@@ -1,9 +1,8 @@
-use crate::webview::WebviewCallbackHandler;
 use clap::{Parser, Subcommand};
 mod commands;
 mod webview;
 
-use xodus::licensing;
+use xodus::{hardware, licensing};
 use xodus::xal::TokenStore;
 use xodus::xal::client_params::CLIENT_WINDOWS;
 use xodus::xal::oauth2::TokenResponse;
@@ -39,9 +38,6 @@ async fn main() {
         .connection_verbose(true)
         .build()
         .unwrap();
-
-    let cb = crate::webview::WebviewCallbackHandler {};
-    cb.call().await;
 
     let args = CliArgs::parse();
 

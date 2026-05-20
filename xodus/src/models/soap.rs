@@ -65,7 +65,7 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn new(username: String, password: String, message_id: String) -> Self {
+    pub fn new() -> Self {
         let now = chrono::Utc::now();
         Self {
             action: MustUnderstandValue {
@@ -76,12 +76,13 @@ impl Header {
                 must_understand: "1".to_owned(),
                 value: "https://login.live.com:443/RST2.srf".to_owned(),
             },
-            message_id,
+            message_id: now.timestamp().to_string(),
             auth_info: AuthInfo::default(),
             security: Security {
-                username_token: UsernameToken::new(username, password),
+                username_token: None,
+                encrypted_data: None,
                 timestamp: Timestamp {
-                    id: "Timestamp".to_owned(),
+                    id: Some("Timestamp".to_owned()),
                     created: now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
                     expires: (now + std::time::Duration::from_mins(5))
                         .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
@@ -93,8 +94,19 @@ impl Header {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Body {
+    #[serde(rename = "$value")]
+    pub body: BodyContent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BodyContent {
     #[serde(rename = "wst:RequestSecurityToken")]
-    pub request_security_token: RequestSecurityToken,
+    RequestSecurityToken(RequestSecurityToken),
+    #[serde(rename = "ps:RequestMultipleSecurityTokens")]
+    RequestMultipleSecurityTokens(RequestMultipleSecurityTokens),
+
+    #[serde(rename = "wst:RequestSecurityTokenResponse")]
+    RequestSecurityTokenResponse(RequestSecurityTokenResponse),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,8 +167,10 @@ impl Default for AuthInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Security {
-    #[serde(rename = "wsse:UsernameToken")]
-    pub username_token: UsernameToken,
+    #[serde(rename = "wsse:UsernameToken", skip_serializing_if = "Option::is_none")]
+    pub username_token: Option<UsernameToken>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encrypted_data: Option<EncryptedData>,
     #[serde(rename = "wsu:Timestamp")]
     pub timestamp: Timestamp,
 }
@@ -168,7 +182,7 @@ pub struct UsernameToken {
     #[serde(rename = "wsse:Username")]
     pub username: String,
     #[serde(rename = "wsse:Password")]
-    pub password: String
+    pub password: String,
 }
 
 impl UsernameToken {
@@ -176,7 +190,36 @@ impl UsernameToken {
         Self {
             id: "devicesoftware".to_string(),
             username,
-            password
+            password,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EncryptedData {
+    #[serde(rename = "@Id")]
+    pub id: String,
+    #[serde(rename = "@xmlns")]
+    pub xmlns: String,
+    #[serde(rename = "@Type")]
+    pub el_type: String,
+
+    pub encryption_method: EncryptionMethod,
+    #[serde(rename = "ds:KeyInfo")]
+    pub key_info: KeyInfo,
+    pub cipher_data: CipherData,
+}
+
+impl EncryptedData {
+    pub fn devicesoftware(key: String) -> Self {
+        Self {
+            id: "devicesoftware".to_string(),
+            xmlns: "http://www.w3.org/2001/04/xmlenc#".to_string(),
+            el_type: "http://www.w3.org/2001/04/xmlenc#Element".to_string(),
+
+            encryption_method: EncryptionMethod::default(),
+            key_info: KeyInfo::sts(),
+            cipher_data: CipherData::new(key),
         }
     }
 }
@@ -184,7 +227,7 @@ impl UsernameToken {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Timestamp {
     #[serde(rename = "@wsu:Id")]
-    pub id: String,
+    pub id: Option<String>,
     #[serde(rename = "wsu:Created")]
     pub created: String,
     #[serde(rename = "wsu:Expires")]
@@ -199,6 +242,45 @@ pub struct RequestSecurityToken {
     pub request_type: String,
     #[serde(rename = "wsp:AppliesTo")]
     pub applies_to: AppliesTo,
+    #[serde(
+        rename = "wsp:PolicyReference",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub policy_reference: Option<PolicyReference>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestSecurityTokenResponse {
+    #[serde(rename = "wst:TokenType")]
+    pub token_type: String,
+    #[serde(rename = "wsp:AppliesTo")]
+    pub applies_to: AppliesTo,
+    #[serde(rename = "wst:Lifetime")]
+    pub lifetime: Timestamp,
+    #[serde(rename = "wst:RequestedSecurityToken")]
+    pub requested_security_token: RequestedSecurityToken,
+    #[serde(rename = "wst:RequestedProofToken")]
+    pub requested_proof_token: RequestedProofToken,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestedSecurityToken {
+    pub encrypted_data: EncryptedData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestedProofToken {
+    #[serde(rename = "wst:BinarySecret")]
+    pub binary_secret: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestMultipleSecurityTokens {
+    #[serde(rename = "@Id")]
+    pub id: String,
+
+    #[serde(rename = "wst:RequestSecurityToken")]
+    pub security_tokens: Vec<RequestSecurityToken>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -211,4 +293,66 @@ pub struct AppliesTo {
 pub struct EndpointReference {
     #[serde(rename = "wsa:Address")]
     pub address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyReference {
+    #[serde(rename = "@URI")]
+    pub uri: String,
+    #[serde(rename = "$value")]
+    pub val: String,
+}
+
+impl PolicyReference {
+    pub fn new() -> Self {
+        Self {
+            uri: "TOKEN_BROKER".to_string(),
+            val: String::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EncryptionMethod {
+    #[serde(rename = "@Algorithm")]
+    pub algorithm: String,
+    #[serde(rename = "$value")]
+    pub val: String,
+}
+
+impl Default for EncryptionMethod {
+    fn default() -> Self {
+        Self {
+            algorithm: "http://www.w3.org/2001/04/xmlenc#tripledes-cbc".to_string(),
+            val: String::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyInfo {
+    #[serde(rename = "@xmlns:ds")]
+    pub ds: String,
+    #[serde(rename = "ds:KeyName")]
+    pub key_name: String,
+}
+
+impl KeyInfo {
+    pub fn sts() -> Self {
+        Self {
+            ds: "http://www.w3.org/2000/09/xmldsig#".to_string(),
+            key_name: "http://Passport.NET/STS".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CipherData {
+    pub cipher_value: String,
+}
+
+impl CipherData {
+    pub fn new(key: String) -> Self {
+        Self { cipher_value: key }
+    }
 }

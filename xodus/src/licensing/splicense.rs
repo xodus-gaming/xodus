@@ -1,59 +1,282 @@
-pub struct Block<'a> {
-    pub block_id: BlockId,
-    pub size: u32,
-    pub data: &'a [u8],
-}
+// Built based on CikExtractor
+// MIT License
 
+// Copyright (c) 2022 LukeFZ
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+use std::io::{BufRead, BufReader, Read};
+
+use aes::cipher::{BlockCipherDecrypt, KeyInit};
+
+// pub struct Block<'a> {
+//     pub block_id: BlockId,
+//     pub size: u32,
+//     pub data: &'a [u8],
+// }
+
+#[derive(Debug)]
 #[repr(u32)]
 pub enum BlockId {
-    EkbEscrowedKeyType = 1,  // length 0x2, value 0x5
-    EkbEscrowedKeyId = 2,    // length 0x20
-    EkbEscrowingKeyType = 3, // length 0x2, value 0x7
-    EkbEscrowingKeyId = 4,   // length 0x1, value 0x31
-    EkbEscrowMethod = 5,     // length 0x2, value 0x1
-    EkbCustomData = 6,
-    EkbEscrowBlob = 7, // length 0x180
-    EkbSignature = 8,
-    EkbSigningKey = 9,
-    EkbSigningKeyId = 10,
-    EkbSignatureValue = 11,
+    UnkBlock0 = 0x14,
+    DeviceLicenseExpirationTime = 0x1f,
+    PollingTime = 0xd3,
+    LicenseExpirationTime = 0x20,
+    ClepSignState = 0x12d,
+    LicenseDeviceId = 0xd2,
+    UnkBlock1 = 0xd1,
+    LicenseId = 0xcb,
+    HardwareId = 0xd0,
+    UnkBlock2 = 0xcf,
+    UplinkKeyId = 0x18,
+    UnkBlock3 = 0x0,
+    UnkBlock4 = 0x12e,
+    UnkBlock5 = 0xd5,
+    PackageFullName = 0xce,
+    LicenseInformation = 0xc9,
+    PackedContentKeys = 0xca,
+    EncryptedDeviceKey = 0x1,
+    DeviceLicenseDeviceId = 0x2,
+    LicenseEntryIds = 0xcd,
+    LicensePolicies = 0xd4,
+    KeyholderPublicSigningKey = 0xdc,
+    KeyholderPolicies = 0xdd,
+    KeyholderKeyLicenseId = 0xde,
+    SignatureBlock = 0xcc,
+}
 
-    // SPLicenseBlock block IDs follow
-    SpLicenseBlock = 20, // LicenseSection
-    SpLicenseBlockVersion = 21,
-    CryptoUsage = 22,
-    EncryptedLicenseBlockIV = 23,
-    UplinkKeyId = 24,
-    GenerationId = 25,
-    KeyId = 26,
-    EscrowedKey = 27, // EncryptedCik
-    SpPolicies = 28,  // DiscIdSection
-    SocId = 29,
-    ConsoleType = 30,
-    AbsoluteExpirationDate = 31,
-    AbsoluteBeginDate = 32,
-    EncryptedLicenseBlock = 33,
-    CipherText = 34,
-    Padding = 35,
-    LicenseUsage = 36,
-    DiscId = 37,
-    _Unknown_38 = 38,
-    _Unknown_39 = 39,
-    SpSignature = 40, // SignatureSection
-    DigestAlgorithm = 41,
-    SigningKeyId = 42,
-    Signature = 43,
-    SignatureAlgorithm = 44,
+impl TryFrom<u32> for BlockId {
+    type Error = u32;
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0x14 => Ok(Self::UnkBlock0),
+            0x1f => Ok(Self::DeviceLicenseExpirationTime),
+            0xd3 => Ok(Self::PollingTime),
+            0x20 => Ok(Self::LicenseExpirationTime),
+            0x12d => Ok(Self::ClepSignState),
+            0xd2 => Ok(Self::LicenseDeviceId),
+            0xd1 => Ok(Self::UnkBlock1),
+            0xcb => Ok(Self::LicenseId),
+            0xd0 => Ok(Self::HardwareId),
+            0xcf => Ok(Self::UnkBlock2),
+            0x18 => Ok(Self::UplinkKeyId),
+            0x0 => Ok(Self::UnkBlock3),
+            0x12e => Ok(Self::UnkBlock4),
+            0xd5 => Ok(Self::UnkBlock5),
+            0xce => Ok(Self::PackageFullName),
+            0xc9 => Ok(Self::LicenseInformation),
+            0xca => Ok(Self::PackedContentKeys),
+            0x1 => Ok(Self::EncryptedDeviceKey),
+            0x2 => Ok(Self::DeviceLicenseDeviceId),
+            0xcd => Ok(Self::LicenseEntryIds),
+            0xd4 => Ok(Self::LicensePolicies),
+            0xdc => Ok(Self::KeyholderPublicSigningKey),
+            0xdd => Ok(Self::KeyholderPolicies),
+            0xde => Ok(Self::KeyholderKeyLicenseId),
+            0xcc => Ok(Self::SignatureBlock),
+            _ => Err(value),
+        }
+    }
+}
 
-    Fingerprint = 99,
-    SPHeader = 100,
+#[derive(Debug)]
+pub struct SPLicense {
+    pub license_id: uuid::Uuid,
+    pub keyholder_key_license_id: uuid::Uuid,
+    pub package_name: String,
+    pub signature_origin: u16,
+    pub signature_block: Vec<u8>,
+    pub clep_sign_state: Vec<u8>,
+    pub encrypted_device_key: Vec<u8>,
+    pub content_keys: Vec<u8>,
+    pub keyholder_public_key: Vec<u8>,
+    pub keyholder_policies: Vec<u8>,
+    pub license_policies: Vec<u8>,
+    pub entry_ids: Vec<[u8; 32]>,
+    pub hardware_id: Vec<u8>,
+    pub polling_time: u32,
+    pub license_expiration_time: u32,
+}
+impl From<&[u8]> for SPLicense {
+    fn from(value: &[u8]) -> Self {
+        let mut bio = BufReader::new(value);
+        let mut buffer = [0; 4];
+        bio.read(&mut buffer).unwrap();
+        let header = buffer;
+        bio.read(&mut buffer).unwrap();
+        let offset = u32::from_le_bytes(buffer);
 
-    // UWP SPLicenseBlock IDs
-    Unknown201 = 201, // 10 bytes, contains a unix timestamp
-    UWPKeyId = 202, // 76 bytes = [2 bytes keyID size] [2 bytes unkData size] [0x20 bytes keyID] [0x28 bytes unkData]
-    Unknown203 = 203, // 16 bytes
-    Unknown204 = 204, // 68 bytes
-    Unknown205 = 205, // 34 bytes
-    UWPPackageId = 206,
-    Unknown210 = 210, // 8 bytes
+        let mut license = Self {
+            license_id: uuid::Uuid::nil(),
+            keyholder_key_license_id: uuid::Uuid::nil(),
+            package_name: String::default(),
+            encrypted_device_key: Vec::new(),
+            content_keys: Vec::new(),
+            clep_sign_state: Vec::new(),
+            polling_time: 0,
+            signature_origin: 0,
+            license_expiration_time: 0,
+            signature_block: Vec::new(),
+            entry_ids: Vec::new(),
+            keyholder_public_key: Vec::new(),
+            keyholder_policies: Vec::new(),
+            license_policies: Vec::new(),
+            hardware_id: Vec::new(),
+        };
+        while let Ok(size) = bio.read(&mut buffer) {
+            if size == 0 {
+                break;
+            }
+
+            let block_id: Result<BlockId, u32> = u32::from_le_bytes(buffer).try_into();
+            bio.read(&mut buffer).unwrap();
+            let size = u32::from_le_bytes(buffer);
+
+            match block_id {
+                Ok(BlockId::LicenseId | BlockId::DeviceLicenseDeviceId) => {
+                    let mut buffer = [0u8; 16];
+                    bio.read(&mut buffer).unwrap();
+                    license.license_id = uuid::Uuid::from_bytes_le(buffer);
+                }
+                Ok(BlockId::KeyholderKeyLicenseId) => {
+                    let mut buffer = [0u8; 16];
+                    bio.read(&mut buffer).unwrap();
+                    license.keyholder_key_license_id = uuid::Uuid::from_bytes_le(buffer);
+                }
+                Ok(BlockId::EncryptedDeviceKey) => {
+                    let mut data: Vec<u8> = vec![0; size as usize];
+                    bio.read(&mut data).unwrap();
+                    license.encrypted_device_key = data;
+                }
+                Ok(BlockId::PackageFullName) => {
+                    let mut data: Vec<u8> = vec![0; size as usize];
+                    bio.read(&mut data).unwrap();
+                    license.package_name = std::str::from_utf8(&data).unwrap().to_string();
+                }
+                Ok(BlockId::PackedContentKeys) => {
+                    let mut data: Vec<u8> = vec![0; size as usize];
+                    bio.read(&mut data).unwrap();
+                    license.content_keys = data;
+                }
+                Ok(BlockId::ClepSignState) => {
+                    let mut data: Vec<u8> = vec![0; size as usize];
+                    bio.read(&mut data).unwrap();
+                    license.clep_sign_state = data;
+                }
+                Ok(BlockId::SignatureBlock) => {
+                    bio.consume(2);
+                    let mut buffer = [0; 2];
+                    bio.read(&mut buffer).unwrap();
+                    license.signature_origin = u16::from_le_bytes(buffer);
+                    let mut data: Vec<u8> = vec![0; size as usize];
+                    bio.read(&mut data).unwrap();
+                    license.signature_block = data;
+                }
+                Ok(BlockId::PollingTime) => {
+                    let mut buffer = [0u8; 4];
+                    bio.read(&mut buffer).unwrap();
+                    let ts = u32::from_le_bytes(buffer);
+                    license.polling_time = ts;
+                }
+                Ok(BlockId::LicenseExpirationTime | BlockId::DeviceLicenseExpirationTime) => {
+                    let mut buffer = [0u8; 4];
+                    bio.read(&mut buffer).unwrap();
+                    let ts = u32::from_le_bytes(buffer);
+                    license.license_expiration_time = ts;
+                }
+                Ok(BlockId::HardwareId) => {
+                    let mut buffer = vec![0; size as usize];
+                    bio.read(&mut buffer).unwrap();
+                    license.hardware_id = buffer;
+                }
+                Ok(BlockId::LicenseInformation) => {
+                    let mut buffer2 = [0u8; 2];
+                    let mut buffer4 = [0u8; 4];
+
+                    bio.read(&mut buffer2).unwrap();
+                    bio.read(&mut buffer2).unwrap();
+                    bio.read(&mut buffer4).unwrap();
+                    bio.read(&mut buffer2).unwrap();
+                }
+                Ok(BlockId::LicenseEntryIds) => {
+                    let mut buffer2 = [0; 2];
+                    let mut buffer32 = [0; 32];
+                    bio.read(&mut buffer2).unwrap();
+                    let count = u16::from_le_bytes(buffer2);
+                    for _ in 0..count {
+                        bio.read(&mut buffer32).unwrap();
+                        license.entry_ids.push(buffer32);
+                    }
+                }
+                Ok(BlockId::KeyholderPublicSigningKey) => {
+                    let mut buf = vec![0; size as usize];
+                    bio.read(&mut buf).unwrap();
+                    license.keyholder_public_key = buf;
+                }
+                Ok(BlockId::KeyholderPolicies) => {
+                    let mut buf = vec![0; size as usize];
+                    bio.read(&mut buf).unwrap();
+                    license.keyholder_policies = buf;
+                }
+                Ok(BlockId::LicensePolicies) => {
+                    let mut buf = vec![0; size as usize];
+                    bio.read(&mut buf).unwrap();
+                    license.license_policies = buf;
+                }
+                Ok(
+                    BlockId::UnkBlock0
+                    | BlockId::UnkBlock1
+                    | BlockId::UnkBlock2
+                    | BlockId::UnkBlock3
+                    | BlockId::UnkBlock4
+                    | BlockId::UnkBlock5,
+                ) => {
+                    let mut buf = vec![0; size as usize];
+                    bio.read(&mut buf).unwrap();
+                }
+                _ => {
+                    let mut buf = vec![0; size as usize];
+                    bio.read(&mut buf).unwrap();
+                }
+            }
+        }
+        license
+    }
+}
+
+pub fn derive_device_key(license: &[u8]) -> Vec<u8> {
+    let keyschedule: [u8; 228] = license[4..232].try_into().unwrap();
+    let keyschedule: [u32; 57] = unsafe { std::mem::transmute(keyschedule) };
+    let devicekey: [u8; 16] = license[516..532].try_into().unwrap();
+
+    let mut decryption_key = [0u32; 4];
+
+    decryption_key[0] = keyschedule[46] ^ keyschedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
+    decryption_key[1] = keyschedule[36] ^ keyschedule[47] ^ 0xDF080E39;
+    decryption_key[2] = keyschedule[40] ^ keyschedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
+    decryption_key[3] = keyschedule[30] ^ keyschedule[41] ^ 0x37288CEC;
+    let decryption_key: [u8; 16] = unsafe { std::mem::transmute(decryption_key) };
+
+    let key = aes::cipher::array::Array::from(decryption_key);
+    let aes = aes::Aes128::new(&key);
+    let mut data = aes::cipher::Array::from(devicekey);
+    aes.decrypt_block(&mut data);
+
+    return data.to_vec();
 }

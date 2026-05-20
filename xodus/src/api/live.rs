@@ -1,5 +1,5 @@
 use crate::models::devicecredential::{DeviceAddRequest, DeviceAddResponse};
-use crate::models::soap::{self, AppliesTo, EndpointReference};
+use crate::models::soap::{self, AppliesTo, EndpointReference, UsernameToken};
 
 pub async fn login_device_credential(
     client: &reqwest::Client,
@@ -22,10 +22,15 @@ pub async fn login_device_credential(
     Ok(resp)
 }
 
-pub async fn authenticate_device(client: &reqwest::Client, username: String, password: String) -> reqwest::Result<()> {
-    let header = soap::Header::new(username, password, chrono::Utc::now().timestamp().to_string());
+pub async fn authenticate_device(
+    client: &reqwest::Client,
+    username: String,
+    password: String,
+) -> reqwest::Result<soap::Envelope> {
+    let mut header = soap::Header::new();
+    header.security.username_token = Some(UsernameToken::new(username, password));
     let body = soap::Body {
-        request_security_token: soap::RequestSecurityToken {
+        body: soap::BodyContent::RequestSecurityToken(soap::RequestSecurityToken {
             id: "RST0".to_string(),
             request_type: "http://schemas.xmlsoap.org/ws/2005/02/trust/Issue".to_string(),
             applies_to: AppliesTo {
@@ -33,7 +38,8 @@ pub async fn authenticate_device(client: &reqwest::Client, username: String, pas
                     address: "http://Passport.NET/tb".to_string(),
                 },
             },
-        },
+            policy_reference: None,
+        }),
     };
     let envelope = soap::Envelope::new(header, body);
     let xml = quick_xml::se::to_string(&envelope).unwrap();
@@ -49,12 +55,10 @@ pub async fn authenticate_device(client: &reqwest::Client, username: String, pas
         .body(xml)
         .send()
         .await?;
-    
-    println!("{response:?}");
 
     let text = response.text().await?;
 
-    println!("{text:?}");
+    let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
 
-    Ok(())
+    Ok(res_envelope)
 }

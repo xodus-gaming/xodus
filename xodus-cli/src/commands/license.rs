@@ -9,17 +9,17 @@ pub async fn run(client: &reqwest::Client) {
     let password = generate_string(20);
     let provision = DeviceAddRequest {
         client_info: ClientInfo::default(),
-        authentication: Authentication::new(
-            username.clone(),
-            password.clone(),
-        ),
+        authentication: Authentication::new(username.clone(), password.clone()),
         device_info: Some(DeviceInfo {
             id: "DeviceInfo".to_string(),
             components: hardware::probe_provision_components(),
         }),
     };
 
-    let dev = xodus::api::live::login_device_credential(client, provision).await.expect("Failed to get device creds");
-    xodus::api::live::authenticate_device(client, username, password).await.expect("Failed to auth device");
-
+    let dev = xodus::api::live::login_device_credential(client, provision)
+        .await
+        .expect("Failed to get device creds");
+    let tokens = xodus::api::live::authenticate_device(client, username, password)
+        .await
+        .expect("Failed to auth device");
 }
