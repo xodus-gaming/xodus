@@ -1,3 +1,6 @@
+use zerocopy::{FromZeros, IntoBytes};
+
+#[derive(FromZeros, IntoBytes)]
 #[repr(C, packed)]
 pub struct ClepV2 {
     pub version: u32,
@@ -11,6 +14,7 @@ pub struct ClepV2 {
     pub reserved: [u8; 639],
 }
 
+#[derive(FromZeros, IntoBytes)]
 #[repr(C, packed)]
 pub struct ClepV4 {
     pub version: u32,

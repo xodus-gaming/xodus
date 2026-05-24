@@ -24,6 +24,7 @@
 use std::io::{BufRead, BufReader, Read};
 
 use aes::cipher::{BlockCipherDecrypt, KeyInit};
+use zerocopy::transmute;
 
 // pub struct Block<'a> {
 //     pub block_id: BlockId,
@@ -262,7 +263,7 @@ impl From<&[u8]> for SPLicense {
 
 pub fn derive_device_key(license: &[u8]) -> Vec<u8> {
     let keyschedule: [u8; 228] = license[4..232].try_into().unwrap();
-    let keyschedule: [u32; 57] = unsafe { std::mem::transmute(keyschedule) };
+    let keyschedule: [u32; 57] = transmute!(keyschedule);
     let devicekey: [u8; 16] = license[516..532].try_into().unwrap();
 
     let mut decryption_key = [0u32; 4];
@@ -271,7 +272,7 @@ pub fn derive_device_key(license: &[u8]) -> Vec<u8> {
     decryption_key[1] = keyschedule[36] ^ keyschedule[47] ^ 0xDF080E39;
     decryption_key[2] = keyschedule[40] ^ keyschedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
     decryption_key[3] = keyschedule[30] ^ keyschedule[41] ^ 0x37288CEC;
-    let decryption_key: [u8; 16] = unsafe { std::mem::transmute(decryption_key) };
+    let decryption_key: [u8; 16] = transmute!(decryption_key);
 
     let key = aes::cipher::array::Array::from(decryption_key);
     let aes = aes::Aes128::new(&key);

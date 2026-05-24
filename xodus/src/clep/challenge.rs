@@ -1,21 +1,22 @@
 use crate::models::clep::*;
-use std::mem::{transmute, zeroed};
+
+use zerocopy::{FromZeros, transmute};
 
 pub fn get_license_challange(smbios: [u8; 256], disk_serial: [u8; 64]) -> ([u8; 2048], [u8; 2048]) {
-    let mut clepv2: ClepV2 = unsafe { zeroed() };
+    let mut clepv2 = ClepV2::new_zeroed();
     clepv2.version = 2;
     clepv2.always_0 = 0;
     clepv2.always_1 = true;
     clepv2.smbios.copy_from_slice(&smbios);
     clepv2.disk_serial.copy_from_slice(&disk_serial);
-    let mut clepv4: ClepV4 = unsafe { zeroed() };
+    let mut clepv4 = ClepV4::new_zeroed();
     clepv4.version = 4;
     clepv4.debuger_not_present = 1;
     clepv4.smbios = smbios;
     clepv4.disk_serial = disk_serial;
 
-    let mut obfuscatedv2 = unsafe { transmute(clepv2) };
-    let mut obfuscatedv4 = unsafe { transmute(clepv4) };
+    let mut obfuscatedv2 = transmute!(clepv2);
+    let mut obfuscatedv4 = transmute!(clepv4);
 
     clep_obfuscate(&mut obfuscatedv2);
     clep_obfuscate(&mut obfuscatedv4);

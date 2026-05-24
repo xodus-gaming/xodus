@@ -4636,6 +4636,7 @@ dependencies = [
  "tokio",
  "uuid",
  "xal",
+ "zerocopy",
 ]
 
 [[package]]
