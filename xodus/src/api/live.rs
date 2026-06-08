@@ -197,7 +197,12 @@ pub async fn exchange_device_token(
     header.security.encrypted_data = Some(soap::EncryptedData::devicesoftware(token));
     let mut nonce = [0u8; 32];
     OsRng.try_fill_bytes(&mut nonce);
-    let hmacKey = generateSharedKey(32, sharedSecret.as_bytes(), "WS-SecureConversationWS-SecureConversation".to_string(), &nonce);
+    println!("sharedSecret {}", sharedSecret);
+    let secret = base64::engine::general_purpose::STANDARD
+    .decode(sharedSecret)
+    .unwrap();
+
+    let hmacKey = generateSharedKey(32, secret.as_bytes(), "WS-SecureConversationWS-SecureConversation".to_string(), &nonce);
     let mut nonceb64 : String = "".to_string();
     base64::engine::general_purpose::STANDARD.encode_string(nonce, &mut nonceb64);
 
