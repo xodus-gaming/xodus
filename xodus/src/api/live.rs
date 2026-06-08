@@ -1,7 +1,8 @@
 use std::cmp::min;
-use std::io::Write;
 
-use base64::Engine;
+use aes::cipher::block_padding::Pkcs7;
+use aes::cipher::{BlockModeDecrypt, KeyInit, KeyIvInit};
+use base64::prelude::*;
 use bergshamra::VerifyResult::Invalid;
 use bergshamra::{DsigContext, Key, KeyData, KeyUsage, KeysManager};
 use hmac::{Hmac, Mac};
@@ -9,11 +10,14 @@ use rsa::rand_core::{OsRng, RngCore};
 use rsa::sha2::Sha256;
 use zerocopy::IntoBytes;
 
-use crate::licensing::splicense::derive_device_key;
 use crate::models::devicecredential::{DeviceAddRequest, DeviceAddResponse};
-use crate::models::soap::{self, AlgorithmNode, AppliesTo, DerivedKeyToken, EndpointReference, ReferenceUri, SecurityTokenReference, SignatureReference, SignatureTransforms, SignedInfo, UsernameToken};
+use crate::models::soap::{
+    self, AlgorithmNode, AppliesTo, DerivedKeyToken, EndpointReference, ReferenceUri,
+    SecurityTokenReference, SignatureReference, SignatureTransforms, SignedInfo, UsernameToken,
+};
 
 pub const XML_HEADER: &str = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
+type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
 pub async fn login_device_credential(
     client: &reqwest::Client,
@@ -126,21 +130,21 @@ pub async fn authenticate_device(
 
 //     return sharedKey;
 // }
-pub fn generateSharedKey(keyLength: usize, inKey: &[u8], keyUsage: String, nonce : &[u8]) -> Vec<u8> {
-    let len : usize = 4 + keyUsage.len() + 1 + nonce.len() + 4;
-    let mut sharedKeyMaterial : Vec<u8> = vec![];
+pub fn generateSharedKey(keyLength: usize, inKey: &[u8], keyUsage: &str, nonce: &[u8]) -> [u8; 32] {
+    let len: usize = 4 + keyUsage.len() + 1 + nonce.len() + 4;
+    let mut sharedKeyMaterial: Vec<u8> = vec![];
     sharedKeyMaterial.resize(len, 0);
 
     let mut offset = 0;
     offset += 4;
-    sharedKeyMaterial[offset..offset+keyUsage.len()].copy_from_slice(keyUsage.as_bytes());
-    offset+=keyUsage.len();
+    sharedKeyMaterial[offset..offset + keyUsage.len()].copy_from_slice(keyUsage.as_bytes());
+    offset += keyUsage.len();
 
     // Already zerod
-    offset+=1;
+    offset += 1;
 
-    sharedKeyMaterial[offset..offset+nonce.len()].copy_from_slice(nonce);
-    offset+=nonce.len();
+    sharedKeyMaterial[offset..offset + nonce.len()].copy_from_slice(nonce);
+    offset += nonce.len();
 
     let keyBitLength = u32::try_from(keyLength * 8).unwrap();
     sharedKeyMaterial[offset..offset + 4].copy_from_slice(&keyBitLength.to_be_bytes());
@@ -149,9 +153,8 @@ pub fn generateSharedKey(keyLength: usize, inKey: &[u8], keyUsage: String, nonce
 
     let mut currentKeyLength: usize = 0;
     let mut currentHashCount: u32 = 1;
-    
-    let mut sharedKey : Vec<u8> = vec![];
-    sharedKey.resize(keyLength as usize, 0);
+
+    let mut sharedKey = [0; 32];
 
     while currentKeyLength < keyLength {
         sharedKeyMaterial[0..4].copy_from_slice(&currentHashCount.to_be_bytes());
@@ -164,7 +167,8 @@ pub fn generateSharedKey(keyLength: usize, inKey: &[u8], keyUsage: String, nonce
         hmac.update(&sharedKeyMaterial[..offset]);
         let signature = hmac.finalize().into_bytes();
         let amount = min(signature.len(), keyLength - currentKeyLength);
-        sharedKey[currentKeyLength..currentKeyLength + amount].copy_from_slice(&signature.as_bytes()[0..amount]);
+        sharedKey[currentKeyLength..currentKeyLength + amount]
+            .copy_from_slice(&signature.as_bytes()[0..amount]);
         currentKeyLength += amount;
     }
 
@@ -177,91 +181,98 @@ pub async fn exchange_device_token(
     sharedSecret: String,
     hosting_app: String,
     scope: String,
-    policy: Option<soap::PolicyReference>
-) -> reqwest::Result<soap::Envelope> {
+    policy: Option<soap::PolicyReference>,
+) -> reqwest::Result<soap::RequestSecurityTokenResponse> {
     let mut header = soap::Header::new();
-    header
-        .auth_info
-        .as_mut()
-        .map(|i| i.hosting_app = hosting_app);
-    header
-        .auth_info
-        .as_mut()
-        .map(|i| i.sso_flags = "SsoRestr".to_string());
+    header.auth_info.as_mut().map(|i| {
+        i.hosting_app = hosting_app;
+        i.sso_flags = "SsoRestr".to_string();
+    });
     header.security.encrypted_data = Some(soap::EncryptedData::devicesoftware(token));
     let mut nonce = [0u8; 32];
     OsRng.try_fill_bytes(&mut nonce);
-    let secret = base64::engine::general_purpose::STANDARD
-    .decode(sharedSecret)
-    .unwrap();
+    let secret = BASE64_STANDARD.decode(sharedSecret).unwrap();
 
-    let hmacKey = generateSharedKey(32, secret.as_bytes(), "WS-SecureConversationWS-SecureConversation".to_string(), &nonce);
-    let mut nonceb64 : String = "".to_string();
-    base64::engine::general_purpose::STANDARD.encode_string(nonce, &mut nonceb64);
+    let hmac_key = generateSharedKey(
+        32,
+        &secret,
+        "WS-SecureConversationWS-SecureConversation",
+        &nonce,
+    );
+    let mut nonceb64: String = "".to_string();
+    BASE64_STANDARD.encode_string(nonce, &mut nonceb64);
     let mut secretb64: String = String::new();
-    base64::engine::general_purpose::STANDARD.encode_string(&secret, &mut secretb64);
+    BASE64_STANDARD.encode_string(&secret, &mut secretb64);
     let mut hmac_key_b64: String = String::new();
-    base64::engine::general_purpose::STANDARD.encode_string(&hmacKey, &mut hmac_key_b64);
+    BASE64_STANDARD.encode_string(&hmac_key, &mut hmac_key_b64);
     println!(
         "exchange_device_token: secret_b64={secretb64} nonce_b64={nonceb64} shared_key_b64={hmac_key_b64}"
     );
 
-    header.security.derived_key_token = Some(DerivedKeyToken{
+    header.security.derived_key_token = vec![DerivedKeyToken{
         nonce: nonceb64,
         id: "SignKey".to_string(),
         algorithm: "urn:liveid:SP800108_CTR_HMAC_SHA256_DOUBLEDERIVED".to_string(),
-        requested_token_reference: soap::RequestedTokenReference { key_identifier: soap::KeyIdentifier { value_type: "http://docs.oasis-open.org/wss/2004/XX/oasis-2004XX-wss-saml-token-profile-1.0#SAMLAssertionID".to_string(), value: None }, reference: soap::ReferenceUri { uri: "".to_string() } }
-    });
+        token_reference: None,
+        requested_token_reference: Some(soap::RequestedTokenReference { key_identifier: soap::KeyIdentifier { value_type: "http://docs.oasis-open.org/wss/2004/XX/oasis-2004XX-wss-saml-token-profile-1.0#SAMLAssertionID".to_string(), value: None }, reference: soap::ReferenceUri { uri: "".to_string() } })
+    }];
     header.security.signature = Some(soap::Signature {
         xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
         signed_info: SignedInfo {
-            canonicalization_method: AlgorithmNode{
-                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string()
+            canonicalization_method: AlgorithmNode {
+                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
             },
             reference: vec![
-                SignatureReference{
+                SignatureReference {
                     uri: "#RST0".to_string(),
-                    digest_method: AlgorithmNode { algorithm:  "http://www.w3.org/2001/04/xmlenc#sha256".to_string() },
+                    digest_method: AlgorithmNode {
+                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
+                    },
                     digest_value: "".to_string(),
                     transforms: SignatureTransforms {
-                        transform: vec![
-                            AlgorithmNode{
-                                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                            }
-                        ]
-                    }
+                        transform: vec![AlgorithmNode {
+                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                        }],
+                    },
                 },
-                SignatureReference{
+                SignatureReference {
                     uri: "#Timestamp".to_string(),
-                    digest_method: AlgorithmNode { algorithm:  "http://www.w3.org/2001/04/xmlenc#sha256".to_string() },
+                    digest_method: AlgorithmNode {
+                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
+                    },
                     digest_value: "".to_string(),
                     transforms: SignatureTransforms {
-                        transform: vec![
-                            AlgorithmNode{
-                                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                            }
-                        ]
-                    }
+                        transform: vec![AlgorithmNode {
+                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                        }],
+                    },
                 },
-                SignatureReference{
+                SignatureReference {
                     uri: "#PPAuthInfo".to_string(),
-                    digest_method: AlgorithmNode { algorithm:  "http://www.w3.org/2001/04/xmlenc#sha256".to_string() },
+                    digest_method: AlgorithmNode {
+                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
+                    },
                     digest_value: "".to_string(),
                     transforms: SignatureTransforms {
-                        transform: vec![
-                            AlgorithmNode{
-                                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                            }
-                        ]
-                    }
-                }
+                        transform: vec![AlgorithmNode {
+                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                        }],
+                    },
+                },
             ],
-            signature_method: AlgorithmNode{
+            signature_method: AlgorithmNode {
                 algorithm: "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256".to_string(),
-            }
+            },
         },
         signature_value: "".to_string(),
-        key_info: Some(soap::SignatureKeyInfo { security_token_reference: SecurityTokenReference { reference: ReferenceUri{ uri: "#SignKey".to_string() } } }) });
+        key_info: Some(soap::SignatureKeyInfo {
+            security_token_reference: SecurityTokenReference {
+                reference: ReferenceUri {
+                    uri: "#SignKey".to_string(),
+                },
+            },
+        }),
+    });
     let body = soap::Body {
         body: soap::BodyContent::RequestSecurityToken(soap::RequestSecurityToken {
             id: "RST0".to_string(),
@@ -279,22 +290,21 @@ pub async fn exchange_device_token(
     println!("{}", xml);
 
     let mut kmgr = KeysManager::new();
-    kmgr.add_key(Key::new(
-        KeyData::Hmac(hmacKey),
-        KeyUsage::Any,
-    ));
+    kmgr.add_key(Key::new(KeyData::Hmac(hmac_key.to_vec()), KeyUsage::Sign));
 
-    let ctx = DsigContext::new(kmgr).with_debug(true).with_strict_verification(false);
+    let ctx = DsigContext::new(kmgr).with_strict_verification(false);
     let prefixes: [&str; 0] = [];
-    let minXml =bergshamra::c14n::canonicalize(xml.as_str(), bergshamra_c14n::C14nMode::Exclusive, None, &prefixes).unwrap();
-    
-    let signed = bergshamra::sign(
-        &ctx,
-        std::str::from_utf8(&minXml).unwrap(),
+    let minXml = bergshamra::c14n::canonicalize(
+        xml.as_str(),
+        bergshamra_c14n::C14nMode::Exclusive,
+        None,
+        &prefixes,
     )
     .unwrap();
 
-    // println!("{}", signed);
+    let signed = bergshamra::sign(&ctx, std::str::from_utf8(&minXml).unwrap()).unwrap();
+
+    println!("{}", signed);
     let response = client
         .post(format!(
             "https://login.live.com/RST2.srf"
@@ -309,18 +319,73 @@ pub async fn exchange_device_token(
     let text = response.text().await?;
     println!("{}", text);
 
+    let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
+
+    if let soap::BodyContent::EncryptedData(data) = res_envelope.body.body {
+        let key_info = data.key_info.key_info.as_signature();
+        let id = key_info.security_token_reference.reference.uri;
+        let mut enc_nonce = None;
+        let mut nonce = None;
+        for token in res_envelope.header.security.derived_key_token {
+            if format!("#{}", token.id) == id {
+                enc_nonce = Some(token.nonce);
+                continue;
+            }
+            if token.id == "SignKey" {
+                nonce = Some(token.nonce);
+                continue;
+            }
+        }
+        let nonce = nonce.unwrap();
+        let enc_nonce = enc_nonce.unwrap();
+        let nonce = BASE64_STANDARD.decode(nonce).unwrap();
+        let enc_nonce = BASE64_STANDARD.decode(enc_nonce).unwrap();
+        let key = generateSharedKey(
+            32,
+            &secret,
+            "WS-SecureConversationWS-SecureConversation",
+            &nonce,
+        );
+        let enc_key = generateSharedKey(
+            32,
+            &secret,
+            "WS-SecureConversationWS-SecureConversation",
+            &enc_nonce,
+        );
+
+        let mut kmgr = KeysManager::new();
+        kmgr.add_key(Key::new(KeyData::Hmac(key.to_vec()), KeyUsage::Verify));
+        let ctx = DsigContext::new(kmgr).with_strict_verification(false);
         let result = bergshamra::verify(&ctx, &text).unwrap();
         match result {
             Invalid { reason } => {
-                print!("{}", reason);
+                println!("{}", reason);
             }
             bergshamra::VerifyResult::Valid { .. } => {
                 println!("signature valid");
             }
         }
 
+        let value = BASE64_STANDARD
+            .decode(data.cipher_data.cipher_value)
+            .unwrap();
+        let (iv, encrypted) = value.split_at(16);
+        let iv: &[u8; 16] = iv.try_into().unwrap();
 
-    let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
+        let decryptor = Aes256CbcDec::new(&enc_key.into(), iv.into());
+        let mut block = [0; 8192];
 
-    Ok(res_envelope)
+        decryptor
+            .decrypt_padded_b2b::<Pkcs7>(&encrypted, &mut block)
+            .expect("Failed");
+        let result = std::str::from_utf8(&block).unwrap();
+        let security_token_res: soap::RequestSecurityTokenResponse =
+            quick_xml::de::from_str(&result).unwrap();
+        return Ok(security_token_res)
+    }
+
+    match res_envelope.body.body {
+        soap::BodyContent::RequestSecurityTokenResponse(res) => Ok(res),
+        _ => unimplemented!("Exchange device token supports only one token variant")
+    }
 }

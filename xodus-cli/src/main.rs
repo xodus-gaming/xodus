@@ -1,12 +1,13 @@
 use clap::{Parser, Subcommand};
 mod commands;
 mod device;
+mod user;
 mod webview;
-
-use xodus::xal::TokenStore;
+use xodus::models::live::DAProperty;
+use xodus::models::soap::PolicyReference;
 use xodus::xal::client_params::CLIENT_WINDOWS;
-use xodus::xal::oauth2::TokenResponse;
-use xodus::{hardware, licensing};
+
+use crate::webview::WebviewCallbackHandler;
 
 #[derive(Subcommand)]
 enum SubCommand {
@@ -22,6 +23,7 @@ enum SubCommand {
         #[arg(short, long)]
         market: Option<String>,
     },
+    Login,
 }
 
 #[derive(Parser)]
@@ -53,6 +55,28 @@ async fn main() {
         } => (), //commands::download::run(&client, &ts, product, market, dry_run).await,
         SubCommand::License { content_id, market } => {
             commands::license::run(&client).await;
+        }
+        SubCommand::Login => {
+            let webview = WebviewCallbackHandler {};
+            let token = webview.call().await.expect("failed to login");
+            if let Some(da_token) = token {
+                let prop: DAProperty = serde_json::from_str(&da_token).expect("Invalid structure");
+                let user_data = xodus::models::secrets::User {
+                    da_token: prop.da_token,
+                    da_session_key: prop.da_session_key,
+                    lifetime: xodus::models::soap::Timestamp {
+                        id: None,
+                        created: prop.da_start_time,
+                        expires: prop.da_expires,
+                    },
+                    username: prop.username,
+                    first_name: prop.first_name,
+                    last_name: prop.last_name,
+                    cid: prop.cid,
+                    puid: prop.puid,
+                };
+                user::save_user(user_data);
+            }
         }
     }
 

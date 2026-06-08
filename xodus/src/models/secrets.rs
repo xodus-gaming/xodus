@@ -19,3 +19,15 @@ pub struct Token {
     pub binary_secret: String,
     pub lifetime: Timestamp
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct User {
+    pub da_token: String,
+    pub da_session_key: String,
+    pub lifetime: Timestamp,
+    pub username: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub cid: String,
+    pub puid: String
+}

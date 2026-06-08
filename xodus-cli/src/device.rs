@@ -43,18 +43,11 @@ pub async fn ensure_device_credentials(client: &reqwest::Client) {
             .expect("Failed to auth device");
 
         if let BodyContent::RequestSecurityTokenResponse(resp) = tokens.body.body {
+            let encrypted_data = resp.requested_security_token.encrypted_data.unwrap();
             let token = xodus::models::secrets::Token {
-                key_name: resp
-                    .requested_security_token
-                    .encrypted_data
-                    .key_info
-                    .key_name,
-                cipher_value: resp
-                    .requested_security_token
-                    .encrypted_data
-                    .cipher_data
-                    .cipher_value,
-                binary_secret: resp.requested_proof_token.binary_secret,
+                key_name: encrypted_data.key_info.key_info.as_named().key_name,
+                cipher_value: encrypted_data.cipher_data.cipher_value,
+                binary_secret: resp.requested_proof_token.unwrap().binary_secret,
                 lifetime: resp.lifetime,
             };
             let entry = xodus::secrets::get_entry("device-STS").unwrap();
@@ -69,18 +62,11 @@ pub async fn ensure_device_credentials(client: &reqwest::Client) {
                 .expect("Failed to auth device");
 
         if let BodyContent::RequestSecurityTokenResponse(resp) = tokens.body.body {
+            let encrypted_data = resp.requested_security_token.encrypted_data.unwrap();
             let token = xodus::models::secrets::Token {
-                key_name: resp
-                    .requested_security_token
-                    .encrypted_data
-                    .key_info
-                    .key_name,
-                cipher_value: resp
-                    .requested_security_token
-                    .encrypted_data
-                    .cipher_data
-                    .cipher_value,
-                binary_secret: resp.requested_proof_token.binary_secret,
+                key_name: encrypted_data.key_info.key_info.as_named().key_name,
+                cipher_value: encrypted_data.cipher_data.cipher_value,
+                binary_secret: resp.requested_proof_token.unwrap().binary_secret,
                 lifetime: resp.lifetime,
             };
             let entry = xodus::secrets::get_entry("device-STS").unwrap();

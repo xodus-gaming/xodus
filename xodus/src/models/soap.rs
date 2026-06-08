@@ -62,6 +62,8 @@ pub struct Header {
     pub auth_info: Option<AuthInfo>,
     #[serde(rename = "wsse:Security", alias = "Security")]
     pub security: Security,
+    #[serde(rename = "psf:EncryptedPP", alias = "EncryptedPP", skip_serializing_if = "Option::is_none")]
+    pub encrypted_pp: Option<EncryptedPP>,
 }
 
 impl Header {
@@ -81,7 +83,7 @@ impl Header {
             security: Security {
                 username_token: None,
                 encrypted_data: None,
-                derived_key_token: None,
+                derived_key_token: vec![],
                 timestamp: Timestamp {
                     id: Some("Timestamp".to_owned()),
                     created: now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
@@ -90,6 +92,7 @@ impl Header {
                 },
                 signature: None,
             },
+            encrypted_pp: None,
         }
     }
 }
@@ -107,8 +110,12 @@ pub enum BodyContent {
     #[serde(rename = "ps:RequestMultipleSecurityTokens")]
     RequestMultipleSecurityTokens(RequestMultipleSecurityTokens),
 
-    #[serde(rename = "wst:RequestSecurityTokenResponse", alias = "RequestSecurityTokenResponse")]
+    #[serde(
+        rename = "wst:RequestSecurityTokenResponse",
+        alias = "RequestSecurityTokenResponse"
+    )]
     RequestSecurityTokenResponse(RequestSecurityTokenResponse),
+    EncryptedData(EncryptedData),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,10 +181,19 @@ impl Default for AuthInfo {
 pub struct Security {
     #[serde(rename = "wsse:UsernameToken", skip_serializing_if = "Option::is_none")]
     pub username_token: Option<UsernameToken>,
-    #[serde(rename = "EncryptedData", alias = "EncryptedData", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "EncryptedData",
+        alias = "EncryptedData",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub encrypted_data: Option<EncryptedData>,
-    #[serde(rename = "wssc:DerivedKeyToken", skip_serializing_if = "Option::is_none")]
-    pub derived_key_token: Option<DerivedKeyToken>,
+    #[serde(
+        rename = "wssc:DerivedKeyToken",
+        alias = "DerivedKeyToken",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub derived_key_token: Vec<DerivedKeyToken>,
     #[serde(rename = "wsu:Timestamp", alias = "Timestamp")]
     pub timestamp: Timestamp,
     #[serde(rename = "Signature", skip_serializing_if = "Option::is_none")]
@@ -186,7 +202,7 @@ pub struct Security {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsernameToken {
-    #[serde(rename = "@wsu:Id")]
+    #[serde(rename = "@wsu:Id", alias = "@Id")]
     pub id: String,
     #[serde(rename = "wsse:Username")]
     pub username: String,
@@ -216,7 +232,7 @@ pub struct EncryptedData {
 
     pub encryption_method: EncryptionMethod,
     #[serde(rename = "ds:KeyInfo", alias = "KeyInfo")]
-    pub key_info: KeyInfo,
+    pub key_info: KeyInfoWrap,
     pub cipher_data: CipherData,
 }
 
@@ -228,15 +244,52 @@ impl EncryptedData {
             el_type: "http://www.w3.org/2001/04/xmlenc#Element".to_string(),
 
             encryption_method: EncryptionMethod::default(),
-            key_info: KeyInfo::sts(),
+            key_info: KeyInfoWrap { key_info: KeyInfo::Named(NamedKeyInfo::sts())} ,
             cipher_data: CipherData::new(key),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct EncryptedPP {
+    pub encrypted_data: EncryptedData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyInfoWrap {
+    #[serde(flatten)]
+    pub key_info: KeyInfo
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum KeyInfo {
+    Signature(SignatureKeyInfo),
+    Named(NamedKeyInfo),
+}
+
+impl KeyInfo {
+    pub fn as_signature(self) -> SignatureKeyInfo {
+        if let Self::Signature(n) = self {
+            n
+        } else {
+            panic!("Key is not named");
+        }
+    }
+
+    pub fn as_named(self) -> NamedKeyInfo {
+        if let Self::Named(n) = self {
+            n
+        } else {
+            panic!("Key is not named");
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Timestamp {
-    #[serde(rename = "@wsu:Id")]
+    #[serde(rename = "@wsu:Id", alias = "@Id")]
     pub id: Option<String>,
     #[serde(rename = "wsu:Created", alias = "Created")]
     pub created: String,
@@ -246,13 +299,15 @@ pub struct Timestamp {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DerivedKeyToken {
-    #[serde(rename = "@wsu:Id")]
+    #[serde(rename = "@wsu:Id", alias = "@Id")]
     pub id: String,
     #[serde(rename = "@Algorithm")]
     pub algorithm: String,
-    #[serde(rename = "wsse:RequestedTokenReference")]
-    pub requested_token_reference: RequestedTokenReference,
-    #[serde(rename = "wssc:Nonce")]
+    #[serde(rename = "wsse:RequestedTokenReference", alias = "RequestedTokenReference")]
+    pub requested_token_reference: Option<RequestedTokenReference>,
+    #[serde(rename = "wsse:SecurityTokenReference", alias = "SecurityTokenReference")]
+    pub token_reference: Option<SecurityTokenReference>,
+    #[serde(rename = "wssc:Nonce", alias = "Nonce")]
     pub nonce: String,
 }
 
@@ -261,7 +316,8 @@ impl DerivedKeyToken {
         Self {
             id: "SignKey".to_string(),
             algorithm: "urn:liveid:SP800108_CTR_HMAC_SHA256_DOUBLEDERIVED".to_string(),
-            requested_token_reference: RequestedTokenReference::default(),
+            requested_token_reference: Some(RequestedTokenReference::default()),
+            token_reference: None,
             nonce,
         }
     }
@@ -397,7 +453,10 @@ pub struct SignatureTransforms {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignatureKeyInfo {
-    #[serde(rename = "wsse:SecurityTokenReference")]
+    #[serde(
+        rename = "wsse:SecurityTokenReference",
+        alias = "SecurityTokenReference"
+    )]
     pub security_token_reference: SecurityTokenReference,
 }
 
@@ -415,7 +474,7 @@ impl SignatureKeyInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityTokenReference {
-    #[serde(rename = "wsse:Reference")]
+    #[serde(rename = "wsse:Reference", alias = "Reference")]
     pub reference: ReferenceUri,
 }
 
@@ -423,12 +482,13 @@ pub struct SecurityTokenReference {
 pub struct RequestSecurityToken {
     #[serde(rename = "@Id")]
     pub id: String,
-    #[serde(rename = "wst:RequestType")]
+    #[serde(rename = "wst:RequestType", alias = "RequestType")]
     pub request_type: String,
-    #[serde(rename = "wsp:AppliesTo")]
+    #[serde(rename = "wsp:AppliesTo", alias = "AppliesTo")]
     pub applies_to: AppliesTo,
     #[serde(
         rename = "wsp:PolicyReference",
+        alias = "PolicyReference",
         skip_serializing_if = "Option::is_none"
     )]
     pub policy_reference: Option<PolicyReference>,
@@ -442,18 +502,33 @@ pub struct RequestSecurityTokenResponse {
     pub applies_to: AppliesTo,
     #[serde(rename = "wst:Lifetime", alias = "Lifetime")]
     pub lifetime: Timestamp,
-    #[serde(rename = "wst:RequestedSecurityToken", alias = "RequestedSecurityToken")]
+    #[serde(
+        rename = "wst:RequestedSecurityToken",
+        alias = "RequestedSecurityToken"
+    )]
     pub requested_security_token: RequestedSecurityToken,
     #[serde(rename = "wst:RequestedProofToken", alias = "RequestedProofToken")]
-    pub requested_proof_token: RequestedProofToken,
+    pub requested_proof_token: Option<RequestedProofToken>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct RequestedSecurityToken {
-    #[serde(rename = "EncryptedData", alias = "EncryptedData")]
-    pub encrypted_data: EncryptedData,
+    #[serde(rename = "EncryptedData")]
+    pub encrypted_data: Option<EncryptedData>,
+    #[serde(rename = "wsse:BinarySecurityToken", alias = "BinarySecurityToken")]
+    pub binary_security_token: Option<BinarySecurityToken>
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct BinarySecurityToken {
+    #[serde(rename = "@Id")]
+    pub id: String,
+    #[serde(rename = "$value")]
+    pub value: String,
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestedProofToken {
@@ -518,20 +593,20 @@ impl Default for EncryptionMethod {
     fn default() -> Self {
         Self {
             algorithm: "http://www.w3.org/2001/04/xmlenc#tripledes-cbc".to_string(),
-            val: None
+            val: None,
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KeyInfo {
+pub struct NamedKeyInfo {
     #[serde(rename = "@xmlns:ds")]
     pub ds: String,
     #[serde(rename = "ds:KeyName", alias = "KeyName")]
     pub key_name: String,
 }
 
-impl KeyInfo {
+impl NamedKeyInfo {
     pub fn sts() -> Self {
         Self {
             ds: "http://www.w3.org/2000/09/xmldsig#".to_string(),

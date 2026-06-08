@@ -24,6 +24,7 @@ bergshamra-c14n = "0.5.1"
 hmac = "0.12.0"
 bergshamra = "0.5.1"
 rsa = "0.9.10"
+cbc = "0.2.1"
 
 [dev-dependencies]
 rsa = "0.9.10"

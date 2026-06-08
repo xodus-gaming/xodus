@@ -21,8 +21,8 @@ enum CustomEvent {
 pub struct WebviewCallbackHandler;
 
 impl WebviewCallbackHandler {
-    pub async fn call(&self) -> Result<Option<xodus::xal::url::Url>, Box<dyn std::error::Error>> {
-        let mut final_url = None;
+    pub async fn call(&self) -> Result<Option<String>, Box<dyn std::error::Error>> {
+        let mut token = None;
         let mut event_loop: EventLoop<CustomEvent> = EventLoopBuilder::with_user_event().build();
         let window = WindowBuilder::new()
             .with_resizable(false)
@@ -32,53 +32,19 @@ impl WebviewCallbackHandler {
             .unwrap();
         let proxy = event_loop.create_proxy();
 
-        let clientid = "000000004424da1f".to_string();
+        //let clientid = "000000004424da1f".to_string();
+        let clientid = "{D6D5A677-0872-4AB0-9442-BB792FCE85C5}".to_string();
         let market = "pl-PL".to_string();
-        let uid = uuid::Uuid::new_v4();
         let url = format!(
-            "https://login.live.com/ppsecure/InlineLogin.srf?id=80604&scid=3&mkt=en-US&Platform=Windows10&clientid={clientid}"
+            "https://login.live.com/ppsecure/InlineConnect.srf?id=80604&scid=3&mkt={market}&Platform=android2.1.0510.1018&clientid={clientid}"
         );
 
-        let mut headers = HeaderMap::new();
-        headers.insert("cxh-capabilities", HeaderValue::from_static(r#"{"PrivatePropertyBag":1,"PasswordlessConnect":1,"PreferAssociate":1,"ChromelessUI":0}"#));
-        headers.insert(
-            "cxh-correlationId",
-            HeaderValue::from_str(&format!("{uid}")).unwrap(),
-        );
-        headers.insert("cxh-msaBinaryVersion", HeaderValue::from_static(r#"55"#));
-        headers.insert(
-            "cxh-identityClientBinaryVersion",
-            HeaderValue::from_static(r#"3"#),
-        );
-        headers.insert(
-            "cxh-osVersionInfo",
-            HeaderValue::from_static(
-                r#"{"platformId":2,"majorVersion":10,"minorVersion":0,"buildNumber":26100}"#,
-            ),
-        );
-        headers.insert(
-            "cxh-platform",
-            HeaderValue::from_static(r#"CloudExperienceHost.Platform.DESKTOP"#),
-        );
-        headers.insert("cxh-protocol", HeaderValue::from_static(r#"TokenBroker"#));
-        headers.insert("cxh-source", HeaderValue::from_static(r#"TokenBroker"#));
-        headers.insert(
-            "hostApp",
-            HeaderValue::from_static(r#"CloudExperienceHost"#),
-        );
-        headers.insert(
-            "ms-identity-app-properties",
-            HeaderValue::from_str(&format!("api-version=2.0&uaid={uid}&clientid={clientid}"))
-                .unwrap(),
-        );
-        let headermap: HeaderMap = headers.try_into().unwrap();
         let builder = WebViewBuilder::new()
             .with_url(url)
             .with_user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; MSAppHost/3.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.26100")
-            .with_headers(headermap)
+            // .with_headers(headermap)
             .with_on_page_load_handler(move |event, url| {
                 if matches!(event, PageLoadEvent::Finished)
-                    && url.starts_with("https://login.live.com/ppsecure/post.srf")
                 {
                     proxy.send_event(CustomEvent::Finish(url)).ok();
                 }
@@ -98,10 +64,24 @@ impl WebviewCallbackHandler {
             match event {
                 Event::UserEvent(CustomEvent::Finish(url)) => {
                     if !url.contains("access_denied") {
-                        final_url = Some(url.parse().unwrap());
+                        let cookies = webview.cookies().unwrap();
+                        let mut isfinal = false;
+                        for cookie in &cookies {
+                            if cookie.name() == "Page" && cookie.value().contains("finalNext") {
+                                isfinal = true;
+                                break;
+                            }
+                        }
+                        if isfinal {
+                            for cookie in cookies {
+                                if cookie.name() == "Property" {
+                                    token = Some(cookie.value().to_owned());
+                                    *control_flow = ControlFlow::Exit;
+                                    break;
+                                }
+                            }
+                        }
                     }
-
-                    *control_flow = ControlFlow::Exit;
                 }
                 Event::WindowEvent {
                     event: WindowEvent::CloseRequested,
@@ -113,12 +93,7 @@ impl WebviewCallbackHandler {
                 _ => (),
             }
         });
-        
-        let cookies = webview.cookies();
 
-        println!("{final_url:#?}");
-        println!("{cookies:#?}");
-
-        Ok(final_url)
+        Ok(token)
     }
 }
