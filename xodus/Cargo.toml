@@ -20,3 +20,12 @@ aes = "0.9.0"
 keyring-core = "1.0.0"
 dbus-secret-service-keyring-store = { version = "1.0.0", features = ["crypto-openssl"]}
 zerocopy = { version = "0.8.48", features = ["derive"] }
+bergshamra-c14n = "0.5.1"
+hmac = "0.12.0"
+bergshamra = "0.5.1"
+rsa = "0.9.10"
+
+[dev-dependencies]
+rsa = "0.9.10"
+bergshamra = "0.5.1"
+ed25519-dalek = "2.2.0"
