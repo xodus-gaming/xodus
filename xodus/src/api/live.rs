@@ -203,7 +203,7 @@ pub async fn exchange_device_token(
 
     header.security.derived_key_token = Some(DerivedKeyToken{
         nonce: nonceb64,
-        id: "SigningKey".to_string(),
+        id: "SignKey".to_string(),
         algorithm: "urn:liveid:SP800108_CTR_HMAC_SHA256_DOUBLEDERIVED".to_string(),
         requested_token_reference: soap::RequestedTokenReference { key_identifier: soap::KeyIdentifier { value_type: "http://docs.oasis-open.org/wss/2004/XX/oasis-2004XX-wss-saml-token-profile-1.0#SAMLAssertionID".to_string(), value: None }, reference: soap::ReferenceUri { uri: "".to_string() } }
     });
