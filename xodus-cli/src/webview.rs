@@ -1,6 +1,3 @@
-use std::time::Duration;
-
-use async_trait::async_trait;
 use tao::{
     dpi::{LogicalSize, Size},
     event::{Event, WindowEvent},
@@ -8,11 +5,7 @@ use tao::{
     platform::run_return::EventLoopExtRunReturn,
     window::WindowBuilder,
 };
-use wry::{
-    PageLoadEvent, WebViewBuilder,
-    http::{HeaderMap, HeaderValue},
-};
-use xodus::xal::AuthPromptCallback;
+use wry::{PageLoadEvent, WebViewBuilder};
 
 enum CustomEvent {
     Finish(String),

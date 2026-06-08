@@ -62,7 +62,11 @@ pub struct Header {
     pub auth_info: Option<AuthInfo>,
     #[serde(rename = "wsse:Security", alias = "Security")]
     pub security: Security,
-    #[serde(rename = "psf:EncryptedPP", alias = "EncryptedPP", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "psf:EncryptedPP",
+        alias = "EncryptedPP",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub encrypted_pp: Option<EncryptedPP>,
 }
 
@@ -244,7 +248,7 @@ impl EncryptedData {
             el_type: "http://www.w3.org/2001/04/xmlenc#Element".to_string(),
 
             encryption_method: EncryptionMethod::default(),
-            key_info: KeyInfoWrap { key_info: KeyInfo::Named(NamedKeyInfo::sts())} ,
+            key_info: KeyInfoWrap::sts(),
             cipher_data: CipherData::new(key),
         }
     }
@@ -258,31 +262,59 @@ pub struct EncryptedPP {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyInfoWrap {
-    #[serde(flatten)]
-    pub key_info: KeyInfo
+    #[serde(
+        rename = "@xmlns:ds",
+        alias = "@xmlns",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ds: Option<String>,
+    #[serde(
+        rename = "ds:KeyName",
+        alias = "KeyName",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub key_name: Option<String>,
+    #[serde(
+        rename = "wsse:SecurityTokenReference",
+        alias = "SecurityTokenReference",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub security_token_reference: Option<SecurityTokenReference>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum KeyInfo {
-    Signature(SignatureKeyInfo),
-    Named(NamedKeyInfo),
-}
+impl KeyInfoWrap {
+    pub fn sts() -> Self {
+        Self {
+            ds: Some("http://www.w3.org/2000/09/xmldsig#".to_string()),
+            key_name: Some("http://Passport.NET/STS".to_string()),
+            security_token_reference: None,
+        }
+    }
 
-impl KeyInfo {
     pub fn as_signature(self) -> SignatureKeyInfo {
-        if let Self::Signature(n) = self {
-            n
-        } else {
+        let Self {
+            security_token_reference: Some(reference),
+            ..
+        } = self
+        else {
             panic!("Key is not named");
+        };
+
+        SignatureKeyInfo {
+            security_token_reference: reference,
         }
     }
 
     pub fn as_named(self) -> NamedKeyInfo {
-        if let Self::Named(n) = self {
-            n
-        } else {
-            panic!("Key is not named");
+        let Self {
+            ds,
+            key_name,
+            security_token_reference: _,
+        } = self;
+
+        NamedKeyInfo {
+            ds: ds.unwrap_or_else(|| "http://www.w3.org/2000/09/xmldsig#".to_string()),
+            key_name: key_name.expect("Key is not named"),
         }
     }
 }
@@ -303,9 +335,15 @@ pub struct DerivedKeyToken {
     pub id: String,
     #[serde(rename = "@Algorithm")]
     pub algorithm: String,
-    #[serde(rename = "wsse:RequestedTokenReference", alias = "RequestedTokenReference")]
+    #[serde(
+        rename = "wsse:RequestedTokenReference",
+        alias = "RequestedTokenReference"
+    )]
     pub requested_token_reference: Option<RequestedTokenReference>,
-    #[serde(rename = "wsse:SecurityTokenReference", alias = "SecurityTokenReference")]
+    #[serde(
+        rename = "wsse:SecurityTokenReference",
+        alias = "SecurityTokenReference"
+    )]
     pub token_reference: Option<SecurityTokenReference>,
     #[serde(rename = "wssc:Nonce", alias = "Nonce")]
     pub nonce: String,
@@ -517,7 +555,7 @@ pub struct RequestedSecurityToken {
     #[serde(rename = "EncryptedData")]
     pub encrypted_data: Option<EncryptedData>,
     #[serde(rename = "wsse:BinarySecurityToken", alias = "BinarySecurityToken")]
-    pub binary_security_token: Option<BinarySecurityToken>
+    pub binary_security_token: Option<BinarySecurityToken>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -528,7 +566,6 @@ pub struct BinarySecurityToken {
     #[serde(rename = "$value")]
     pub value: String,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestedProofToken {
@@ -624,5 +661,39 @@ pub struct CipherData {
 impl CipherData {
     pub fn new(key: String) -> Self {
         Self { cipher_value: key }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn key_info_wrap_deserializes_ds_key_info_key_name() {
+        let xml = r#"<ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+                        <ds:KeyName>http://Passport.NET/STS</ds:KeyName>
+                    </ds:KeyInfo>"#;
+
+        let key_info: KeyInfoWrap =
+            quick_xml::de::from_str(xml).expect("failed to deserialize key info");
+
+        let named = key_info.as_named();
+        assert_eq!(named.ds, "http://www.w3.org/2000/09/xmldsig#");
+        assert_eq!(named.key_name, "http://Passport.NET/STS");
+    }
+
+    #[test]
+    fn key_info_wrap_deserializes_wsse_security_token_reference() {
+        let xml = r##"<KeyInfo xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+                        <wsse:SecurityTokenReference>
+                            <wsse:Reference URI="#SignKey"></wsse:Reference>
+                        </wsse:SecurityTokenReference>
+                    </KeyInfo>"##;
+
+        let key_info: KeyInfoWrap =
+            quick_xml::de::from_str(xml).expect("failed to deserialize key info");
+
+        let signature = key_info.as_signature();
+        assert_eq!(signature.security_token_reference.reference.uri, "#SignKey");
     }
 }

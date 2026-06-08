@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 
-use xal::{
-    TokenStore, cvlib::CorrelationVector, extensions::CorrelationVectorReqwestBuilder,
-    oauth2::TokenResponse,
-};
+use xal::{cvlib::CorrelationVector, extensions::CorrelationVectorReqwestBuilder};
 
 use crate::{
     licensing::utils,
@@ -12,7 +9,8 @@ use crate::{
 
 pub async fn get_license_content(
     client: &reqwest::Client,
-    ts: &TokenStore,
+    device_ms_token: String,
+    user_ms_token: String,
     content_id: String,
     market: String,
 ) -> reqwest::Result<String> {
@@ -20,7 +18,7 @@ pub async fn get_license_content(
     let response = client
         .post("https://licensing.mp.microsoft.com/v7.0/licenses/content")
         .header("from", "XboxLicenseManager")
-        .header("Authorization", format!("t={}", ts.live_token.access_token().secret()))
+        .header("Authorization", device_ms_token)
         .header("user-agent", "XboxLm-PC/Microsoft.GamingServices_32.107.4002.0_x64__8wekyb3d8bbwe")
         .json(&LicenseContentRequest {
             content_id,
@@ -35,7 +33,7 @@ pub async fn get_license_content(
                 [(utils::generate_suid(),
                 vec![LicenseUserIdentity {
                     identity_type: "Msa".to_string(),
-                    identity_value: format!("t={}", ts.live_token.access_token().secret()),
+                    identity_value: user_ms_token,
                     local_ticket_reference: "000CE6CA35BDEFFB".into(),
                 }])],
             ),

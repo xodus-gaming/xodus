@@ -45,7 +45,7 @@ pub async fn ensure_device_credentials(client: &reqwest::Client) {
         if let BodyContent::RequestSecurityTokenResponse(resp) = tokens.body.body {
             let encrypted_data = resp.requested_security_token.encrypted_data.unwrap();
             let token = xodus::models::secrets::Token {
-                key_name: encrypted_data.key_info.key_info.as_named().key_name,
+                key_name: encrypted_data.key_info.as_named().key_name,
                 cipher_value: encrypted_data.cipher_data.cipher_value,
                 binary_secret: resp.requested_proof_token.unwrap().binary_secret,
                 lifetime: resp.lifetime,
@@ -64,7 +64,7 @@ pub async fn ensure_device_credentials(client: &reqwest::Client) {
         if let BodyContent::RequestSecurityTokenResponse(resp) = tokens.body.body {
             let encrypted_data = resp.requested_security_token.encrypted_data.unwrap();
             let token = xodus::models::secrets::Token {
-                key_name: encrypted_data.key_info.key_info.as_named().key_name,
+                key_name: encrypted_data.key_info.as_named().key_name,
                 cipher_value: encrypted_data.cipher_data.cipher_value,
                 binary_secret: resp.requested_proof_token.unwrap().binary_secret,
                 lifetime: resp.lifetime,
