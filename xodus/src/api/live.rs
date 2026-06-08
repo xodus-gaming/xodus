@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::io::Write;
 
 use base64::Engine;
+use bergshamra::VerifyResult::Invalid;
 use bergshamra::{DsigContext, Key, KeyData, KeyUsage, KeysManager};
 use hmac::{Hmac, Mac};
 use rsa::rand_core::{OsRng, RngCore};
@@ -141,33 +142,26 @@ pub fn generateSharedKey(keyLength: usize, inKey: &[u8], keyUsage: String, nonce
     sharedKeyMaterial[offset..offset+nonce.len()].copy_from_slice(nonce);
     offset+=nonce.len();
 
-    let keyBitLength: usize = keyLength * 8;
-
-    sharedKeyMaterial[offset] = ((keyBitLength & 0xff000000) >> 24) as u8;
-    sharedKeyMaterial[offset + 1] = ((keyBitLength & 0x00ff0000) >> 16) as u8;
-    sharedKeyMaterial[offset + 2] = ((keyBitLength & 0x0000ff00) >> 8) as u8;
-    sharedKeyMaterial[offset + 3] = (keyBitLength & 0x000000ff) as u8;
+    let keyBitLength = u32::try_from(keyLength * 8).unwrap();
+    sharedKeyMaterial[offset..offset + 4].copy_from_slice(&keyBitLength.to_be_bytes());
 
     offset += 4;
 
     let mut currentKeyLength: usize = 0;
-    let mut currentHashCount: i64 = 1;
+    let mut currentHashCount: u32 = 1;
     
     let mut sharedKey : Vec<u8> = vec![];
     sharedKey.resize(keyLength as usize, 0);
 
     while currentKeyLength < keyLength {
-        sharedKeyMaterial[0] = ((currentHashCount & 0xff000000) >> 24) as u8;
-        sharedKeyMaterial[1] = ((currentHashCount & 0x00ff0000) >> 16) as u8;
-        sharedKeyMaterial[2] = ((currentHashCount & 0x0000ff00) >> 8) as u8;
-        sharedKeyMaterial[3] = (currentHashCount & 0x000000ff) as u8;
+        sharedKeyMaterial[0..4].copy_from_slice(&currentHashCount.to_be_bytes());
 
         currentHashCount += 1;
 
         type HmacSha256 = Hmac<Sha256>;
 
         let mut hmac = HmacSha256::new_from_slice(inKey).unwrap();
-        _ = hmac.write(&sharedKeyMaterial);
+        hmac.update(&sharedKeyMaterial[..offset]);
         let signature = hmac.finalize().into_bytes();
         let amount = min(signature.len(), keyLength - currentKeyLength);
         sharedKey[currentKeyLength..currentKeyLength + amount].copy_from_slice(&signature.as_bytes()[0..amount]);
@@ -197,7 +191,6 @@ pub async fn exchange_device_token(
     header.security.encrypted_data = Some(soap::EncryptedData::devicesoftware(token));
     let mut nonce = [0u8; 32];
     OsRng.try_fill_bytes(&mut nonce);
-    println!("sharedSecret {}", sharedSecret);
     let secret = base64::engine::general_purpose::STANDARD
     .decode(sharedSecret)
     .unwrap();
@@ -205,6 +198,13 @@ pub async fn exchange_device_token(
     let hmacKey = generateSharedKey(32, secret.as_bytes(), "WS-SecureConversationWS-SecureConversation".to_string(), &nonce);
     let mut nonceb64 : String = "".to_string();
     base64::engine::general_purpose::STANDARD.encode_string(nonce, &mut nonceb64);
+    let mut secretb64: String = String::new();
+    base64::engine::general_purpose::STANDARD.encode_string(&secret, &mut secretb64);
+    let mut hmac_key_b64: String = String::new();
+    base64::engine::general_purpose::STANDARD.encode_string(&hmacKey, &mut hmac_key_b64);
+    println!(
+        "exchange_device_token: secret_b64={secretb64} nonce_b64={nonceb64} shared_key_b64={hmac_key_b64}"
+    );
 
     header.security.derived_key_token = Some(DerivedKeyToken{
         nonce: nonceb64,
@@ -285,13 +285,16 @@ pub async fn exchange_device_token(
     ));
 
     let ctx = DsigContext::new(kmgr).with_debug(true).with_strict_verification(false);
+    let prefixes: [&str; 0] = [];
+    let minXml =bergshamra::c14n::canonicalize(xml.as_str(), bergshamra_c14n::C14nMode::Exclusive, None, &prefixes).unwrap();
+    
     let signed = bergshamra::sign(
         &ctx,
-        &xml,
+        std::str::from_utf8(&minXml).unwrap(),
     )
     .unwrap();
 
-    println!("{}", signed);
+    // println!("{}", signed);
     let response = client
         .post(format!(
             "https://login.live.com/RST2.srf"
@@ -305,6 +308,17 @@ pub async fn exchange_device_token(
 
     let text = response.text().await?;
     println!("{}", text);
+
+        let result = bergshamra::verify(&ctx, &text).unwrap();
+        match result {
+            Invalid { reason } => {
+                print!("{}", reason);
+            }
+            bergshamra::VerifyResult::Valid { .. } => {
+                println!("signature valid");
+            }
+        }
+
 
     let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
 
