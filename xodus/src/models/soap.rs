@@ -1,3 +1,5 @@
+use std::vec;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +90,7 @@ impl Header {
                 username_token: None,
                 encrypted_data: None,
                 derived_key_token: vec![],
+                binary_security_token: vec![],
                 timestamp: Timestamp {
                     id: Some("Timestamp".to_owned()),
                     created: now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
@@ -155,10 +158,12 @@ pub struct AuthInfo {
     pub request_params: String,
     #[serde(rename = "ps:WindowsClientString")]
     pub windows_client_string: String,
-    #[serde(rename = "ps:LicenseSignatureKeyVersion")]
+    #[serde(rename = "ps:LicenseSignatureKeyVersion", skip_serializing_if = "String::is_empty")]
     pub license_signature_key_version: String,
     #[serde(rename = "ps:ClientCapabilities")]
     pub client_capabilities: String,
+    #[serde(rename = "ps:IsConnected", skip_serializing_if = "String::is_empty")]
+    pub is_connected: String,
 }
 
 impl Default for AuthInfo {
@@ -177,6 +182,7 @@ impl Default for AuthInfo {
             windows_client_string: "b4d/QB7Zy5pjUAY9ByQ1echTyTITx6ZCErOEztuIVtw=".to_owned(),
             license_signature_key_version: "2".to_owned(),
             client_capabilities: "1".to_owned(),
+            is_connected: "".to_owned(),
         }
     }
 }
@@ -191,6 +197,13 @@ pub struct Security {
         skip_serializing_if = "Option::is_none"
     )]
     pub encrypted_data: Option<EncryptedData>,
+    #[serde(
+        rename = "wsse:BinarySecurityToken",
+        alias = "BinarySecurityToken",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub binary_security_token: Vec<BinarySecurityToken>,
     #[serde(
         rename = "wssc:DerivedKeyToken",
         alias = "DerivedKeyToken",
@@ -208,10 +221,14 @@ pub struct Security {
 pub struct UsernameToken {
     #[serde(rename = "@wsu:Id", alias = "@Id")]
     pub id: String,
-    #[serde(rename = "wsse:Username")]
+    #[serde(rename = "wsse:Username", skip_serializing_if = "String::is_empty")]
     pub username: String,
-    #[serde(rename = "wsse:Password")]
+    #[serde(rename = "wsse:Password", skip_serializing_if = "String::is_empty")]
     pub password: String,
+    #[serde(rename = "wsse:UsernameHint", skip_serializing_if = "String::is_empty")]
+    pub username_hint: String,
+    #[serde(rename = "wsse:LoginOption", skip_serializing_if = "String::is_empty")]
+    pub login_option: String,
 }
 
 impl UsernameToken {
@@ -220,6 +237,8 @@ impl UsernameToken {
             id: "devicesoftware".to_string(),
             username,
             password,
+            login_option: "".to_string(),
+            username_hint: "".to_string(),
         }
     }
 }
@@ -565,6 +584,8 @@ pub struct BinarySecurityToken {
     pub id: String,
     #[serde(rename = "$value")]
     pub value: String,
+    #[serde(rename = "@ValueType", skip_serializing_if = "String::is_empty")]
+    pub value_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
