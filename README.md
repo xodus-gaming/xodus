@@ -15,8 +15,8 @@ These parts are still scattered arround and are not functioning as a whole.
 - [x] Device token exchange
 - [x] License parsing
 - [x] Device key deriviation
-- [ ] User TokenBroker auth
-- [ ] User token exchange
+- [x] User TokenBroker auth
+- [x] User token exchange
 - [ ] Licensing flow
 - [ ] MSIXVC support
 - [ ] Downloading and decryption
