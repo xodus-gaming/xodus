@@ -1,3 +1,3 @@
 pub mod download;
-pub mod login;
 pub mod license;
+pub mod login;

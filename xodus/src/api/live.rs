@@ -6,8 +6,8 @@ use crate::models::devicecredential::{DeviceAddRequest, DeviceAddResponse};
 use crate::models::live::ExchangeUserTokenOutcome;
 use crate::models::soap::{
     self, AlgorithmNode, AppliesTo, BinarySecurityTokenReq, DerivedKeyToken, EncryptedData,
-    EndpointReference, ReferenceUri, SecurityTokenReference, SignatureReference,
-    SignatureTransforms, SignedInfo, UsernameToken,
+    EndpointReference, ReferenceUri, RequestMultipleSecurityTokens, SecurityTokenReference,
+    SignatureReference, SignatureTransforms, SignedInfo, UsernameToken,
 };
 
 mod utils;
@@ -250,15 +250,14 @@ pub async fn exchange_user_token(
     shared_secret: String,
     inline_token: Option<String>,
     hosting_app: String,
-    scope: String,
-    policy: Option<soap::PolicyReference>,
+    scope_policies: &[(String, Option<soap::PolicyReference>)],
 ) -> reqwest::Result<ExchangeUserTokenOutcome> {
     let mut header = soap::Header::new();
     header.auth_info.as_mut().map(|i| {
         i.hosting_app = hosting_app;
         i.sso_flags = "SsoRestr".to_string();
         i.license_signature_key_version = None;
-        i.inline_ux = "Silent".to_string();
+        i.inline_ux = "TokenBroker".to_string();
         i.inline_ft = inline_token
     });
     header.security.username_token = Some(soap::UsernameToken::user_hint(username));
@@ -290,6 +289,7 @@ pub async fn exchange_user_token(
         token_reference: None,
         requested_token_reference: Some(soap::RequestedTokenReference { key_identifier: soap::KeyIdentifier { value_type: "http://docs.oasis-open.org/wss/2004/XX/oasis-2004XX-wss-saml-token-profile-1.0#SAMLAssertionID".to_string(), value: None }, reference: soap::ReferenceUri { uri: "#DeviceDAToken".to_string() } })
     }];
+    let multiple_policies = scope_policies.len() > 1;
     header.security.signature = Some(soap::Signature {
         xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
         signed_info: SignedInfo {
@@ -298,7 +298,7 @@ pub async fn exchange_user_token(
             },
             reference: vec![
                 SignatureReference {
-                    uri: "#RST0".to_string(),
+                    uri: if multiple_policies { "#RSTS" } else { "#RST0" }.to_string(),
                     digest_method: AlgorithmNode {
                         algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
                     },
@@ -347,21 +347,48 @@ pub async fn exchange_user_token(
             },
         }),
     });
-    let body = soap::Body {
-        body: soap::BodyContent::RequestSecurityToken(soap::RequestSecurityToken {
-            id: "RST0".to_string(),
-            request_type: "http://schemas.xmlsoap.org/ws/2005/02/trust/Issue".to_string(),
-            applies_to: AppliesTo {
-                endpoint_reference: EndpointReference { address: scope },
-            },
-            policy_reference: policy,
-        }),
+    let body = if multiple_policies {
+        let mut security_tokens: Vec<soap::RequestSecurityToken> =
+            Vec::with_capacity(scope_policies.len());
+        for i in 0..scope_policies.len() {
+            let (scope, policy) = scope_policies[i].clone();
+            let id_num = i + 1;
+            let id = format!("RST{id_num}");
+
+            security_tokens.push(soap::RequestSecurityToken {
+                id,
+                request_type: "http://schemas.xmlsoap.org/ws/2005/02/trust/Issue".to_string(),
+                applies_to: AppliesTo {
+                    endpoint_reference: EndpointReference { address: scope },
+                },
+                policy_reference: policy,
+            });
+        }
+
+        soap::Body {
+            body: soap::BodyContent::RequestMultipleSecurityTokens(RequestMultipleSecurityTokens {
+                id: "RSTS".to_string(),
+                ps: "http://schemas.microsoft.com/Passport/SoapServices/PPCRL".to_string(),
+                security_tokens,
+            }),
+        }
+    } else {
+        let (scope, policy) = scope_policies[0].clone();
+        soap::Body {
+            body: soap::BodyContent::RequestSecurityToken(soap::RequestSecurityToken {
+                id: "RST0".to_string(),
+                request_type: "http://schemas.xmlsoap.org/ws/2005/02/trust/Issue".to_string(),
+                applies_to: AppliesTo {
+                    endpoint_reference: EndpointReference { address: scope },
+                },
+                policy_reference: policy,
+            }),
+        }
     };
 
     let envelope = soap::Envelope::new(header, body);
     let xml = quick_xml::se::to_string(&envelope).unwrap();
     let xml = format!("{XML_HEADER}\n{xml}");
-    println!("{}", xml);
 
     let mut kmgr = KeysManager::new();
     kmgr.add_key(Key::new(KeyData::Hmac(hmac_key.to_vec()), KeyUsage::Sign));
@@ -378,7 +405,6 @@ pub async fn exchange_user_token(
 
     let signed = bergshamra::sign(&ctx, std::str::from_utf8(&min_xml).unwrap()).unwrap();
 
-    println!("{}", signed);
     let response = client
         .post(format!(
             "https://login.live.com/RST2.srf"
@@ -391,7 +417,6 @@ pub async fn exchange_user_token(
         .await?;
 
     let text = response.text().await?;
-    println!("{}", text);
 
     let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
 

@@ -15,6 +15,7 @@ struct LoginHandler {
     client: reqwest::Client,
     device: xodus::models::secrets::Token,
     client_id: String,
+    finish: bool
 }
 
 impl LoginHandler {
@@ -23,6 +24,7 @@ impl LoginHandler {
             client,
             device,
             client_id: CLIENT_ID.to_string(),
+            finish: false
         }
     }
 
@@ -34,6 +36,15 @@ impl LoginHandler {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async move {
+                let mut scopes = vec![(
+                    USER_AUTH_SCOPE.to_string(),
+                    Some(PolicyReference::token_broker()),
+                )];
+
+                if self.finish {
+                    scopes.push(("http://Passport.NET/tb".to_string(), None));
+                }
+
                 xodus::api::live::exchange_user_token(
                     &client,
                     prop.da_token,
@@ -42,8 +53,7 @@ impl LoginHandler {
                     binary_secret,
                     Some(prop.sts_inline_flow_token),
                     client_id,
-                    USER_AUTH_SCOPE.to_string(),
-                    Some(PolicyReference::token_broker()),
+                    &scopes,
                 )
                 .await
             })
@@ -71,7 +81,6 @@ impl webview::SessionHandler for LoginHandler {
         data: DAProperty,
         runtime: &mut webview::RuntimeCommands,
     ) -> Result<webview::HandlerControl<Self::Output>, Box<dyn std::error::Error>> {
-        println!("Got token");
         let exchanged = self.exchange_user_token(data)?;
 
         match exchanged {
@@ -79,6 +88,7 @@ impl webview::SessionHandler for LoginHandler {
                 if let Some(pp) = pp {
                     if let Some(auth_url) = pp.inline_auth_url {
                         runtime.close_session(session_id);
+                        self.finish = true;
                         runtime.open_session(webview::finalize_request(auth_url));
                         return Ok(webview::HandlerControl::Continue);
                     }
