@@ -435,8 +435,7 @@ pub async fn exchange_device_token(
 
 pub async fn exchange_user_token(
     client: &reqwest::Client,
-    username: String,
-    password: String,
+    userToken: String,
     token: String,
     shared_secret: String,
     hosting_app: String,
@@ -457,16 +456,8 @@ pub async fn exchange_user_token(
         login_option: "1".to_string(),
         username_hint: "USERNAME".to_string(),
     });
-    let url = Url::parse(&password).unwrap();
-    if let Some(fragment) = url.fragment() {
-        for (key, value) in form_urlencoded::parse(fragment.as_bytes()) {
-            println!("{key} = {value}");
-            if key == "stsda" {
-                let data: EncryptedData = quick_xml::de::from_str(&value).unwrap();
-                header.security.encrypted_data = Some(data);
-            }
-        }
-    }
+    let data: EncryptedData = quick_xml::de::from_str(&userToken).unwrap();
+    header.security.encrypted_data = Some(data);
 
     header.security.binary_security_token = vec![
         BinarySecurityToken {
