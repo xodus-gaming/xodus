@@ -89,7 +89,7 @@ impl Header {
             security: Security {
                 username_token: None,
                 encrypted_data: None,
-                derived_key_token: vec![],
+                derived_key_tokens: vec![],
                 binary_security_token: vec![],
                 timestamp: Timestamp {
                     id: Some("Timestamp".to_owned()),
@@ -123,6 +123,7 @@ pub enum BodyContent {
     )]
     RequestSecurityTokenResponse(RequestSecurityTokenResponse),
     EncryptedData(EncryptedData),
+    Fault(Fault)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,12 +159,17 @@ pub struct AuthInfo {
     pub request_params: String,
     #[serde(rename = "ps:WindowsClientString")]
     pub windows_client_string: String,
-    #[serde(rename = "ps:LicenseSignatureKeyVersion", skip_serializing_if = "String::is_empty")]
-    pub license_signature_key_version: String,
+    #[serde(
+        rename = "ps:LicenseSignatureKeyVersion",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub license_signature_key_version: Option<String>,
     #[serde(rename = "ps:ClientCapabilities")]
     pub client_capabilities: String,
-    #[serde(rename = "ps:IsConnected", skip_serializing_if = "String::is_empty")]
-    pub is_connected: String,
+    #[serde(rename = "ps:IsConnected", skip_serializing_if = "Option::is_none")]
+    pub is_connected: Option<String>,
+    #[serde(rename = "ps:InlineFT", skip_serializing_if = "Option::is_none")]
+    pub inline_ft: Option<String>,
 }
 
 impl Default for AuthInfo {
@@ -175,14 +181,15 @@ impl Default for AuthInfo {
             hosting_app: "{DF60E2DF-88AD-4526-AE21-83D130EF0F68}".to_owned(),
             binary_version: "55".to_owned(),
             ui_version: "1".to_owned(),
+            is_connected: None,
             inline_ux: "TokenBroker".to_owned(),
             is_admin: "1".to_owned(),
             cookies: None,
             request_params: "AQAAAAIAAABsYwQAAAAxMDMz".to_owned(),
             windows_client_string: "b4d/QB7Zy5pjUAY9ByQ1echTyTITx6ZCErOEztuIVtw=".to_owned(),
-            license_signature_key_version: "2".to_owned(),
+            license_signature_key_version: Some("2".to_owned()),
             client_capabilities: "1".to_owned(),
-            is_connected: "".to_owned(),
+            inline_ft: None,
         }
     }
 }
@@ -203,14 +210,14 @@ pub struct Security {
         default,
         skip_serializing_if = "Vec::is_empty"
     )]
-    pub binary_security_token: Vec<BinarySecurityToken>,
+    pub binary_security_token: Vec<BinarySecurityTokenReq>,
     #[serde(
         rename = "wssc:DerivedKeyToken",
         alias = "DerivedKeyToken",
         default,
         skip_serializing_if = "Vec::is_empty"
     )]
-    pub derived_key_token: Vec<DerivedKeyToken>,
+    pub derived_key_tokens: Vec<DerivedKeyToken>,
     #[serde(rename = "wsu:Timestamp", alias = "Timestamp")]
     pub timestamp: Timestamp,
     #[serde(rename = "Signature", skip_serializing_if = "Option::is_none")]
@@ -221,24 +228,34 @@ pub struct Security {
 pub struct UsernameToken {
     #[serde(rename = "@wsu:Id", alias = "@Id")]
     pub id: String,
-    #[serde(rename = "wsse:Username", skip_serializing_if = "String::is_empty")]
-    pub username: String,
-    #[serde(rename = "wsse:Password", skip_serializing_if = "String::is_empty")]
-    pub password: String,
-    #[serde(rename = "wsse:UsernameHint", skip_serializing_if = "String::is_empty")]
-    pub username_hint: String,
-    #[serde(rename = "wsse:LoginOption", skip_serializing_if = "String::is_empty")]
-    pub login_option: String,
+    #[serde(rename = "wsse:Username", skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(rename = "wsse:Password", skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    // HINT
+    #[serde(rename = "wsse:UsernameHint", skip_serializing_if = "Option::is_none")]
+    pub username_hint: Option<String>,
+    #[serde(rename = "wsse:LoginOption", skip_serializing_if = "Option::is_none")]
+    pub login_option: Option<String>,
 }
 
 impl UsernameToken {
-    pub fn new(username: String, password: String) -> Self {
+    pub fn devicetoken(username: String, password: String) -> Self {
         Self {
             id: "devicesoftware".to_string(),
-            username,
-            password,
-            login_option: "".to_string(),
-            username_hint: "".to_string(),
+            username: Some(username),
+            password: Some(password),
+            username_hint: None,
+            login_option: None,
+        }
+    }
+    pub fn user_hint(username: String) -> Self {
+        Self {
+            id: "user".to_string(),
+            username_hint: Some(username),
+            login_option: Some("1".to_string()),
+            username: None,
+            password: None,
         }
     }
 }
@@ -271,7 +288,23 @@ impl EncryptedData {
             cipher_data: CipherData::new(key),
         }
     }
+
+    pub fn binary_da_token(key: String) -> Self {
+        Self {
+            id: "BinaryDAToken0".to_string(),
+            xmlns: "http://www.w3.org/2001/04/xmlenc#".to_string(),
+            el_type: "http://www.w3.org/2001/04/xmlenc#Element".to_string(),
+
+            encryption_method: EncryptionMethod::default(),
+            key_info: KeyInfoWrap::sts(),
+            cipher_data: CipherData::new(key),
+        }
+    }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Fault {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -361,7 +394,8 @@ pub struct DerivedKeyToken {
     pub requested_token_reference: Option<RequestedTokenReference>,
     #[serde(
         rename = "wsse:SecurityTokenReference",
-        alias = "SecurityTokenReference"
+        alias = "SecurityTokenReference",
+        skip_serializing_if = "Option::is_none"
     )]
     pub token_reference: Option<SecurityTokenReference>,
     #[serde(rename = "wssc:Nonce", alias = "Nonce")]
@@ -574,18 +608,29 @@ pub struct RequestedSecurityToken {
     #[serde(rename = "EncryptedData")]
     pub encrypted_data: Option<EncryptedData>,
     #[serde(rename = "wsse:BinarySecurityToken", alias = "BinarySecurityToken")]
-    pub binary_security_token: Option<BinarySecurityToken>,
+    pub binary_security_token: Option<BinarySecurityTokenRes>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct BinarySecurityToken {
+pub struct BinarySecurityTokenRes {
     #[serde(rename = "@Id")]
     pub id: String,
     #[serde(rename = "$value")]
     pub value: String,
     #[serde(rename = "@ValueType", skip_serializing_if = "String::is_empty")]
     pub value_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct BinarySecurityTokenReq {
+    #[serde(rename = "@id")]
+    pub id: String,
+    #[serde(rename = "@ValueType")]
+    pub value_type: String,
+    #[serde(rename = "$value")]
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -26,8 +26,4 @@ pub struct User {
     pub da_session_key: String,
     pub lifetime: Timestamp,
     pub username: String,
-    pub first_name: String,
-    pub last_name: String,
-    pub cid: String,
-    pub puid: String
 }

@@ -4,9 +4,8 @@ mod device;
 mod user;
 mod webview;
 use xodus::models::live::DAProperty;
+use xodus::models::soap::PolicyReference;
 use xodus::xal::client_params::CLIENT_WINDOWS;
-
-use crate::webview::WebviewCallbackHandler;
 
 #[derive(Subcommand)]
 enum SubCommand {
@@ -56,25 +55,38 @@ async fn main() {
             commands::license::run(&client).await;
         }
         SubCommand::Login => {
-            let webview = WebviewCallbackHandler {};
-            let token = webview.call().await.expect("failed to login");
-            if let Some(da_token) = token {
-                let prop: DAProperty = serde_json::from_str(&da_token).expect("Invalid structure");
-                let user_data = xodus::models::secrets::User {
-                    da_token: prop.da_token,
-                    da_session_key: prop.da_session_key,
-                    lifetime: xodus::models::soap::Timestamp {
-                        id: None,
-                        created: prop.da_start_time,
-                        expires: prop.da_expires,
-                    },
-                    username: prop.username,
-                    first_name: prop.first_name,
-                    last_name: prop.last_name,
-                    cid: prop.cid,
-                    puid: prop.puid,
-                };
-                user::save_user(user_data);
+            let clientid = "000000004424da1f".to_string();
+            let token = webview::login_client(clientid.clone(), "pl-PL".to_string())
+                .await
+                .expect("failed to login");
+            if let Some(prop) = token {
+                println!("Got token");
+                let device = device::get_device_token().unwrap();
+                let exchanged = xodus::api::live::exchange_user_token(
+                    &client,
+                    prop.da_token,
+                    prop.username,
+                    device.cipher_value,
+                    device.binary_secret,
+                    Some(prop.sts_inline_flow_token),
+                    clientid.clone(),
+                    "scope=service::user.auth.xboxlive.com::MBI_SSL&amp;api-version=2.0"
+                        .to_string(),
+                    Some(PolicyReference::token_broker()),
+                ).await.expect("failed to exchange");
+
+                println!("{exchanged:?}");
+                // let user_data = xodus::models::secrets::User {
+                //     da_token: prop.da_token,
+                //     da_session_key: prop.da_session_key,
+                //     lifetime: xodus::models::soap::Timestamp {
+                //         id: None,
+                //         created: prop.da_start_time,
+                //         expires: prop.da_expires,
+                //     },
+                //     username: prop.username,
+                // };
+                // user::save_user(user_data);
             }
         }
     }

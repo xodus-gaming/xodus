@@ -119,9 +119,9 @@ impl From<&[u8]> for SPLicense {
         let mut bio = BufReader::new(value);
         let mut buffer = [0; 4];
         bio.read(&mut buffer).unwrap();
-        let header = buffer;
+        let _header = buffer;
         bio.read(&mut buffer).unwrap();
-        let offset = u32::from_le_bytes(buffer);
+        let _offset = u32::from_le_bytes(buffer);
 
         let mut license = Self {
             license_id: uuid::Uuid::nil(),
