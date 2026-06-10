@@ -70,6 +70,12 @@ pub struct Header {
         skip_serializing_if = "Option::is_none"
     )]
     pub encrypted_pp: Option<EncryptedPP>,
+    #[serde(
+        rename = "psf:pp",
+        alias = "pp",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pp: Option<PP>,
 }
 
 impl Header {
@@ -100,6 +106,7 @@ impl Header {
                 signature: None,
             },
             encrypted_pp: None,
+            pp: None,
         }
     }
 }
@@ -123,7 +130,7 @@ pub enum BodyContent {
     )]
     RequestSecurityTokenResponse(RequestSecurityTokenResponse),
     EncryptedData(EncryptedData),
-    Fault(Fault)
+    Fault(Fault),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -728,6 +735,72 @@ impl CipherData {
     pub fn new(key: String) -> Self {
         Self { cipher_value: key }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PP {
+    #[serde(
+        rename = "@xmlns:psf",
+        alias = "@xmlns",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub xmlns_psf: Option<String>,
+
+    #[serde(rename = "psf:serverVersion", alias = "serverVersion")]
+    pub server_version: Option<String>,
+
+    #[serde(rename = "psf:reqstatus", alias = "reqstatus")]
+    pub req_status: Option<String>,
+
+    #[serde(rename = "psf:inlineauthurl", alias = "inlineauthurl")]
+    pub inline_auth_url: Option<String>,
+
+    #[serde(rename = "psf:inlineendauthurl", alias = "inlineendauthurl")]
+    pub inline_end_auth_url: Option<String>,
+
+    #[serde(rename = "psf:serverInfo", alias = "serverInfo")]
+    pub server_info: Option<PPServerInfo>,
+
+    #[serde(rename = "psf:authstateinternal", alias = "authstateinternal")]
+    pub auth_state_internal: Option<String>,
+
+    #[serde(
+        rename = "psf:cookies",
+        alias = "cookies",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub cookies: Option<PPEmptyElement>,
+
+    #[serde(
+        rename = "psf:response",
+        alias = "response",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub response: Option<PPEmptyElement>,
+
+    #[serde(rename = "psf:UserSessionKey", alias = "UserSessionKey")]
+    pub user_session_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PPServerInfo {
+    #[serde(rename = "@LocVersion")]
+    pub loc_version: Option<String>,
+
+    #[serde(rename = "@ServerTime")]
+    pub server_time: Option<String>,
+
+    #[serde(rename = "@BuildVersion")]
+    pub build_version: Option<String>,
+
+    #[serde(rename = "$text", default)]
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PPEmptyElement {
+    #[serde(rename = "$text", default)]
+    pub value: String,
 }
 
 #[cfg(test)]

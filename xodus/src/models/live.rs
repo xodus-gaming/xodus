@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::soap;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DAProperty {
     #[serde(rename = "sDAToken")]
@@ -13,5 +15,37 @@ pub struct DAProperty {
     #[serde(rename = "sSTSInlineFlowToken")]
     pub sts_inline_flow_token: String,
     #[serde(rename = "sSigninName")]
-    pub username: String
+    pub username: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct HostBridgeMessage {
+    #[serde(rename = "type")]
+    pub message_type: Option<String>,
+    pub value: Option<HostBridgeValue>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct HostBridgeValue {
+    pub name: Option<String>,
+    pub context: Option<String>,
+}
+
+impl HostBridgeMessage {
+    pub fn get_context_invoke(&self) -> Option<&str> {
+        let value = self.value.as_ref()?;
+        if self.message_type.as_deref() == Some("invoke")
+            && value.name.as_deref() == Some("CloudExperienceHost.getContext")
+        {
+            value.context.as_deref()
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ExchangeUserTokenOutcome {
+    Issued(soap::BodyContent),
+    Fault(Option<soap::PP>),
 }

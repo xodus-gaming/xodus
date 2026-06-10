@@ -1,4 +1,1 @@
-
-pub async fn run(client: &reqwest::Client) {
-    
-}
+pub async fn run(client: &reqwest::Client) {}

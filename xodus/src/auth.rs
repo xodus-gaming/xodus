@@ -29,7 +29,14 @@ pub async fn start_new_session(
     let app_params = get_app_params();
     let mut authenticator = XalAuthenticator::new(app_params, CLIENT_WINDOWS(), "RETAIL".into());
     let ts = Flows::ms_authorization_flow(&mut authenticator, cb, true).await?;
-    let ts = Flows::xbox_live_authorization_traditional_flow(&mut authenticator, ts.live_token, Constants::RELYING_PARTY_XBOXLIVE.to_string(), xal::AccessTokenPrefix::None, false).await?;
+    let ts = Flows::xbox_live_authorization_traditional_flow(
+        &mut authenticator,
+        ts.live_token,
+        Constants::RELYING_PARTY_XBOXLIVE.to_string(),
+        xal::AccessTokenPrefix::None,
+        false,
+    )
+    .await?;
     Ok(ts)
 }
 

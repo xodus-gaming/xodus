@@ -2,10 +2,12 @@ use base64::prelude::*;
 use bergshamra::{DsigContext, Key, KeyData, KeyUsage, KeysManager};
 use rsa::rand_core::{OsRng, RngCore};
 
-
 use crate::models::devicecredential::{DeviceAddRequest, DeviceAddResponse};
+use crate::models::live::ExchangeUserTokenOutcome;
 use crate::models::soap::{
-    self, AlgorithmNode, AppliesTo, BinarySecurityTokenReq, DerivedKeyToken, EncryptedData, EndpointReference, ReferenceUri, SecurityTokenReference, SignatureReference, SignatureTransforms, SignedInfo, UsernameToken
+    self, AlgorithmNode, AppliesTo, BinarySecurityTokenReq, DerivedKeyToken, EncryptedData,
+    EndpointReference, ReferenceUri, SecurityTokenReference, SignatureReference,
+    SignatureTransforms, SignedInfo, UsernameToken,
 };
 
 mod utils;
@@ -235,7 +237,7 @@ pub async fn exchange_device_token(
     }
 
     match utils::decrypt_response(res_envelope, &secret).expect("Failed to decrypt") {
-        soap::BodyContent::RequestSecurityTokenResponse(res) => Ok(res),
+        (soap::BodyContent::RequestSecurityTokenResponse(res), _) => Ok(res),
         _ => unimplemented!("Exchange token supports only singular token right now"),
     }
 }
@@ -250,7 +252,7 @@ pub async fn exchange_user_token(
     hosting_app: String,
     scope: String,
     policy: Option<soap::PolicyReference>,
-) -> reqwest::Result<soap::RequestSecurityTokenResponse> {
+) -> reqwest::Result<ExchangeUserTokenOutcome> {
     let mut header = soap::Header::new();
     header.auth_info.as_mut().map(|i| {
         i.hosting_app = hosting_app;
@@ -393,8 +395,10 @@ pub async fn exchange_user_token(
 
     let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
 
-    match utils::decrypt_response(res_envelope, &secret).expect("Failed to decrypt") {
-        soap::BodyContent::RequestSecurityTokenResponse(res) => Ok(res),
-        _ => unimplemented!("Exchange user token supports only one token variant"),
+    let (body, pp) = utils::decrypt_response(res_envelope, &secret).expect("Failed to decrypt");
+
+    match body {
+        soap::BodyContent::Fault(_) => Ok(ExchangeUserTokenOutcome::Fault(pp)),
+        body => Ok(ExchangeUserTokenOutcome::Issued(body)),
     }
 }

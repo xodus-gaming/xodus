@@ -121,7 +121,8 @@ pub fn generate_nonce() -> [u8; 32] {
 pub fn decrypt_response(
     envelope: soap::Envelope,
     secret: &[u8],
-) -> Result<soap::BodyContent, Box<dyn std::error::Error>> {
+) -> Result<(soap::BodyContent, Option<soap::PP>), Box<dyn std::error::Error>> {
+    let mut pp = envelope.header.pp;
     if let Some(enc_pp) = envelope.header.encrypted_pp {
         let id = enc_pp
             .encrypted_data
@@ -158,7 +159,8 @@ pub fn decrypt_response(
             .decrypt_padded_b2b::<Pkcs7>(&encrypted, &mut block)
             .expect("Failed");
         let result = std::str::from_utf8(&block).unwrap();
-        println!("{result}");
+        let new_pp = quick_xml::de::from_str::<soap::PP>(result).unwrap();
+        pp = Some(new_pp);
     }
 
     if let soap::BodyContent::EncryptedData(data) = envelope.body.body {
@@ -196,8 +198,8 @@ pub fn decrypt_response(
         let result = std::str::from_utf8(&block).unwrap();
         let security_token_res: soap::BodyContent = quick_xml::de::from_str(&result).unwrap();
 
-        return Ok(security_token_res);
+        return Ok((security_token_res, pp));
     }
 
-    Ok(envelope.body.body)
+    Ok((envelope.body.body, pp))
 }

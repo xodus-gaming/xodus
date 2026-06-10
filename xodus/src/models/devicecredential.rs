@@ -60,7 +60,6 @@ pub struct DeviceInfo {
     pub components: Vec<Component>,
 }
 
-
 #[derive(Serialize, Debug)]
 pub struct Component {
     #[serde(rename = "@name")]
@@ -146,7 +145,7 @@ pub struct Binding {
     pub user_id: Option<String>,
     #[serde(rename = "USID")]
     pub usid: Option<String>,
-    pub lease_required: Option<String>
+    pub lease_required: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -155,14 +154,14 @@ pub enum LicenseType {
     Device,
     User,
     Full,
-    KeyHolder
+    KeyHolder,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub enum LicenseUsage {
     Online,
-    Offline
+    Offline,
 }
 
 #[derive(Deserialize, Debug)]
