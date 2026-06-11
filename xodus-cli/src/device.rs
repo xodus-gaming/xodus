@@ -58,9 +58,6 @@ pub async fn ensure_device_credentials(client: &reqwest::Client) {
             let key_name = key_name.clone();
             let token: xodus::models::secrets::Token = resp.into();
             save_token(key_name, token);
-            let entry = xodus::secrets::get_entry("device-STS").unwrap();
-            let json = serde_json::to_string(&token).unwrap();
-            entry.set_secret(json.as_bytes()).unwrap();
         }
     } else if get_device_token().is_err() {
         let license = license.unwrap();
