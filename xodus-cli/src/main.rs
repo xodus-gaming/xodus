@@ -49,7 +49,7 @@ async fn main() {
             dry_run,
         } => (),//commands::download::run(&client, product, market, dry_run).await,
         SubCommand::License { content_id, market } => {
-            commands::license::run(&client, content_id, market.unwrap_or("en-US".to_string()))
+            commands::license::run(&client, content_id, market.unwrap_or("neutral".to_string()))
                 .await;
         }
         SubCommand::Login => {
