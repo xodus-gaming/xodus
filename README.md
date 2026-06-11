@@ -17,7 +17,7 @@ These parts are still scattered arround and are not functioning as a whole.
 - [x] Device key deriviation
 - [x] User TokenBroker auth
 - [x] User token exchange
-- [ ] Licensing flow
+- [x] Licensing flow
 - [ ] MSIXVC support
 - [ ] Downloading and decryption
 - [ ] On-demand .exe decryption
