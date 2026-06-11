@@ -243,12 +243,10 @@ pub async fn run(client: &reqwest::Client, dev_token: LegacyToken, legacy: Legac
     let resp = authenticate_xbox_user(client, user_token)
         .await
         .expect("Failed to authenticate Xbox user");
-    println!("{resp:#?}");
     let signing_key = SigningKey::random(&mut OsRng);
 
     let resp = request_xsts_token(client, &signing_key, resp.token, relying_party)
         .await
         .expect("Failed to authenticate Xbox user");
-    println!("{resp:#?}");
     resp
 }
