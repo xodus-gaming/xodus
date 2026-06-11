@@ -122,9 +122,9 @@ impl From<&[u8]> for SPLicense {
     fn from(value: &[u8]) -> Self {
         let mut bio = BufReader::new(value);
         let mut buffer = [0; 4];
-        bio.read(&mut buffer).unwrap();
+        bio.read_exact(&mut buffer).unwrap();
         let _header = buffer;
-        bio.read(&mut buffer).unwrap();
+        bio.read_exact(&mut buffer).unwrap();
         let _offset = u32::from_le_bytes(buffer);
 
         let mut license = Self {
@@ -150,44 +150,44 @@ impl From<&[u8]> for SPLicense {
             }
 
             let block_id: Result<BlockId, u32> = u32::from_le_bytes(buffer).try_into();
-            bio.read(&mut buffer).unwrap();
+            bio.read_exact(&mut buffer).unwrap();
             let size = u32::from_le_bytes(buffer);
             match block_id {
                 Ok(BlockId::LicenseId | BlockId::DeviceLicenseDeviceId) => {
                     let mut buffer = [0u8; 16];
-                    bio.read(&mut buffer).unwrap();
+                    bio.read_exact(&mut buffer).unwrap();
                     license.license_id = uuid::Uuid::from_bytes_le(buffer);
                 }
                 Ok(BlockId::KeyholderKeyLicenseId) => {
                     let mut buffer = [0u8; 16];
-                    bio.read(&mut buffer).unwrap();
+                    bio.read_exact(&mut buffer).unwrap();
                     license.keyholder_key_license_id = uuid::Uuid::from_bytes_le(buffer);
                 }
                 Ok(BlockId::EncryptedDeviceKey) => {
                     let mut buffer = [0; 2];
-                    bio.read(&mut buffer).unwrap();
+                    bio.read_exact(&mut buffer).unwrap();
                     let mut data: Vec<u8> = vec![0; size as usize];
-                    bio.read(&mut data).unwrap();
+                    bio.read_exact(&mut data).unwrap();
                     license.encrypted_device_key = data;
                 }
                 Ok(BlockId::PackageFullName) => {
                     let mut data: Vec<u8> = vec![0; size as usize];
-                    bio.read(&mut data).unwrap();
+                    bio.read_exact(&mut data).unwrap();
                     license.package_name = std::str::from_utf8(&data).unwrap().to_string();
                 }
                 Ok(BlockId::PackedContentKeys) => {
                     let mut offset = 0;
                     let mut buffer = [0; 2];
                     while offset < size {
-                        bio.read(&mut buffer).unwrap();
+                        bio.read_exact(&mut buffer).unwrap();
                         let id_len = u16::from_le_bytes(buffer);
-                        bio.read(&mut buffer).unwrap();
+                        bio.read_exact(&mut buffer).unwrap();
                         let key_len = u16::from_le_bytes(buffer);
 
                         let mut key_id: Vec<u8> = vec![0; id_len as usize];
-                        bio.read(&mut key_id).unwrap();
+                        bio.read_exact(&mut key_id).unwrap();
                         let mut key: Vec<u8> = vec![0; key_len as usize];
-                        bio.read(&mut key).unwrap();
+                        bio.read_exact(&mut key).unwrap();
 
                         let key_id = uuid::Uuid::from_bytes_le(key_id[..16].try_into().unwrap());
                         license.content_keys.insert(key_id, key);
@@ -196,67 +196,67 @@ impl From<&[u8]> for SPLicense {
                 }
                 Ok(BlockId::ClepSignState) => {
                     let mut data: Vec<u8> = vec![0; size as usize];
-                    bio.read(&mut data).unwrap();
+                    bio.read_exact(&mut data).unwrap();
                     license.clep_sign_state = data;
                 }
                 Ok(BlockId::SignatureBlock) => {
                     bio.consume(2);
                     let mut buffer = [0; 2];
-                    bio.read(&mut buffer).unwrap();
+                    bio.read_exact(&mut buffer).unwrap();
                     license.signature_origin = u16::from_le_bytes(buffer);
                     let mut data: Vec<u8> = vec![0; size as usize];
-                    bio.read(&mut data).unwrap();
+                    bio.read_exact(&mut data).unwrap();
                     license.signature_block = data;
                 }
                 Ok(BlockId::PollingTime) => {
                     let mut buffer = [0u8; 4];
-                    bio.read(&mut buffer).unwrap();
+                    bio.read_exact(&mut buffer).unwrap();
                     let ts = u32::from_le_bytes(buffer);
                     license.polling_time = ts;
                 }
                 Ok(BlockId::LicenseExpirationTime | BlockId::DeviceLicenseExpirationTime) => {
                     let mut buffer = [0u8; 4];
-                    bio.read(&mut buffer).unwrap();
+                    bio.read_exact(&mut buffer).unwrap();
                     let ts = u32::from_le_bytes(buffer);
                     license.license_expiration_time = ts;
                 }
                 Ok(BlockId::HardwareId) => {
                     let mut buffer = vec![0; size as usize];
-                    bio.read(&mut buffer).unwrap();
+                    bio.read_exact(&mut buffer).unwrap();
                     license.hardware_id = buffer;
                 }
                 Ok(BlockId::LicenseInformation) => {
                     let mut buffer2 = [0u8; 2];
                     let mut buffer4 = [0u8; 4];
 
-                    bio.read(&mut buffer2).unwrap();
-                    bio.read(&mut buffer2).unwrap();
-                    bio.read(&mut buffer4).unwrap();
-                    bio.read(&mut buffer2).unwrap();
+                    bio.read_exact(&mut buffer2).unwrap();
+                    bio.read_exact(&mut buffer2).unwrap();
+                    bio.read_exact(&mut buffer4).unwrap();
+                    bio.read_exact(&mut buffer2).unwrap();
                 }
                 Ok(BlockId::LicenseEntryIds) => {
                     let mut buffer2 = [0; 2];
                     let mut buffer32 = [0; 32];
-                    bio.read(&mut buffer2).unwrap();
+                    bio.read_exact(&mut buffer2).unwrap();
                     let count = u16::from_le_bytes(buffer2);
                     for _ in 0..count {
-                        bio.read(&mut buffer32).unwrap();
+                        bio.read_exact(&mut buffer32).unwrap();
                         license.entry_ids.push(buffer32);
                     }
                 }
                 Ok(BlockId::KeyholderPublicSigningKey) => {
                     let mut buf = vec![0; size as usize];
-                    bio.read(&mut buf).unwrap();
+                    bio.read_exact(&mut buf).unwrap();
                     license.keyholder_public_key = buf;
                 }
                 Ok(BlockId::KeyholderPolicies) => {
                     let mut buf = vec![0; size as usize];
-                    bio.read(&mut buf).unwrap();
+                    bio.read_exact(&mut buf).unwrap();
                     license.keyholder_policies = buf;
                 }
                 Ok(BlockId::LicensePolicies) => {
                     let mut buf = vec![0; size as usize];
-                    bio.read(&mut buf).unwrap();
+                    bio.read_exact(&mut buf).unwrap();
                     license.license_policies = buf;
                 }
                 Ok(
@@ -268,11 +268,11 @@ impl From<&[u8]> for SPLicense {
                     | BlockId::UnkBlock5,
                 ) => {
                     let mut buf = vec![0; size as usize];
-                    bio.read(&mut buf).unwrap();
+                    bio.read_exact(&mut buf).unwrap();
                 }
                 _ => {
                     let mut buf = vec![0; size as usize];
-                    bio.read(&mut buf).unwrap();
+                    bio.read_exact(&mut buf).unwrap();
                 }
             }
         }
