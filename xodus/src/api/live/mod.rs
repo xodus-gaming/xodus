@@ -203,9 +203,9 @@ pub async fn exchange_device_token(
 
     let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
     let mut nonce = None;
-    for token in envelope.header.security.derived_key_tokens {
+    for token in &res_envelope.header.security.derived_key_tokens {
         if token.id == "SignKey" {
-            nonce = Some(token.nonce);
+            nonce = Some(token.nonce.clone());
             continue;
         }
     }
