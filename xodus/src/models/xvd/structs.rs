@@ -48,8 +48,7 @@ pub struct XvdHeader {
     pub odk_keyslot_id: u32,
     pub _reservedd2a0: [u8; 0xB54],
     pub resilient_data_offset: u64,
-    pub resilient_data_length: u32
-    /* 0xE00 = END */
+    pub resilient_data_length: u32, /* 0xE00 = END */
 }
 
 #[repr(C, packed)]
@@ -58,12 +57,11 @@ pub struct XvdExtEntry {
     pub length: u32,
     pub offset: u64,
     pub data_length: u32,
-    pub reserved: u32
+    pub reserved: u32,
 }
 
 #[repr(C, packed)]
 pub struct XvcInfo {
-
     pub content_id: [u8; 0x10],
     pub xvc_encryption_key_id: [[u8; 0x10]; 0xC0],
     pub description: [u8; 0x100],
@@ -81,6 +79,5 @@ pub struct XvcInfo {
     pub preview_offset: u64,
     pub _unused_space: u64,
     pub region_specifier_count: u32,
-    pub _reserved: [u8; 0x54]
-    /* 0xDA8 = END (actually 0x2000 but rest is read in XVDFile) */
+    pub _reserved: [u8; 0x54], /* 0xDA8 = END (actually 0x2000 but rest is read in XVDFile) */
 }

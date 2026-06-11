@@ -45,7 +45,7 @@ pub struct LicenseUserIdentity {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LicenseContentResponse {
-    pub license: LicenseContent
+    pub license: LicenseContent,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,5 +57,5 @@ pub struct LicenseContent {
 
 #[derive(Debug, Deserialize)]
 pub struct LicenseKeys {
-    pub value: String
+    pub value: String,
 }

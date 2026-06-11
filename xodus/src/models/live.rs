@@ -17,7 +17,7 @@ pub struct DAProperty {
     #[serde(rename = "sSigninName")]
     pub username: String,
     #[serde(rename = "K")]
-    pub puid: String
+    pub puid: String,
 }
 
 #[derive(Deserialize, Debug)]
