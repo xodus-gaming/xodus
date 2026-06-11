@@ -94,11 +94,9 @@ impl SPLicense {
 
         let mut license = Self::default();
 
-        while let Ok(size) = reader.read(&mut buffer) {
-            if size == 0 {
-                break;
-            }
-
+        while let size = reader.read(&mut buffer)?
+            && size != 0
+        {
             // The read function does not guarantee that the buffer is completely filled,
             // read_exact must be called afterwards
             reader.read_exact(&mut buffer[size..])?;
