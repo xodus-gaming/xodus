@@ -44,10 +44,10 @@ async fn main() {
 
     match args.command {
         SubCommand::Download {
-            product,
-            market,
-            dry_run,
-        } => (),//commands::download::run(&client, product, market, dry_run).await,
+            product: _,
+            market: _,
+            dry_run: _,
+        } => (), //commands::download::_run(&client, product, market, dry_run).await,
         SubCommand::License { content_id, market } => {
             commands::license::run(&client, content_id, market.unwrap_or("en-US".to_string()))
                 .await;

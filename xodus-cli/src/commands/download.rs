@@ -13,7 +13,7 @@ use xodus::{
     },
 };
 
-pub async fn run(
+pub async fn _run(
     client: &reqwest::Client,
     ts: &TokenStore,
     product: String,
