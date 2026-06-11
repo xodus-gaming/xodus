@@ -101,7 +101,6 @@ pub async fn authenticate_xbox_user(
         .send()
         .await?;
 
-    let code = resp.status();
     resp.json().await
 }
 
