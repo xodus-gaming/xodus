@@ -103,6 +103,7 @@ impl TryFrom<u32> for BlockId {
 #[derive(Debug)]
 pub struct SPLicense {
     pub license_id: uuid::Uuid,
+    pub device_id: Vec<u8>,
     pub keyholder_key_license_id: uuid::Uuid,
     pub package_name: String,
     pub signature_origin: u16,
@@ -128,6 +129,7 @@ impl From<&[u8]> for SPLicense {
 
         let mut license = Self {
             license_id: uuid::Uuid::nil(),
+            device_id: Vec::new(),
             keyholder_key_license_id: uuid::Uuid::nil(),
             package_name: String::default(),
             encrypted_device_key: Vec::new(),
@@ -152,10 +154,15 @@ impl From<&[u8]> for SPLicense {
             value.read_exact(&mut buffer).unwrap();
             let size = u32::from_le_bytes(buffer);
             match block_id {
-                Ok(BlockId::LicenseId | BlockId::DeviceLicenseDeviceId) => {
+                Ok(BlockId::LicenseId) => {
                     let mut buffer = [0u8; 16];
                     value.read_exact(&mut buffer).unwrap();
                     license.license_id = uuid::Uuid::from_bytes_le(buffer);
+                }
+                Ok(BlockId::DeviceLicenseDeviceId | BlockId::LicenseDeviceId) => {
+                    let mut buf = vec![0; size as usize];
+                    value.read_exact(&mut buf).unwrap();
+                    license.device_id = buf;
                 }
                 Ok(BlockId::KeyholderKeyLicenseId) => {
                     let mut buffer = [0u8; 16];
@@ -165,14 +172,19 @@ impl From<&[u8]> for SPLicense {
                 Ok(BlockId::EncryptedDeviceKey) => {
                     let mut buffer = [0; 2];
                     value.read_exact(&mut buffer).unwrap();
-                    let mut data: Vec<u8> = vec![0; size as usize];
+                    let mut data: Vec<u8> = vec![0; size as usize - 2];
                     value.read_exact(&mut data).unwrap();
                     license.encrypted_device_key = data;
                 }
                 Ok(BlockId::PackageFullName) => {
                     let mut data: Vec<u8> = vec![0; size as usize];
                     value.read_exact(&mut data).unwrap();
-                    license.package_name = std::str::from_utf8(&data).unwrap().to_string();
+                    let utf16: Vec<u16> = data.chunks_exact(2).map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]])).collect();
+                    let mut s = String::from_utf16(&utf16).unwrap();
+                    if s.ends_with('\0') {
+                        s.pop();
+                    }
+                    license.package_name = s;
                 }
                 Ok(BlockId::PackedContentKeys) => {
                     let mut offset = 0;
@@ -203,7 +215,7 @@ impl From<&[u8]> for SPLicense {
                     let mut buffer = [0; 2];
                     value.read_exact(&mut buffer).unwrap();
                     license.signature_origin = u16::from_le_bytes(buffer);
-                    let mut data: Vec<u8> = vec![0; size as usize];
+                    let mut data: Vec<u8> = vec![0; size as usize - 4];
                     value.read_exact(&mut data).unwrap();
                     license.signature_block = data;
                 }
