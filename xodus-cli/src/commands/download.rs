@@ -4,17 +4,15 @@ use tokio::io::AsyncWriteExt;
 use xodus::{
     XBOX_LIVE_PACKAGES_PC,
     api::displaycatalog::find_products_by_id,
-    models::{packagespc::{PackageFile, PackageResponse}, secrets::Token},
+    models::{
+        packagespc::{PackageFile, PackageResponse},
+        secrets::Token,
+    },
 };
 
 use crate::{device, user};
 
-pub async fn run(
-    client: &reqwest::Client,
-    product: String,
-    market: Option<String>,
-    dry_run: bool,
-) {
+pub async fn run(client: &reqwest::Client, product: String, market: Option<String>, dry_run: bool) {
     let displaycatalog = find_products_by_id(
         client,
         product,
@@ -69,14 +67,18 @@ pub async fn run(
         return;
     };
 
-    let xsts_token = xodus::api::xbox::run(client, dev_token, legacy, "http://update.xboxlive.com").await;
+    let xsts_token =
+        xodus::api::xbox::run(client, dev_token, legacy, "http://update.xboxlive.com").await;
 
     let response = client
         .get(format!(
             "{XBOX_LIVE_PACKAGES_PC}/GetBasePackage/{content_id}"
         ))
         .header("x-xbl-contract-version", "3")
-        .header("Authorization", xodus::api::xbox::get_xsts_auth_header(xsts_token))
+        .header(
+            "Authorization",
+            xodus::api::xbox::get_xsts_auth_header(xsts_token),
+        )
         .send()
         .await
         .unwrap();

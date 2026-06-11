@@ -1,9 +1,16 @@
-use serde::{Serialize, Deserialize};
+use crate::models::{
+    live::ExchangeUserTokenOutcome,
+    secrets::{LegacyToken, Token},
+    soap,
+};
 use base64::Engine;
-use p256::{ecdsa::{Signature, SigningKey, signature::Signer}, pkcs8::rand_core::OsRng};
+use p256::{
+    ecdsa::{Signature, SigningKey, signature::Signer},
+    pkcs8::rand_core::OsRng,
+};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::{models::{live::ExchangeUserTokenOutcome, secrets::{LegacyToken, Token}, soap}};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -39,7 +46,6 @@ struct DisplayClaims {
 struct XuiClaim {
     uhs: String,
 }
-
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -123,14 +129,15 @@ fn ecdsa_public_key_to_jwk(key: &SigningKey) -> Vec<u8> {
         "y": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(y),
         "alg": "ES256",
         "use": "sig",
-    })).unwrap()
+    }))
+    .unwrap()
 }
 
 pub async fn request_xsts_token(
     client: &reqwest::Client,
     key: &SigningKey,
     token: String,
-    relying_party: &str
+    relying_party: &str,
 ) -> reqwest::Result<XstsResponse> {
     let file_time = to_windows_file_time(SystemTime::now());
 
@@ -197,7 +204,12 @@ pub fn get_xsts_auth_header(xsts: XstsResponse) -> String {
     format!("XBL3.0 x={uhs};{}", xsts.token)
 }
 
-pub async fn run(client: &reqwest::Client, dev_token: LegacyToken, legacy: LegacyToken, relying_party : &str) -> XstsResponse {
+pub async fn run(
+    client: &reqwest::Client,
+    dev_token: LegacyToken,
+    legacy: LegacyToken,
+    relying_party: &str,
+) -> XstsResponse {
     let secret = dev_token.binary_secret.unwrap();
 
     let user_token = crate::api::live::exchange_user_token(
