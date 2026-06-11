@@ -1,5 +1,8 @@
 use crate::{device, user};
-use xodus::models::{live::ExchangeUserTokenOutcome, secrets::Token, soap};
+use xodus::{
+    licensing::splicense::{derive_device_key, parse_license, unpack_key},
+    models::{live::ExchangeUserTokenOutcome, secrets::Token, soap},
+};
 
 pub async fn run(client: &reqwest::Client, content_id: String, market: String) {
     let dev_token = device::get_device_token().unwrap();
@@ -66,7 +69,7 @@ pub async fn run(client: &reqwest::Client, content_id: String, market: String) {
         return;
     };
 
-    let license = xodus::licensing::content::get_license_content(
+    let (_response, game_license) = xodus::licensing::content::get_license_content(
         client,
         ms_device_token,
         user_token,
@@ -77,5 +80,15 @@ pub async fn run(client: &reqwest::Client, content_id: String, market: String) {
     .await
     .expect("failed to get license");
 
-    println!("{license:?}");
+    let game_splicense = parse_license(game_license.splicense_block);
+
+    let dev_license = device::get_dev_license().unwrap();
+    let device_license = parse_license(dev_license.splicense);
+    let key = derive_device_key(&device_license.encrypted_device_key);
+    let key: [u8; 16] = key.try_into().expect("Key too big");
+    for (uuid, content_key) in game_splicense.content_keys {
+        let unpacked = unpack_key(&key, content_key).expect("failed to unpack");
+        println!("{uuid:?} decrypted");
+    }
+
 }

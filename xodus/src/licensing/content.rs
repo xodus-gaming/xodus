@@ -1,10 +1,15 @@
+use base64::prelude::*;
 use std::collections::HashMap;
-
 use xal::{cvlib::CorrelationVector, extensions::CorrelationVectorReqwestBuilder};
 
 use crate::{
     licensing::utils,
-    models::licensing::{DeviceContext, LicenseContentRequest, LicenseUserIdentity},
+    models::{
+        devicecredential::License,
+        licensing::{
+            DeviceContext, LicenseContentRequest, LicenseContentResponse, LicenseUserIdentity,
+        },
+    },
 };
 
 pub async fn get_license_content(
@@ -14,7 +19,7 @@ pub async fn get_license_content(
     ticket_reference: String,
     content_id: String,
     market: String,
-) -> reqwest::Result<String> {
+) -> reqwest::Result<(LicenseContentResponse, License)> {
     let mut cv = CorrelationVector::new();
     let response = client
         .post("https://licensing.mp.microsoft.com/v7.0/licenses/content")
@@ -44,5 +49,9 @@ pub async fn get_license_content(
         .send()
         .await?;
 
-    response.text().await
+    let content_res = response.json::<LicenseContentResponse>().await?;
+    let license = &content_res.license.keys[0].value;
+    let license = BASE64_STANDARD.decode(license).unwrap();
+    let license = quick_xml::de::from_str::<License>(&String::from_utf8(license).unwrap()).unwrap();
+    Ok((content_res, license))
 }

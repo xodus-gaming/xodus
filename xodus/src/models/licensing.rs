@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,4 +40,22 @@ pub struct LicenseUserIdentity {
     pub identity_type: String,
     pub identity_value: String,
     pub local_ticket_reference: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LicenseContentResponse {
+    pub license: LicenseContent
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LicenseContent {
+    pub keys: Vec<LicenseKeys>,
+    pub leases: Vec<LicenseKeys>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LicenseKeys {
+    pub value: String
 }

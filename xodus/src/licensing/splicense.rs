@@ -21,9 +21,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::io::{BufRead, BufReader, Read};
+use std::{
+    collections::HashMap,
+    io::{BufRead, BufReader, Read},
+};
 
 use aes::cipher::{BlockCipherDecrypt, KeyInit};
+use base64::prelude::*;
 use zerocopy::transmute;
 
 // pub struct Block<'a> {
@@ -105,7 +109,7 @@ pub struct SPLicense {
     pub signature_block: Vec<u8>,
     pub clep_sign_state: Vec<u8>,
     pub encrypted_device_key: Vec<u8>,
-    pub content_keys: Vec<u8>,
+    pub content_keys: HashMap<uuid::Uuid, Vec<u8>>,
     pub keyholder_public_key: Vec<u8>,
     pub keyholder_policies: Vec<u8>,
     pub license_policies: Vec<u8>,
@@ -128,7 +132,7 @@ impl From<&[u8]> for SPLicense {
             keyholder_key_license_id: uuid::Uuid::nil(),
             package_name: String::default(),
             encrypted_device_key: Vec::new(),
-            content_keys: Vec::new(),
+            content_keys: HashMap::new(),
             clep_sign_state: Vec::new(),
             polling_time: 0,
             signature_origin: 0,
@@ -160,6 +164,8 @@ impl From<&[u8]> for SPLicense {
                     license.keyholder_key_license_id = uuid::Uuid::from_bytes_le(buffer);
                 }
                 Ok(BlockId::EncryptedDeviceKey) => {
+                    let mut buffer = [0; 2];
+                    bio.read(&mut buffer).unwrap();
                     let mut data: Vec<u8> = vec![0; size as usize];
                     bio.read(&mut data).unwrap();
                     license.encrypted_device_key = data;
@@ -170,9 +176,23 @@ impl From<&[u8]> for SPLicense {
                     license.package_name = std::str::from_utf8(&data).unwrap().to_string();
                 }
                 Ok(BlockId::PackedContentKeys) => {
-                    let mut data: Vec<u8> = vec![0; size as usize];
-                    bio.read(&mut data).unwrap();
-                    license.content_keys = data;
+                    let mut offset = 0;
+                    let mut buffer = [0; 2];
+                    while offset < size {
+                        bio.read(&mut buffer).unwrap();
+                        let id_len = u16::from_le_bytes(buffer);
+                        bio.read(&mut buffer).unwrap();
+                        let key_len = u16::from_le_bytes(buffer);
+
+                        let mut key_id: Vec<u8> = vec![0; id_len as usize];
+                        bio.read(&mut key_id).unwrap();
+                        let mut key: Vec<u8> = vec![0; key_len as usize];
+                        bio.read(&mut key).unwrap();
+
+                        let key_id = uuid::Uuid::from_bytes_le(key_id[..16].try_into().unwrap());
+                        license.content_keys.insert(key_id, key);
+                        offset += 4 + id_len as u32 + key_len as u32;
+                    }
                 }
                 Ok(BlockId::ClepSignState) => {
                     let mut data: Vec<u8> = vec![0; size as usize];
@@ -261,6 +281,8 @@ impl From<&[u8]> for SPLicense {
 }
 
 pub fn derive_device_key(license: &[u8]) -> Vec<u8> {
+    assert!(u32::from_le_bytes(license[..4].try_into().unwrap()) == 4);
+
     let keyschedule: [u8; 228] = license[4..232].try_into().unwrap();
     let keyschedule: [u32; 57] = transmute!(keyschedule);
     let devicekey: [u8; 16] = license[516..532].try_into().unwrap();
@@ -279,4 +301,16 @@ pub fn derive_device_key(license: &[u8]) -> Vec<u8> {
     aes.decrypt_block(&mut data);
 
     return data.to_vec();
+}
+
+pub fn parse_license(splicense_block: String) -> SPLicense {
+    SPLicense::from(BASE64_STANDARD.decode(splicense_block).unwrap().as_slice())
+}
+
+pub fn unpack_key(
+    key: &[u8; 16],
+    content_key: Vec<u8>,
+) -> Result<Vec<u8>, aes_keywrap::KeywrapError> {
+    let packer = aes_keywrap::Aes128KeyWrapAligned::new(key);
+    packer.decapsulate(&content_key)
 }
