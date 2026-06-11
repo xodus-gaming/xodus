@@ -116,7 +116,7 @@ impl SPLicense {
                 self.license_id = uuid::Uuid::from_bytes_le(buffer);
             }
             Ok(BlockId::DeviceLicenseDeviceId | BlockId::LicenseDeviceId) => {
-                let mut buf = vec![0; size as usize];
+                let mut buf = vec![0u8; size as usize];
                 reader.read_exact(&mut buf)?;
                 self.device_id = buf;
             }
@@ -126,14 +126,14 @@ impl SPLicense {
                 self.keyholder_key_license_id = uuid::Uuid::from_bytes_le(buffer);
             }
             Ok(BlockId::EncryptedDeviceKey) => {
-                let mut buffer = [0; 2];
+                let mut buffer = [0u8; 2];
                 reader.read_exact(&mut buffer)?;
-                let mut data: Vec<u8> = vec![0; size as usize - 2];
+                let mut data = vec![0u8; size as usize - 2];
                 reader.read_exact(&mut data)?;
                 self.encrypted_device_key = data;
             }
             Ok(BlockId::PackageFullName) => {
-                let mut data: Vec<u8> = vec![0; size as usize];
+                let mut data = vec![0u8; size as usize];
                 reader.read_exact(&mut data)?;
                 let utf16: Vec<u16> = data
                     .chunks_exact(2)
@@ -147,16 +147,16 @@ impl SPLicense {
             }
             Ok(BlockId::PackedContentKeys) => {
                 let mut offset = 0;
-                let mut buffer = [0; 2];
+                let mut buffer = [0u8; 2];
                 while offset < size {
                     reader.read_exact(&mut buffer)?;
                     let id_len = u16::from_le_bytes(buffer);
                     reader.read_exact(&mut buffer)?;
                     let key_len = u16::from_le_bytes(buffer);
 
-                    let mut key_id: Vec<u8> = vec![0; id_len as usize];
+                    let mut key_id = vec![0u8; id_len as usize];
                     reader.read_exact(&mut key_id)?;
-                    let mut key: Vec<u8> = vec![0; key_len as usize];
+                    let mut key = vec![0u8; key_len as usize];
                     reader.read_exact(&mut key)?;
 
                     let key_id = uuid::Uuid::from_bytes_le(key_id[..16].try_into().unwrap());
@@ -165,17 +165,17 @@ impl SPLicense {
                 }
             }
             Ok(BlockId::ClepSignState) => {
-                let mut data: Vec<u8> = vec![0; size as usize];
+                let mut data = vec![0u8; size as usize];
                 reader.read_exact(&mut data)?;
                 self.clep_sign_state = data;
             }
             Ok(BlockId::SignatureBlock) => {
-                let mut buffer = [0; 2];
+                let mut buffer = [0u8; 2];
                 reader.read_exact(&mut buffer)?;
                 let _unknown = buffer;
                 reader.read_exact(&mut buffer)?;
                 self.signature_origin = u16::from_le_bytes(buffer);
-                let mut data: Vec<u8> = vec![0; size as usize - 4];
+                let mut data = vec![0u8; size as usize - 4];
                 reader.read_exact(&mut data)?;
                 self.signature_block = data;
             }
@@ -192,7 +192,7 @@ impl SPLicense {
                 self.license_expiration_time = ts;
             }
             Ok(BlockId::HardwareId) => {
-                let mut buffer = vec![0; size as usize];
+                let mut buffer = vec![0u8; size as usize];
                 reader.read_exact(&mut buffer)?;
                 self.hardware_id = buffer;
             }
@@ -206,8 +206,8 @@ impl SPLicense {
                 reader.read_exact(&mut buffer2)?;
             }
             Ok(BlockId::LicenseEntryIds) => {
-                let mut buffer2 = [0; 2];
-                let mut buffer32 = [0; 32];
+                let mut buffer2 = [0u8; 2];
+                let mut buffer32 = [0u8; 32];
                 reader.read_exact(&mut buffer2).unwrap();
                 let count = u16::from_le_bytes(buffer2);
                 for _ in 0..count {
@@ -216,17 +216,17 @@ impl SPLicense {
                 }
             }
             Ok(BlockId::KeyholderPublicSigningKey) => {
-                let mut buf = vec![0; size as usize];
+                let mut buf = vec![0u8; size as usize];
                 reader.read_exact(&mut buf)?;
                 self.keyholder_public_key = buf;
             }
             Ok(BlockId::KeyholderPolicies) => {
-                let mut buf = vec![0; size as usize];
+                let mut buf = vec![0u8; size as usize];
                 reader.read_exact(&mut buf)?;
                 self.keyholder_policies = buf;
             }
             Ok(BlockId::LicensePolicies) => {
-                let mut buf = vec![0; size as usize];
+                let mut buf = vec![0u8; size as usize];
                 reader.read_exact(&mut buf)?;
                 self.license_policies = buf;
             }
@@ -238,11 +238,11 @@ impl SPLicense {
                 | BlockId::UnkBlock4
                 | BlockId::UnkBlock5,
             ) => {
-                let mut buf = vec![0; size as usize];
+                let mut buf = vec![0u8; size as usize];
                 reader.read_exact(&mut buf)?;
             }
             _ => {
-                let mut buf = vec![0; size as usize];
+                let mut buf = vec![0u8; size as usize];
                 reader.read_exact(&mut buf)?;
             }
         }
