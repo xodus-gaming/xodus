@@ -3,7 +3,6 @@ mod commands;
 mod device;
 mod user;
 mod webview;
-use xodus::xal::client_params::CLIENT_WINDOWS;
 
 #[derive(Subcommand)]
 enum SubCommand {
@@ -33,7 +32,7 @@ struct CliArgs {
 async fn main() {
     env_logger::init_from_env("XODUS_LOG");
     let client = reqwest::ClientBuilder::new()
-        .user_agent(CLIENT_WINDOWS().user_agent)
+        .user_agent("Xodus/1.0.0")
         .connection_verbose(true)
         .build()
         .unwrap();
@@ -44,10 +43,10 @@ async fn main() {
 
     match args.command {
         SubCommand::Download {
-            product: _,
-            market: _,
-            dry_run: _,
-        } => (), //commands::download::_run(&client, product, market, dry_run).await,
+            product,
+            market,
+            dry_run,
+        } => commands::download::run(&client, product, market, dry_run).await,
         SubCommand::License { content_id, market } => {
             commands::license::run(&client, content_id, market.unwrap_or("neutral".to_string()))
                 .await;

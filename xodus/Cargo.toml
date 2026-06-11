@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-xal = { git = "https://github.com/OpenXbox/xal-rs", rev = "230ba61c938f5376b226089ad5f1b812e809dafa", version = "0.1.3" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 serde = { version = "1.0.228", features = ["derive"] }
@@ -17,7 +16,7 @@ base64 = "0.22.1"
 rand = "0.10.0"
 uuid = "1.23.1"
 aes = "0.9.0"
-keyring-core = "1.0.0"
+keyring-core = { version = "1.0.0", features = ["sample"] }
 dbus-secret-service-keyring-store = { version = "1.0.0", features = ["crypto-openssl"]}
 zerocopy = { version = "0.8.48", features = ["derive"] }
 bergshamra-c14n = "0.5.1"
@@ -27,6 +26,8 @@ rsa = "0.9.10"
 cbc = "0.2.1"
 url = "2.5.8"
 aes-keywrap = "0.9.0"
+p256 = "0.13.2"
+sha2 = "0.11.0"
 
 [dev-dependencies]
 rsa = "0.9.10"

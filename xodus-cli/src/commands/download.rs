@@ -4,26 +4,17 @@ use tokio::io::AsyncWriteExt;
 use xodus::{
     XBOX_LIVE_PACKAGES_PC,
     api::displaycatalog::find_products_by_id,
-    auth::get_xsts_token,
-    models::packagespc::{PackageFile, PackageResponse},
-    xal::{
-        RequestSigner, TokenStore,
-        cvlib::CorrelationVector,
-        extensions::{CorrelationVectorReqwestBuilder, SigningReqwestBuilder},
-    },
+    models::{packagespc::{PackageFile, PackageResponse}, secrets::Token},
 };
 
-pub async fn _run(
+use crate::{device, user};
+
+pub async fn run(
     client: &reqwest::Client,
-    ts: &TokenStore,
     product: String,
     market: Option<String>,
     dry_run: bool,
 ) {
-    // Create new instances of Correlation vector and request signer
-    let mut cv = CorrelationVector::new();
-    let mut signer = RequestSigner::new();
-
     let displaycatalog = find_products_by_id(
         client,
         product,
@@ -65,26 +56,25 @@ pub async fn _run(
 
     let content_id = &package.content_id;
 
-    let xsts_token = get_xsts_token(
-        ts.device_token.as_ref(),
-        ts.title_token.as_ref(),
-        ts.user_token.as_ref(),
-        "http://update.xboxlive.com",
-    )
-    .await
-    .expect("Failed to get update xsts token");
+    let dev_token = device::get_device_token().unwrap();
+    let Token::Legacy(dev_token) = dev_token else {
+        eprintln!("Invalid STS token");
+        return;
+    };
+    let user_token = user::get_token("http://Passport.NET/STS".to_string()).unwrap();
+    let Token::Legacy(legacy) = user_token else {
+        eprintln!("Unspported user token");
+        return;
+    };
+
+    let xsts_token = xodus::api::xbox::run(client, dev_token, legacy, "http://update.xboxlive.com").await;
 
     let response = client
         .get(format!(
             "{XBOX_LIVE_PACKAGES_PC}/GetBasePackage/{content_id}"
         ))
         .header("x-xbl-contract-version", "3")
-        .header("Authorization", xsts_token.authorization_header_value())
-        .add_cv(&mut cv)
-        .unwrap()
-        .sign(&mut signer, None)
-        .await
-        .unwrap()
+        .header("Authorization", xodus::api::xbox::get_xsts_auth_header(xsts_token))
         .send()
         .await
         .unwrap();
