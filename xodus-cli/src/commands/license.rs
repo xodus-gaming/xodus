@@ -38,7 +38,7 @@ pub async fn run(client: &reqwest::Client, content_id: String, market: String) {
         secret,
         None,
         Some("Silent".to_string()),
-        "{d6d5a677-0872-4ab0-9442-bb792fce85c5".to_string(),
+        "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
         &[(
             "www.microsoft.com".to_owned(),
             Some(soap::PolicyReference::mbi_ssl()),

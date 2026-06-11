@@ -19,6 +19,9 @@ enum SubCommand {
         #[arg(short, long)]
         market: Option<String>,
     },
+    Extract {
+        path: String
+    },
     Login,
 }
 
@@ -44,16 +47,19 @@ async fn main() {
 
     match args.command {
         SubCommand::Download {
-            product: _,
-            market: _,
-            dry_run: _,
-        } => (), //commands::download::_run(&client, product, market, dry_run).await,
+            product,
+            market,
+            dry_run,
+        } => commands::download::run(&client, product, market, dry_run).await,
         SubCommand::License { content_id, market } => {
             commands::license::run(&client, content_id, market.unwrap_or("neutral".to_string()))
                 .await;
         }
         SubCommand::Login => {
             commands::login::run(&client).await;
+        },
+        SubCommand::Extract { path } => {
+            commands::extract::run(path).await;
         }
     }
 

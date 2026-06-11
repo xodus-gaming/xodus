@@ -224,7 +224,7 @@ pub async fn exchange_device_token(
     let result = bergshamra::verify(&ctx, &text).unwrap();
     match result {
         bergshamra::VerifyResult::Invalid { reason } => {
-            println!("{}", reason);
+            println!("DEVICE {}", reason);
         }
         bergshamra::VerifyResult::Valid { .. } => {
             println!("signature valid");
@@ -416,6 +416,34 @@ pub async fn exchange_user_token(
     let text = response.text().await?;
 
     let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
+    let mut nonce = None;
+    for token in envelope.header.security.derived_key_tokens {
+        if token.id == "SignKey" {
+            nonce = Some(token.nonce);
+            continue;
+        }
+    }
+    let nonce = nonce.unwrap();
+    let nonce = BASE64_STANDARD.decode(nonce).unwrap();
+    let key = utils::generate_shared_key(
+        32,
+        &secret,
+        "WS-SecureConversationWS-SecureConversation",
+        &nonce,
+    );
+
+    let mut kmgr = KeysManager::new();
+    kmgr.add_key(Key::new(KeyData::Hmac(key.to_vec()), KeyUsage::Verify));
+    let ctx = DsigContext::new(kmgr).with_strict_verification(false);
+    let result = bergshamra::verify(&ctx, &text).unwrap();
+    match result {
+        bergshamra::VerifyResult::Invalid { reason } => {
+            println!("USER {}", reason);
+        }
+        bergshamra::VerifyResult::Valid { .. } => {
+            println!("signature valid");
+        }
+    }
 
     let (body, pp) = utils::decrypt_response(res_envelope, &secret).expect("Failed to decrypt");
 

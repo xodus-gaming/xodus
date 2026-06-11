@@ -1,3 +1,14 @@
+use zerocopy::FromBytes;
+
+use crate::{
+    models::xvd::{
+        constants::{LEGACY_SECTOR_SIZE, SECTOR_SIZE, XVD_HEADER_INCL_SIGNATURE_SIZE},
+        XvdVolumeFlags,
+    },
+    xvd::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset},
+};
+
+#[derive(FromBytes)]
 #[repr(C, packed)]
 pub struct XvdHeader {
     pub signature: [u8; 0x200],
@@ -51,6 +62,94 @@ pub struct XvdHeader {
     pub resilient_data_length: u32, /* 0xE00 = END */
 }
 
+impl XvdHeader {
+    pub fn is_encrypted(&self) -> bool {
+        (self.volume_flags & XvdVolumeFlags::EncryptionDisabled as u32) == 0
+    }
+
+    pub fn is_legacy_sector_size(&self) -> bool {
+        (self.volume_flags & XvdVolumeFlags::LegacySectorSize as u32) != 0
+    }
+
+    pub fn is_data_integrity_enabled(&self) -> bool {
+        (self.volume_flags & XvdVolumeFlags::DataIntegrityDisabled as u32) == 0
+    }
+
+    pub fn is_resiliency_enabled(&self) -> bool {
+        (self.volume_flags & XvdVolumeFlags::ResiliencyEnabled as u32) != 0
+    }
+
+    pub fn mutable_data_length(&self) -> u64 {
+        page_number_to_offset(self.mutable_page_count as u64)
+    }
+
+    pub fn user_data_page_count(&self) -> u64 {
+        bytes_to_pages(self.user_data_length as u64)
+    }
+
+    pub fn xvc_data_page_count(&self) -> u64 {
+        bytes_to_pages(self.xvc_data_length as u64)
+    }
+
+    pub fn embedded_xvd_page_count(&self) -> u64 {
+        bytes_to_pages(self.embedded_xvd_length as u64)
+    }
+
+    pub fn dynamic_header_page_count(&self) -> u64 {
+        bytes_to_pages(self.dynamic_header_length as u64)
+    }
+
+    pub fn drive_page_count(&self) -> u64 {
+        bytes_to_pages(self.drive_size)
+    }
+
+    pub fn number_of_hashed_pages(&self) -> u64 {
+        self.drive_page_count()
+            + self.user_data_page_count()
+            + self.xvc_data_page_count()
+            + self.dynamic_header_page_count()
+    }
+
+    pub fn number_of_metadata_pages(&self) -> u64 {
+        self.user_data_page_count() + self.xvc_data_page_count() + self.dynamic_header_page_count()
+    }
+
+    pub fn sector_size(&self) -> u32 {
+        if self.is_legacy_sector_size() {
+            LEGACY_SECTOR_SIZE
+        } else {
+            SECTOR_SIZE
+        }
+    }
+
+    pub fn mdu_offset(&self) -> u64 {
+        page_number_to_offset(self.embedded_xvd_page_count()) + XVD_HEADER_INCL_SIGNATURE_SIZE
+    }
+
+    pub fn hash_tree_offset(&self) -> u64 {
+        self.mutable_data_length() + self.mdu_offset()
+    }
+
+    pub fn hash_tree_info(&self) -> (u64, u64) {
+        calculate_number_of_hash_pages(self.number_of_hashed_pages(), self.is_resiliency_enabled())
+    }
+
+    pub fn user_data_offset(&self, hash_tree_page_count: u64) -> u64 {
+        let hash_pages_offset = if self.is_data_integrity_enabled() {
+            page_number_to_offset(hash_tree_page_count)
+        } else {
+            0
+        };
+
+        hash_pages_offset + self.hash_tree_offset()
+    }
+
+    pub fn xvc_info_offset(&self, hash_tree_page_count: u64) -> u64 {
+        page_number_to_offset(self.user_data_page_count()) + self.user_data_offset(hash_tree_page_count)
+    }
+}
+
+#[derive(FromBytes)]
 #[repr(C, packed)]
 pub struct XvdExtEntry {
     pub code: u32,
@@ -60,6 +159,7 @@ pub struct XvdExtEntry {
     pub reserved: u32,
 }
 
+#[derive(FromBytes)]
 #[repr(C, packed)]
 pub struct XvcInfo {
     pub content_id: [u8; 0x10],
@@ -80,4 +180,37 @@ pub struct XvcInfo {
     pub _unused_space: u64,
     pub region_specifier_count: u32,
     pub _reserved: [u8; 0x54], /* 0xDA8 = END (actually 0x2000 but rest is read in XVDFile) */
+}
+
+#[derive(FromBytes)]
+#[repr(C, packed)]
+pub struct XvdUpdateSegment {
+    pub page_num: u32,
+    pub hash: u64
+}
+
+#[derive(FromBytes)]
+#[repr(C, packed)]
+pub struct XvcRegionSpecifier {
+    pub region_id: u32,
+    pub padding4: u32,
+    pub key: [u8; 0x80], // UTF-16
+    pub value: [u8; 0x100] // UTF-16
+}
+
+#[derive(FromBytes)]
+#[repr(C, packed)]
+pub struct XvcRegionHeader {
+    pub region_id: u32,
+    pub key_id: u16,
+    pub padding6: u16,
+    pub flags: u32,
+    pub first_segment_index: u32,
+    pub description: [u8; 0x40], // UTF-16
+    pub offset: u64,
+    pub length: u64,
+    pub hash: u64,
+    pub unknown_68: u64,
+    pub unknown_70: u64,
+    pub unknown_78: u64,
 }

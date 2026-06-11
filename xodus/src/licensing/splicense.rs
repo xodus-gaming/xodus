@@ -179,7 +179,10 @@ impl From<&[u8]> for SPLicense {
                 Ok(BlockId::PackageFullName) => {
                     let mut data: Vec<u8> = vec![0; size as usize];
                     value.read_exact(&mut data).unwrap();
-                    let utf16: Vec<u16> = data.chunks_exact(2).map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]])).collect();
+                    let utf16: Vec<u16> = data
+                        .chunks_exact(2)
+                        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                        .collect();
                     let mut s = String::from_utf16(&utf16).unwrap();
                     if s.ends_with('\0') {
                         s.pop();
