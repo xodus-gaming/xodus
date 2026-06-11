@@ -102,6 +102,10 @@ impl From<&[u8]> for SPLicense {
                 break;
             }
 
+            // The read function does not guarantee that the buffer is completely filled,
+            // read_exact must be called afterwards
+            value.read_exact(&mut buffer[size..]).unwrap();
+
             let block_id: Result<BlockId, _> = u32::from_le_bytes(buffer).try_into();
             value.read_exact(&mut buffer).unwrap();
             let size = u32::from_le_bytes(buffer);
