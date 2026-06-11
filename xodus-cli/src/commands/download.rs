@@ -56,7 +56,7 @@ pub async fn run(
         return;
     };
 
-    // let content_id = &package.content_id;
+    let content_id = &package.content_id;
 
     let dev_token = device::get_device_token().unwrap();
     let Token::Legacy(dev_token) = dev_token else {
