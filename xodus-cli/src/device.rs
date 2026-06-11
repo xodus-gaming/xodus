@@ -46,7 +46,18 @@ pub async fn ensure_device_credentials(client: &reqwest::Client) {
             .expect("Failed to auth device");
 
         if let BodyContent::RequestSecurityTokenResponse(resp) = tokens.body.body {
+            let key_name = resp
+                .requested_security_token
+                .encrypted_data
+                .as_ref()
+                .unwrap()
+                .key_info
+                .key_name
+                .as_ref()
+                .unwrap();
+            let key_name = key_name.clone();
             let token: xodus::models::secrets::Token = resp.into();
+            save_token(key_name, token);
             let entry = xodus::secrets::get_entry("device-STS").unwrap();
             let json = serde_json::to_string(&token).unwrap();
             entry.set_secret(json.as_bytes()).unwrap();
