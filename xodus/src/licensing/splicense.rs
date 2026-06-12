@@ -64,7 +64,7 @@ pub enum BlockId {
     SignatureBlock = 0xcc,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct SPLicense {
     pub license_id: uuid::Uuid,
     pub device_id: Vec<u8>,
@@ -84,7 +84,7 @@ pub struct SPLicense {
     pub license_expiration_time: u32,
 }
 
-#[derive(Debug, FromBytes, IntoBytes)]
+#[derive(FromBytes, IntoBytes)]
 #[repr(C, packed)]
 pub struct EncryptedDeviceKey {
     /// The total size of the encrypted device key, including the size field itself.

@@ -94,7 +94,6 @@ pub async fn run(client: &reqwest::Client, content_id: String, market: String, c
         .encrypted_device_key
         .unwrap()
         .derive_device_key();
-    println!("{game_splicense:?}");
     tokio::fs::create_dir_all(&ciks).await.unwrap();
     for (uuid, content_key) in game_splicense.content_keys {
         let unpacked = unpack_key(&key, content_key).expect("failed to unpack");
