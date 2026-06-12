@@ -73,7 +73,7 @@ pub struct SPLicense {
     pub signature_origin: u16,
     pub signature_block: Vec<u8>,
     pub clep_sign_state: Vec<u8>,
-    pub encrypted_device_key: Option<EncryptedDeviceKey>,
+    pub encrypted_device_key: Option<Box<EncryptedDeviceKey>>,
     pub content_keys: HashMap<uuid::Uuid, Vec<u8>>,
     pub keyholder_public_key: Vec<u8>,
     pub keyholder_policies: Vec<u8>,
@@ -156,7 +156,7 @@ impl SPLicense {
             }
             Ok(BlockId::EncryptedDeviceKey) => {
                 let key: [u8; 4096] = read_array(&mut reader)?;
-                self.encrypted_device_key = Some(transmute!(key));
+                self.encrypted_device_key = Some(Box::new(transmute!(key)));
             }
             Ok(BlockId::PackageFullName) => {
                 let data = read_vec(&mut reader, size)?;
