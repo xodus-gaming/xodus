@@ -3,7 +3,6 @@ use crate::models::{
     secrets::{LegacyToken, Token},
     soap,
 };
-use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
@@ -22,11 +21,9 @@ struct UserAuthProperties {
     rps_ticket: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct XstsResponse {
-    issue_instant: String,
-    not_after: String,
     token: String,
     display_claims: DisplayClaims,
 }
@@ -82,8 +79,6 @@ pub async fn authenticate_xbox_user(
             rps_ticket: format!("{rps_ticket}"),
         },
     };
-
-    let rbody = serde_json::to_vec(&body).unwrap();
 
     let resp = client
         .post("https://user.auth.xboxlive.com/user/authenticate")
