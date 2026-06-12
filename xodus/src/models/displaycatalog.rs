@@ -549,6 +549,7 @@ pub struct Availability {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub affirmation_id: Option<String>,
     pub display_rank: i32,
+    #[serde(default)]
     pub remediation_required: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub licensing_data: Option<LicensingData>,

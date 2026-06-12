@@ -16,7 +16,7 @@ pub async fn run(client: &reqwest::Client, product: String, market: Option<Strin
     let displaycatalog = find_products_by_id(
         client,
         product,
-        market.unwrap_or("US".to_owned()),
+        market.unwrap_or("neutral".to_owned()),
         vec!["en".to_string(), "neutral".to_string()],
     )
     .await;

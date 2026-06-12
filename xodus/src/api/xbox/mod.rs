@@ -26,6 +26,7 @@ struct UserAuthProperties {
     auth_method: String,
     site_name: String,
     rps_ticket: String,
+    proof_key: serde_json::Value
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,6 +82,7 @@ struct XstsRequest {
 pub async fn authenticate_xbox_user(
     client: &reqwest::Client,
     rps_ticket: String,
+    key: &SigningKey,
 ) -> reqwest::Result<XstsResponse> {
     let body = UserAuthRequest {
         relying_party: "http://auth.xboxlive.com".to_string(),
@@ -89,6 +91,7 @@ pub async fn authenticate_xbox_user(
             auth_method: "RPS".to_string(),
             site_name: "user.auth.xboxlive.com".to_string(),
             rps_ticket: format!("{rps_ticket}"),
+            proof_key: ecdsa_public_key_to_jwk2(key)
         },
     };
 
@@ -111,6 +114,22 @@ fn to_windows_file_time(now: SystemTime) -> u64 {
     let duration = now.duration_since(UNIX_EPOCH).unwrap();
     (duration.as_secs() + SEC_TO_UNIX_EPOCH_FROM_WINDOWS) * WINDOWS_TICK
         + (duration.subsec_nanos() as u64 / 100)
+}
+
+fn ecdsa_public_key_to_jwk2(key: &SigningKey) -> serde_json::Value {
+    let verifying = key.verifying_key();
+    let point = verifying.to_encoded_point(false);
+    let x = point.x().unwrap();
+    let y = point.y().unwrap();
+
+    serde_json::json!({
+        "kty": "EC",
+        "crv": "P-256",
+        "x": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(x),
+        "y": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(y),
+        "alg": "ES256",
+        "use": "sig",
+    })
 }
 
 fn ecdsa_public_key_to_jwk(key: &SigningKey) -> Vec<u8> {
@@ -147,7 +166,8 @@ pub async fn request_xsts_token(
             delegation_token: None,
             service_token: None,
         },
-        proof_key: Some(ecdsa_public_key_to_jwk(key)),
+        proof_key: None
+        // proof_key: Some(ecdsa_public_key_to_jwk(key)),
     };
 
     let rbody = serde_json::to_vec(&body).unwrap();
@@ -247,11 +267,10 @@ pub async fn run(
         eprintln!("Unsupported token");
         panic!("TODO");
     };
-
-    let resp = authenticate_xbox_user(client, user_token)
+    let signing_key = SigningKey::random(&mut OsRng);
+    let resp = authenticate_xbox_user(client, user_token, &signing_key)
         .await
         .expect("Failed to authenticate Xbox user");
-    let signing_key = SigningKey::random(&mut OsRng);
 
     let resp = request_xsts_token(client, &signing_key, resp.token, relying_party)
         .await
