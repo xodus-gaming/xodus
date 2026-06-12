@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+xal = { git = "https://github.com/OpenXbox/xal-rs", rev = "230ba61c938f5376b226089ad5f1b812e809dafa", version = "0.1.3" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 serde = { version = "1.0.228", features = ["derive"] }
