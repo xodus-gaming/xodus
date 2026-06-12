@@ -1,17 +1,58 @@
+use std::io::{Read, Seek, Write};
+
 use tokio::{
-    fs::OpenOptions,
-    io::{AsyncReadExt, AsyncSeekExt},
+    fs::{OpenOptions},
+    io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt},
 };
 use zerocopy::transmute;
 
-use crate::models::xvd::{
+use crate::{models::xvd::{
     XvcInfo, XvcRegionHeader, XvcRegionSpecifier, XvdHeader, XvdUpdateSegment,
-};
+}, xvd::math::page_number_to_offset};
+
+trait AsyncReadSeek: AsyncRead + AsyncSeek {}
+
+#[derive(Debug)]
+struct XvdStream<'a> {
+    file: &'a std::fs::File,
+    offset: u64,
+    end_offset: u64
+}
+
+impl Read for XvdStream<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let soff = self.file.seek(std::io::SeekFrom::Current(0)).unwrap();
+        let r = self.file.read(buf);
+        let roff = self.file.seek(std::io::SeekFrom::Current(0)).unwrap();
+        println!("read {soff} -> {roff}");
+        r
+    }
+}
+
+impl Seek for XvdStream<'_> {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        match pos {
+            std::io::SeekFrom::Current(_) => self.file.seek(pos).map(|o| o - self.offset),
+            std::io::SeekFrom::Start(s) => self.file.seek(std::io::SeekFrom::Start(self.offset + s)).map(|o| o - self.offset),
+            std::io::SeekFrom::End(e) => self.file.seek(std::io::SeekFrom::Start((self.end_offset as i64 + e) as u64)).map(|o| o - self.offset),
+        }
+    }
+}
+
+impl Write for XvdStream<'_> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        todo!()
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        todo!()
+    }
+}
 
 pub async fn parse_file(path: String) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = OpenOptions::new()
         .read(true)
-        .open(path)
+        .open(path.clone())
         .await
         .expect("Unable to open file");
     let mut header_buffer = [0u8; 4096];
@@ -41,6 +82,8 @@ pub async fn parse_file(path: String) -> Result<(), Box<dyn std::error::Error>> 
     println!("volume_flags: 0x{:X}", volume_flags);
     println!("is_encrypted: {}", is_encrypted);
     println!("legacy_sector_size: {}", legacy_sector_size);
+    println!("xvc_data_length: {}", xvc_data_length);
+
 
     let mut region_headers: Vec<XvcRegionHeader> = Vec::new();
     let mut update_segments: Vec<XvdUpdateSegment> = Vec::new();
@@ -94,6 +137,39 @@ pub async fn parse_file(path: String) -> Result<(), Box<dyn std::error::Error>> 
                 }
             }
         }
+    }
+
+    let hash_tree_offset = xvd_header.mutable_data_length() + mdu_offset;
+    let user_data_offset = if xvd_header.is_data_integrity_enabled() { page_number_to_offset(xvd_header.hash_tree_info().1) } else { 0 } + hash_tree_offset;
+    let xvc_info_offset = page_number_to_offset(xvd_header.user_data_page_count()) + user_data_offset;
+    let dynamic_header_offset = page_number_to_offset(xvd_header.xvc_data_page_count()) + xvc_info_offset;
+    let drive_data_offset = page_number_to_offset(xvd_header.dynamic_header_page_count()) + dynamic_header_offset;
+    let dynamic_base_offset = xvc_info_offset;
+    let static_data_length = if xvd_header.xvd_type == 0 { 0 } else { panic!("Unsupported XvdType, TODO support Dynamic") };
+
+    println!("drive_data_offset = {drive_data_offset}");
+    println!("EFI_PART {}", 0x011df000);
+    let mut sfile = std::fs::File::open(path).unwrap();
+    sfile.seek(std::io::SeekFrom::Start(drive_data_offset));
+    // let mut buf = [0u8; 4096];
+    // sfile.read_exact(&mut buf).unwrap();
+    // gpt::disk::read_disk(diskpath)
+    let gp = gpt::GptConfig::new()
+        .writable(false)
+        .logical_block_size(gpt::disk::LogicalBlockSize::Lb4096)
+        .open_from_device(XvdStream{
+            file: &sfile,
+            offset: drive_data_offset,
+            end_offset: drive_data_offset + xvd_header.drive_size
+        }).unwrap();
+
+    for (index, part) in gp.partitions() {
+        println!(
+            "#{index}: {} start={} len={}",
+            part.name,
+            part.bytes_start(*gp.logical_block_size()).unwrap(),
+            part.bytes_len(*gp.logical_block_size()).unwrap(),
+        );
     }
 
     Ok(())
