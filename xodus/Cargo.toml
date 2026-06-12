@@ -16,7 +16,7 @@ base64 = "0.22.1"
 rand = "0.10.0"
 uuid = "1.23.1"
 aes = "0.9.0"
-keyring-core = { version = "1.0.0", features = ["sample"] }
+keyring-core = "1.0.0"
 dbus-secret-service-keyring-store = { version = "1.0.0", features = ["crypto-openssl"]}
 zerocopy = { version = "0.8.48", features = ["derive"] }
 bergshamra-c14n = "0.5.1"
@@ -26,8 +26,6 @@ rsa = "0.9.10"
 cbc = "0.2.1"
 url = "2.5.8"
 aes-keywrap = "0.9.0"
-p256 = "0.13.2"
-sha2 = "0.11.0"
 num_enum = "0.7.6"
 
 [dev-dependencies]
