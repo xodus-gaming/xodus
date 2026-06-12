@@ -1,6 +1,7 @@
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
 
-use ntfs::Ntfs;
+use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
 use tokio::{
     fs::{OpenOptions},
     io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt},
@@ -96,7 +97,70 @@ impl Write for XvdStream {
     }
 }
 
+fn extract_ntfs_file<T: Read + Seek>(
+    fs: &mut T,
+    file: &NtfsFile<'_>,
+    output_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut output_file = std::fs::File::create(output_path)?;
+
+    if let Some(data_item) = file.data(fs, "") {
+        let data_item = data_item?;
+        let data_attribute = data_item.to_attribute()?;
+        let mut data_value = data_attribute.value(fs)?;
+        let mut buf = [0u8; 8192];
+
+        loop {
+            let bytes_read = data_value.read(fs, &mut buf)?;
+            if bytes_read == 0 {
+                break;
+            }
+
+            output_file.write_all(&buf[..bytes_read])?;
+        }
+    }
+
+    Ok(())
+}
+
+fn extract_ntfs_directory<T: Read + Seek>(
+    ntfs: &Ntfs,
+    fs: &mut T,
+    directory: &NtfsFile<'_>,
+    output_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    std::fs::create_dir_all(output_dir)?;
+
+    let index = directory.directory_index(fs)?;
+    let mut entries = index.entries();
+
+    while let Some(entry) = entries.next(fs) {
+        let entry = entry?;
+        let Some(file_name) = entry.key() else {
+            continue;
+        };
+        let file_name = file_name?;
+        let name = file_name.name().to_string()?;
+
+        if name == "." {
+            continue;
+        }
+
+        let child = entry.to_file(ntfs, fs)?;
+        let child_output_path = output_dir.join(&name);
+
+        if file_name.is_directory() {
+            extract_ntfs_directory(ntfs, fs, &child, &child_output_path)?;
+        } else {
+            extract_ntfs_file(fs, &child, &child_output_path)?;
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn parse_file(path: String) -> Result<(), Box<dyn std::error::Error>> {
+    let input_path = PathBuf::from(&path);
     let mut file = OpenOptions::new()
         .read(true)
         .open(path.clone())
@@ -260,9 +324,29 @@ pub async fn parse_file(path: String) -> Result<(), Box<dyn std::error::Error>> 
 
     while let Some(entry) = entries.next(&mut fs) {
         let entry = entry.unwrap();
-        let file_name = entry.key().unwrap().unwrap();
-        println!("{}", file_name.name());
+        let Some(file_name) = entry.key() else {
+            continue;
+        };
+        let file_name = file_name.unwrap();
+        let name = file_name.name().to_string().unwrap();
+        println!("{name}");
+
+        // if name == "data" && file_name.is_directory() {
+        //     data_directory = Some(entry.to_file(&ntfs, &mut fs).unwrap());
+        // }
     }
+
+    let package_name = input_path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or("xvd");
+    let extract_root = PathBuf::from("target")
+        .join("xvd-extract")
+        .join(package_name)
+        .join("data");
+    println!("extracting data directory to {}", extract_root.display());
+    extract_ntfs_directory(&ntfs, &mut fs, &root, &extract_root)?;
 
     Ok(())
 }
+
