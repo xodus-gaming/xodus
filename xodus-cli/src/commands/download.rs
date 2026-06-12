@@ -143,4 +143,6 @@ pub async fn run(client: &reqwest::Client, product: String, market: Option<Strin
         }
         println!();
     }
+
+    println!("ContentID: {content_id}");
 }
