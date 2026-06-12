@@ -17,7 +17,7 @@ pub struct PackageDetails {
     pub version_id: String,
     pub package_files: Vec<PackageFile>,
     pub version: String,
-    pub package_metadata: PackageMetadata,
+    // pub package_metadata: PackageMetadata,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hash_of_hashes: Option<String>,
     pub update_predownload: bool,

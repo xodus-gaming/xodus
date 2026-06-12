@@ -28,6 +28,7 @@ url = "2.5.8"
 aes-keywrap = "0.9.0"
 p256 = "0.13.2"
 sha2 = "0.11.0"
+num_enum = "0.7.6"
 
 [dev-dependencies]
 rsa = "0.9.10"

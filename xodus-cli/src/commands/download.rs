@@ -45,8 +45,6 @@ pub async fn run(client: &reqwest::Client, product: String, market: Option<Strin
         }
     }
 
-    println!("{product_details:?}");
-
     let Some(package) = found_package else {
         log::error!(
             "Windows.Desktop package not found, if you believe this is an error, please report it"
