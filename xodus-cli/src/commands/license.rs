@@ -90,7 +90,10 @@ pub async fn run(client: &reqwest::Client, content_id: String, market: String, c
 
     let dev_license = device::get_dev_license().unwrap();
     let device_license = parse_license(dev_license.splicense);
-    let key = device_license.encrypted_device_key.derive_device_key();
+    let key = device_license
+        .encrypted_device_key
+        .unwrap()
+        .derive_device_key();
     println!("{game_splicense:?}");
     tokio::fs::create_dir_all(&ciks).await.unwrap();
     for (uuid, content_key) in game_splicense.content_keys {

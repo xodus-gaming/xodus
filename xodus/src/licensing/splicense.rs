@@ -26,7 +26,7 @@ use std::{collections::HashMap, io, io::Read};
 use aes::cipher::{BlockCipherDecrypt, KeyInit};
 use base64::prelude::*;
 use num_enum::TryFromPrimitive;
-use zerocopy::{FromBytes, FromZeros, IntoBytes, transmute};
+use zerocopy::{FromBytes, IntoBytes, transmute};
 
 // pub struct Block<'a> {
 //     pub block_id: BlockId,
@@ -73,7 +73,7 @@ pub struct SPLicense {
     pub signature_origin: u16,
     pub signature_block: Vec<u8>,
     pub clep_sign_state: Vec<u8>,
-    pub encrypted_device_key: EncryptedDeviceKey,
+    pub encrypted_device_key: Option<EncryptedDeviceKey>,
     pub content_keys: HashMap<uuid::Uuid, Vec<u8>>,
     pub keyholder_public_key: Vec<u8>,
     pub keyholder_policies: Vec<u8>,
@@ -95,12 +95,6 @@ pub struct EncryptedDeviceKey {
     _unknown1: [u8; 284],
     devicekey: [u8; 16],
     _unknown2: [u8; 3562],
-}
-
-impl Default for EncryptedDeviceKey {
-    fn default() -> Self {
-        Self::new_zeroed()
-    }
 }
 
 fn read_array<const N: usize, R: Read>(mut reader: R) -> io::Result<[u8; N]> {
@@ -162,7 +156,7 @@ impl SPLicense {
             }
             Ok(BlockId::EncryptedDeviceKey) => {
                 let key: [u8; 4096] = read_array(&mut reader)?;
-                self.encrypted_device_key = transmute!(key);
+                self.encrypted_device_key = Some(transmute!(key));
             }
             Ok(BlockId::PackageFullName) => {
                 let data = read_vec(&mut reader, size)?;
