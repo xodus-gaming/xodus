@@ -153,7 +153,7 @@ pub async fn run(
         secret,
         None,
         Some("Silent".to_string()),
-        "minecraft".to_string(),
+        "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
         &[(
             "user.auth.xboxlive.com".to_owned(),
             Some(soap::PolicyReference::mbi_ssl()),
