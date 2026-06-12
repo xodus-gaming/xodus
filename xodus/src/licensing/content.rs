@@ -1,5 +1,6 @@
 use base64::prelude::*;
 use std::collections::HashMap;
+use xal::{cvlib::CorrelationVector, extensions::CorrelationVectorReqwestBuilder};
 
 use crate::{
     licensing::utils,
@@ -19,6 +20,7 @@ pub async fn get_license_content(
     content_id: String,
     market: String,
 ) -> reqwest::Result<(LicenseContentResponse, License)> {
+    let mut cv = CorrelationVector::new();
     let response = client
         .post("https://licensing.mp.microsoft.com/v7.0/licenses/content")
         .header("from", "XboxLicenseManager")
@@ -42,6 +44,8 @@ pub async fn get_license_content(
                 }])],
             ),
         })
+        .add_cv(&mut cv)
+        .unwrap()
         .send()
         .await?;
 
