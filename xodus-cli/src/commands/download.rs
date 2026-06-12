@@ -52,10 +52,8 @@ pub async fn run(client: &reqwest::Client, product: String, market: Option<Strin
         return;
     };
 
-    let Some(content_id) =  &package.content_id else {
-        log::error!(
-            "ContentId not found, if you believe this is an error, please report it"
-        );
+    let Some(content_id) = &package.content_id else {
+        log::error!("ContentId not found, if you believe this is an error, please report it");
         return;
     };
 
