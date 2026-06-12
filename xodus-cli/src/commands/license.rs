@@ -1,7 +1,7 @@
 use crate::{device, user};
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 use xodus::{
-    licensing::splicense::{derive_device_key, parse_license, unpack_key},
+    licensing::splicense::{parse_license, unpack_key},
     models::{live::ExchangeUserTokenOutcome, secrets::Token, soap},
 };
 
@@ -90,8 +90,7 @@ pub async fn run(client: &reqwest::Client, content_id: String, market: String, c
 
     let dev_license = device::get_dev_license().unwrap();
     let device_license = parse_license(dev_license.splicense);
-    let key = derive_device_key(&device_license.encrypted_device_key);
-    let key: [u8; 16] = key.try_into().expect("Key too big");
+    let key = device_license.encrypted_device_key.derive_device_key();
     println!("{game_splicense:?}");
     tokio::fs::create_dir_all(&ciks).await.unwrap();
     for (uuid, content_key) in game_splicense.content_keys {
