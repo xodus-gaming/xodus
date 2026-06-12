@@ -165,7 +165,7 @@ impl SPLicense {
                     let key_len = read_u16(&mut reader)? as usize;
 
                     let key_id = read_uuid(&mut reader)?;
-                    let _unknown = read_vec(&mut reader, id_len - 16);
+                    let _unknown = read_vec(&mut reader, id_len - 16)?;
                     let key = read_vec(&mut reader, key_len)?;
 
                     self.content_keys.insert(key_id, key);
