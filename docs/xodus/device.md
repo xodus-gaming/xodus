@@ -12,7 +12,7 @@ sequenceDiagram
     A->>+B:/ppsecure/deviceaddcredential.srf
     B->>-A:Device SPLicenseBlock
     A->>+B:/RST2.srf - http://Passport.NET/tb
-    B->>-A:Device Ticket
+    B->>-A:Device STS Ticket
 ```
 
 ## deviceaddcredential.srf
@@ -72,7 +72,7 @@ All blobs are base64 encoded
 
 ## RST2.srf
 
-In below example it may be possible to ommit signatures in order to receive raw unencrypted data
+In below example it is possible to ommit signatures in this requiest in order to receive raw unencrypted data
 
 ### Sample request
 

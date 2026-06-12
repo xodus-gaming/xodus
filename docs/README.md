@@ -1,3 +1,6 @@
+# Xodus Docs
+Knowledge dump and design documentation
+
 ## Table of contents
-- [Device Ticket](./device.md)
-- [Licenses](./licenses.md)
+- [Xodus Documentation](./xodus/README.md)
+- [Xbox Services API traces](./xbox/README.md)

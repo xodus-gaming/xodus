@@ -157,7 +157,7 @@ pub enum LicenseType {
     KeyHolder,
     Trial,
     #[serde(other)]
-    Unknown
+    Unknown,
 }
 
 #[derive(Deserialize, Debug)]

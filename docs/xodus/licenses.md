@@ -1,4 +1,7 @@
-# App decryption flow
+# Licensing flow
+
+> [!NOTE]
+> All tokens here are www.microsoft.com
 
 ```mermaid
 flowchart TD
@@ -9,14 +12,12 @@ flowchart TD
     SpL --> EncK["Packed Content Keys"]
 
     DecLi["DeviceLicense"]
-    Hw["Hardware Data"]
-    C["Clep"]
-    Hw-->C
-    DecLi-->C
-    C-->DK["Derived Device Key"]
+    DK["Derived Device Key"]
+    DecLi-->DK
 
     K["Content Keys"]
     EncK-->K
     DK-->K
 
 ```
+
