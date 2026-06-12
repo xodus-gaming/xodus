@@ -5592,6 +5592,7 @@ dependencies = [
  "hmac 0.12.1",
  "keyring-core",
  "log",
+ "num_enum",
  "p256",
  "quick-xml",
  "rand 0.10.1",
