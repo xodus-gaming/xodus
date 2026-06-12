@@ -84,6 +84,7 @@ pub async fn authenticate_xbox_user(
     rps_ticket: String,
     key: &SigningKey,
 ) -> reqwest::Result<XstsResponse> {
+
     let body = UserAuthRequest {
         relying_party: "http://auth.xboxlive.com".to_string(),
         token_type: "JWT".to_string(),
@@ -94,12 +95,38 @@ pub async fn authenticate_xbox_user(
             proof_key: ecdsa_public_key_to_jwk2(key)
         },
     };
+    let file_time = to_windows_file_time(SystemTime::now());
+
+    let rbody = serde_json::to_vec(&body).unwrap();
+
+    let mut rsig = Vec::new();
+    rsig.extend_from_slice(&1u32.to_be_bytes());
+    rsig.push(0);
+    rsig.extend_from_slice(&file_time.to_be_bytes());
+    rsig.push(0);
+    rsig.extend_from_slice(b"GET");
+    rsig.push(0);
+    rsig.extend_from_slice(b"/xsts/authorize");
+    rsig.push(0);
+    rsig.extend_from_slice(&rbody);
+    rsig.push(0);
+
+    let digest = Sha256::digest(&rsig);
+    let signature: Signature = key.sign(&digest);
+
+    let mut bsig = Vec::new();
+    bsig.extend_from_slice(&1u32.to_be_bytes());
+    bsig.extend_from_slice(&file_time.to_be_bytes());
+    bsig.extend_from_slice(&signature.to_bytes());
+
+    let sig = base64::engine::general_purpose::STANDARD.encode(bsig);
 
     let resp = client
         .post("https://user.auth.xboxlive.com/user/authenticate")
         .header("User-Agent", "xal-go/0.0.0")
         .header("Content-Type", "application/json")
         .header("x-xbl-contract-version", "1")
+        .header("Signature", sig)
         .json(&body)
         .send()
         .await?;
