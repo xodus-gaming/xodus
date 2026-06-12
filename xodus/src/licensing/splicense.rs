@@ -26,7 +26,7 @@ use std::{collections::HashMap, io, io::Read};
 use aes::cipher::{BlockCipherDecrypt, KeyInit};
 use base64::prelude::*;
 use num_enum::TryFromPrimitive;
-use zerocopy::transmute;
+use zerocopy::{FromBytes, IntoBytes, transmute};
 
 // pub struct Block<'a> {
 //     pub block_id: BlockId,
@@ -64,7 +64,7 @@ pub enum BlockId {
     SignatureBlock = 0xcc,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct SPLicense {
     pub license_id: uuid::Uuid,
     pub device_id: Vec<u8>,
@@ -73,7 +73,7 @@ pub struct SPLicense {
     pub signature_origin: u16,
     pub signature_block: Vec<u8>,
     pub clep_sign_state: Vec<u8>,
-    pub encrypted_device_key: Vec<u8>,
+    pub encrypted_device_key: Option<Box<EncryptedDeviceKey>>,
     pub content_keys: HashMap<uuid::Uuid, Vec<u8>>,
     pub keyholder_public_key: Vec<u8>,
     pub keyholder_policies: Vec<u8>,
@@ -82,6 +82,19 @@ pub struct SPLicense {
     pub hardware_id: Vec<u8>,
     pub polling_time: u32,
     pub license_expiration_time: u32,
+}
+
+#[derive(FromBytes, IntoBytes)]
+#[repr(C, packed)]
+pub struct EncryptedDeviceKey {
+    /// The total size of the encrypted device key, including the size field itself.
+    /// Is always 4096.
+    size: u16,
+    version: u32,
+    key_schedule: [u32; 57],
+    _unknown1: [u8; 284],
+    device_key: [u8; 16],
+    _unknown2: [u8; 3562],
 }
 
 fn read_array<const N: usize, R: Read>(mut reader: R) -> io::Result<[u8; N]> {
@@ -142,8 +155,8 @@ impl SPLicense {
                 self.keyholder_key_license_id = read_uuid(&mut reader)?;
             }
             Ok(BlockId::EncryptedDeviceKey) => {
-                let _unknown: [u8; 2] = read_array(&mut reader)?;
-                self.encrypted_device_key = read_vec(&mut reader, size - 2)?;
+                let key: [u8; 4096] = read_array(&mut reader)?;
+                self.encrypted_device_key = Some(Box::new(transmute!(key)));
             }
             Ok(BlockId::PackageFullName) => {
                 let data = read_vec(&mut reader, size)?;
@@ -245,27 +258,32 @@ impl SPLicense {
     }
 }
 
-pub fn derive_device_key(license: &[u8]) -> Vec<u8> {
-    assert!(u32::from_le_bytes(license[..4].try_into().unwrap()) == 4);
+impl EncryptedDeviceKey {
+    fn decryption_key(&self) -> [u8; 16] {
+        let mut key = [0u32; 4];
 
-    let keyschedule: [u8; 228] = license[4..232].try_into().unwrap();
-    let keyschedule: [u32; 57] = transmute!(keyschedule);
-    let devicekey: [u8; 16] = license[516..532].try_into().unwrap();
+        key[0] = self.key_schedule[46] ^ self.key_schedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
+        key[1] = self.key_schedule[36] ^ self.key_schedule[47] ^ 0xDF080E39;
+        key[2] = self.key_schedule[40] ^ self.key_schedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
+        key[3] = self.key_schedule[30] ^ self.key_schedule[41] ^ 0x37288CEC;
 
-    let mut decryption_key = [0u32; 4];
+        transmute!(key)
+    }
 
-    decryption_key[0] = keyschedule[46] ^ keyschedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
-    decryption_key[1] = keyschedule[36] ^ keyschedule[47] ^ 0xDF080E39;
-    decryption_key[2] = keyschedule[40] ^ keyschedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
-    decryption_key[3] = keyschedule[30] ^ keyschedule[41] ^ 0x37288CEC;
-    let decryption_key: [u8; 16] = transmute!(decryption_key);
+    pub fn derive_device_key(&self) -> [u8; 16] {
+        assert!(self.version == 4);
 
-    let key = aes::cipher::array::Array::from(decryption_key);
-    let aes = aes::Aes128::new(&key);
-    let mut data = aes::cipher::Array::from(devicekey);
-    aes.decrypt_block(&mut data);
+        let decryption_key = self.decryption_key();
+        let aes = aes::Aes128::new(&decryption_key.into());
 
-    data.to_vec()
+        let mut device_key = self.device_key.into();
+        aes.decrypt_block(&mut device_key);
+
+        // Sanity check: the decrypted device key must be equal to the decryption key
+        assert_eq!(device_key, decryption_key);
+
+        device_key.0
+    }
 }
 
 pub fn parse_license(splicense_block: String) -> SPLicense {
