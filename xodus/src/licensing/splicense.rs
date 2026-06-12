@@ -91,9 +91,9 @@ pub struct EncryptedDeviceKey {
     /// Is always 4096.
     size: u16,
     version: u32,
-    keyschedule: [u32; 57],
+    key_schedule: [u32; 57],
     _unknown1: [u8; 284],
-    devicekey: [u8; 16],
+    device_key: [u8; 16],
     _unknown2: [u8; 3562],
 }
 
@@ -262,10 +262,10 @@ impl EncryptedDeviceKey {
     fn decryption_key(&self) -> [u8; 16] {
         let mut key = [0u32; 4];
 
-        key[0] = self.keyschedule[46] ^ self.keyschedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
-        key[1] = self.keyschedule[36] ^ self.keyschedule[47] ^ 0xDF080E39;
-        key[2] = self.keyschedule[40] ^ self.keyschedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
-        key[3] = self.keyschedule[30] ^ self.keyschedule[41] ^ 0x37288CEC;
+        key[0] = self.key_schedule[46] ^ self.key_schedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
+        key[1] = self.key_schedule[36] ^ self.key_schedule[47] ^ 0xDF080E39;
+        key[2] = self.key_schedule[40] ^ self.key_schedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
+        key[3] = self.key_schedule[30] ^ self.key_schedule[41] ^ 0x37288CEC;
 
         transmute!(key)
     }
@@ -276,7 +276,7 @@ impl EncryptedDeviceKey {
         let decryption_key = self.decryption_key();
         let aes = aes::Aes128::new(&decryption_key.into());
 
-        let mut device_key = self.devicekey.into();
+        let mut device_key = self.device_key.into();
         aes.decrypt_block(&mut device_key);
 
         // Sanity check: the decrypted device key must be equal to the decryption key
