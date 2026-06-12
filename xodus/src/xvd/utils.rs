@@ -1,5 +1,6 @@
-use std::io::{Read, Seek, Write};
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
 
+use ntfs::Ntfs;
 use tokio::{
     fs::{OpenOptions},
     io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt},
@@ -13,39 +14,85 @@ use crate::{models::xvd::{
 trait AsyncReadSeek: AsyncRead + AsyncSeek {}
 
 #[derive(Debug)]
-struct XvdStream<'a> {
-    file: &'a std::fs::File,
+struct XvdStream {
+    file: std::fs::File,
     offset: u64,
-    end_offset: u64
+    end_offset: u64,
 }
 
-impl Read for XvdStream<'_> {
+impl XvdStream {
+    fn len(&self) -> u64 {
+        self.end_offset - self.offset
+    }
+
+    fn current_relative_pos(&mut self) -> std::io::Result<u64> {
+        let absolute = self.file.stream_position()?;
+        absolute
+            .checked_sub(self.offset)
+            .ok_or_else(|| Error::new(ErrorKind::InvalidData, "stream before virtual start"))
+    }
+}
+
+impl Read for XvdStream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let soff = self.file.seek(std::io::SeekFrom::Current(0)).unwrap();
-        let r = self.file.read(buf);
-        let roff = self.file.seek(std::io::SeekFrom::Current(0)).unwrap();
-        println!("read {soff} -> {roff}");
-        r
-    }
-}
-
-impl Seek for XvdStream<'_> {
-    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        match pos {
-            std::io::SeekFrom::Current(_) => self.file.seek(pos).map(|o| o - self.offset),
-            std::io::SeekFrom::Start(s) => self.file.seek(std::io::SeekFrom::Start(self.offset + s)).map(|o| o - self.offset),
-            std::io::SeekFrom::End(e) => self.file.seek(std::io::SeekFrom::Start((self.end_offset as i64 + e) as u64)).map(|o| o - self.offset),
+        let current = self.current_relative_pos()?;
+        if current >= self.len() {
+            return Ok(0);
         }
+
+        let remaining = usize::try_from(self.len() - current)
+            .map_err(|_| Error::new(ErrorKind::InvalidData, "remaining range too large"))?;
+        let to_read = remaining.min(buf.len());
+        self.file.read(&mut buf[..to_read])
     }
 }
 
-impl Write for XvdStream<'_> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        todo!()
+impl Seek for XvdStream {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let new_relative = match pos {
+            SeekFrom::Start(n) => n,
+            SeekFrom::Current(delta) => {
+                let current = self.current_relative_pos()?;
+                if delta >= 0 {
+                    current.checked_add(delta as u64)
+                } else {
+                    current.checked_sub(delta.unsigned_abs())
+                }
+                .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid relative seek"))?
+            }
+            SeekFrom::End(delta) => {
+                let len = self.len();
+                if delta >= 0 {
+                    len.checked_add(delta as u64)
+                } else {
+                    len.checked_sub(delta.unsigned_abs())
+                }
+                .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid end-relative seek"))?
+            }
+        };
+
+        if new_relative > self.len() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "seek past virtual device end",
+            ));
+        }
+
+        self.file.seek(SeekFrom::Start(self.offset + new_relative))?;
+        Ok(new_relative)
+    }
+}
+
+impl Write for XvdStream {
+    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+        Err(Error::new(
+            ErrorKind::PermissionDenied,
+            "XvdStream is read-only",
+        ))
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        todo!()
+        Ok(())
     }
 }
 
@@ -144,32 +191,77 @@ pub async fn parse_file(path: String) -> Result<(), Box<dyn std::error::Error>> 
     let xvc_info_offset = page_number_to_offset(xvd_header.user_data_page_count()) + user_data_offset;
     let dynamic_header_offset = page_number_to_offset(xvd_header.xvc_data_page_count()) + xvc_info_offset;
     let drive_data_offset = page_number_to_offset(xvd_header.dynamic_header_page_count()) + dynamic_header_offset;
-    let dynamic_base_offset = xvc_info_offset;
-    let static_data_length = if xvd_header.xvd_type == 0 { 0 } else { panic!("Unsupported XvdType, TODO support Dynamic") };
+    let _dynamic_base_offset = xvc_info_offset;
+    let _static_data_length = if xvd_header.xvd_type == 0 { 0 } else { panic!("Unsupported XvdType, TODO support Dynamic") };
 
-    println!("drive_data_offset = {drive_data_offset}");
-    println!("EFI_PART {}", 0x011df000);
+    println!("drive_data_offset = {drive_data_offset:#x}");
     let mut sfile = std::fs::File::open(path).unwrap();
-    sfile.seek(std::io::SeekFrom::Start(drive_data_offset));
-    // let mut buf = [0u8; 4096];
-    // sfile.read_exact(&mut buf).unwrap();
-    // gpt::disk::read_disk(diskpath)
+    sfile.seek(SeekFrom::Start(drive_data_offset)).unwrap();
+
     let gp = gpt::GptConfig::new()
         .writable(false)
         .logical_block_size(gpt::disk::LogicalBlockSize::Lb4096)
-        .open_from_device(XvdStream{
-            file: &sfile,
+        .open_from_device(XvdStream {
+            file: sfile.try_clone().unwrap(),
             offset: drive_data_offset,
-            end_offset: drive_data_offset + xvd_header.drive_size
-        }).unwrap();
+            end_offset: drive_data_offset + xvd_header.drive_size,
+        })
+        .unwrap();
 
+    let mut ntfs_partition = None;
     for (index, part) in gp.partitions() {
+        if !part.is_used() {
+            continue;
+        }
+
+        let part_start = part.bytes_start(*gp.logical_block_size()).unwrap();
+        let part_len = part.bytes_len(*gp.logical_block_size()).unwrap();
         println!(
-            "#{index}: {} start={} len={}",
+            "#{index}: '{}' start={} len={}",
             part.name,
-            part.bytes_start(*gp.logical_block_size()).unwrap(),
-            part.bytes_len(*gp.logical_block_size()).unwrap(),
+            part_start,
+            part_len,
         );
+
+        if ntfs_partition.is_none() {
+            ntfs_partition = Some((index, part.name.clone(), part_start, part_len));
+        }
+    }
+
+    let (index, part_name, part_start, part_len) =
+        ntfs_partition.expect("no used GPT partition found");
+    let partition_offset = drive_data_offset + part_start;
+
+    println!("probing partition #{index} '{part_name}' at {partition_offset:#x}");
+    sfile.seek(SeekFrom::Start(partition_offset)).unwrap();
+    let mut boot = [0u8; 512];
+    sfile.read_exact(&mut boot).unwrap();
+    println!("boot oem = {:?}", String::from_utf8_lossy(&boot[3..11]));
+    println!(
+        "boot bytes/sector = {}",
+        u16::from_le_bytes([boot[11], boot[12]])
+    );
+    println!("boot sectors/cluster = {}", boot[13]);
+    println!("boot sig = {:02x}{:02x}", boot[510], boot[511]);
+
+    let mut fs = XvdStream {
+        file: sfile.try_clone().unwrap(),
+        offset: partition_offset,
+        end_offset: partition_offset + part_len,
+    };
+    fs.seek(SeekFrom::Start(0)).unwrap();
+    let mut ntfs = Ntfs::new(&mut fs).unwrap();
+    
+    ntfs.read_upcase_table(&mut fs).unwrap();
+
+    let root = ntfs.root_directory(&mut fs).unwrap();
+    let index = root.directory_index(&mut fs).unwrap();
+    let mut entries = index.entries();
+
+    while let Some(entry) = entries.next(&mut fs) {
+        let entry = entry.unwrap();
+        let file_name = entry.key().unwrap().unwrap();
+        println!("{}", file_name.name());
     }
 
     Ok(())

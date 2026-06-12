@@ -1,0 +1,550 @@
+# The configurations that used for the recording, feel free to edit them
+config:
+
+  # Specify a command to be executed
+  # like `/bin/bash -l`, `ls`, or any other commands
+  # the default is bash for Linux
+  # or powershell.exe for Windows
+  command: cmd.exe
+  
+  # Specify the current working directory path
+  # the default is the current working directory path
+  cwd: C:\
+  
+  # Export additional ENV variables
+  env:
+    recording: true
+  
+  # Explicitly set the number of columns
+  # or use `auto` to take the current
+  # number of columns of your shell
+  cols: 111
+  
+  # Explicitly set the number of rows
+  # or use `auto` to take the current
+  # number of rows of your shell
+  rows: 28
+  
+  # Amount of times to repeat GIF
+  # If value is -1, play once
+  # If value is 0, loop indefinitely
+  # If value is a positive number, loop n times
+  repeat: 0
+  
+  # Quality
+  # 1 - 100
+  quality: 100
+  
+  # Delay between frames in ms
+  # If the value is `auto` use the actual recording delays
+  frameDelay: auto
+  
+  # Maximum delay between frames in ms
+  # Ignored if the `frameDelay` isn't set to `auto`
+  # Set to `auto` to prevent limiting the max idle time
+  maxIdleTime: 2000
+  
+  # The surrounding frame box
+  # The `type` can be null, window, floating, or solid`
+  # To hide the title use the value null
+  # Don't forget to add a backgroundColor style with a null as type
+  frameBox:
+    type: solid
+    title: null
+    style: []
+  
+  # Add a watermark image to the rendered gif
+  # You need to specify an absolute path for
+  # the image on your machine or a URL, and you can also
+  # add your own CSS styles
+  watermark:
+    imagePath: null
+    style:
+      position: absolute
+      right: 15px
+      bottom: 15px
+      width: 100px
+      opacity: 0.9
+  
+  # Cursor style can be one of
+  # `block`, `underline`, or `bar`
+  cursorStyle: block
+  
+  # Font family
+  # You can use any font that is installed on your machine
+  # in CSS-like syntax
+  fontFamily: "Consolas"
+  
+  # The size of the font
+  fontSize: 8
+  
+  # The height of lines
+  lineHeight: 1
+  
+  # The spacing between letters
+  letterSpacing: 0
+  
+  # Theme
+  theme:
+    background: "transparent"
+    foreground: "#afafaf"
+    cursor: "#c7c7c7"
+    black: "#232628"
+    red: "#fc4384"
+    green: "#b3e33b"
+    yellow: "#ffa727"
+    blue: "#75dff2"
+    magenta: "#ae89fe"
+    cyan: "#708387"
+    white: "#d5d5d0"
+    brightBlack: "#626566"
+    brightRed: "#ff7fac"
+    brightGreen: "#c8ed71"
+    brightYellow: "#ebdf86"
+    brightBlue: "#75dff2"
+    brightMagenta: "#ae89fe"
+    brightCyan: "#b1c6ca"
+    brightWhite: "#f9f9f4"
+  
+# Records, feel free to edit them
+records:
+  - delay: 1796
+    content: 'n'
+  - delay: 286
+    content: t
+  - delay: 264
+    content: f
+  - delay: 214
+    content: s
+  - delay: 169
+    content: '-'
+  - delay: 140
+    content: s
+  - delay: 106
+    content: h
+  - delay: 113
+    content: e
+  - delay: 90
+    content: l
+  - delay: 132
+    content: l
+  - delay: 140
+    content: ' '
+  - delay: 688
+    content: \
+  - delay: 190
+    content: \
+  - delay: 360
+    content: .
+  - delay: 654
+    content: \
+  - delay: 1144
+    content: C
+  - delay: 555
+    content: ':'
+  - delay: 464
+    content: "\r\n"
+  - delay: 21
+    content: "\e]0;Administrator: C:\\WINDOWS\\SYSTEM32\\cmd.exe - ntfs-shell  \\\\.\\C:\a"
+  - delay: 496
+    content: "**********************************************************************\r\n"
+  - delay: 21
+    content: "ntfs-shell - Demonstration of the ntfs Rust crate\e[21X\r\nby Colin Finck <colin@reactos.org>\e[36X\r\n**********************************************************************\r\n\e[70X\r\nOpened \"\\\\.\\C:\" read-only.\e[44X\r\n\e[70X\r\nntfs-shell:\\>\e[57X\e[1C"
+  - delay: 1302
+    content: h
+  - delay: 398
+    content: e
+  - delay: 325
+    content: l
+  - delay: 319
+    content: p
+  - delay: 451
+    content: "\r\n"
+  - delay: 12
+    content: "Available Commands:\e[70X\r\n  attr      - Show structure of NTFS attributes of a particular file\e[21X\r\n  attr_runs - Show structure of NTFS attributes of a particular file, including data runs\r\n  cd        - Change the current directory\e[47X\r\n  dir       - Show files of the current directory\e[40X\r\n  exit      - Quit ntfs-shell\e[60X\r\n  fileinfo  - Show information about a particular file\e[35X\r\n  fsinfo    - Show general filesystem information\e[40X\r\n  get       - Copy a file from the NTFS filesystem\e[39X\r\n  help      - Show this help\e[61X\r\n  quit      - Quit ntfs-shell\e[60X\r\n\e[89X\r\nYou can also enter \"help COMMAND\" to get additional help about some commands.\e[12X\r\nntfs-shell:\\>\e[76X\e[1C"
+  - delay: 2112
+    content: f
+  - delay: 347
+    content: s
+  - delay: 427
+    content: i
+  - delay: 234
+    content: 'n'
+  - delay: 250
+    content: f
+  - delay: 259
+    content: o
+  - delay: 642
+    content: "\r\nCluster Size:       4096\r\nFile Record Size:   1024\r\nMFT Byte Position:  0xc0000000"
+  - delay: 20
+    content: "\r\n"
+  - delay: 7
+    content: "NTFS Version:       3.1\r\nSector Size:        512\r\nSerial Number:      9302646815782242889\r\nSize:               510603845120\r\nVolume Name:        \"System\""
+  - delay: 8
+    content: "\r\nntfs-shell:\\>\e[1C"
+  - delay: 2589
+    content: f
+  - delay: 251
+    content: i
+  - delay: 226
+    content: l
+  - delay: 222
+    content: e
+  - delay: 240
+    content: i
+  - delay: 148
+    content: 'n'
+  - delay: 242
+    content: f
+  - delay: 190
+    content: o
+  - delay: 142
+    content: ' '
+  - delay: 324
+    content: $
+  - delay: 345
+    content: M
+  - delay: 284
+    content: F
+  - delay: 313
+    content: T
+  - delay: 536
+    content: "\r\n"
+  - delay: 27
+    content: "============================= FILE RECORD ==============================\r\nAllocated Size:                   1024\r\nByte Position:                    0xc0000000\r\nData Size:                        552\r\nHard-Link Count:                  1\r\nIs Directory:                     false\r\nRecord Number:                    0x0\r\nSequence Number:                  1\r\n\n========================= STANDARD INFORMATION =========================\r\nAttributes:                       HIDDEN | SYSTEM\r\nAccess Time:                      2021-11-09 13:37:00 UTC\r\nCreation Time:                    2021-11-09 13:37:00 UTC\r\nModification Time:                2021-11-09 13:37:00 UTC\r\nMFT Record Modification Time:     2021-11-09 13:37:00 UTC\r\nClass ID:                         0\r\nMaximum Versions:                 0\r\nOwner ID:                         0\r\nQuota Charged:                    0\r\nSecurity ID:                      256\r\nUSN:                              0\r\nVersion:                          0\r\n\n============================== FILE NAME ===============================\r\nName:                             \"$MFT\"\r\nNamespace:                        Win32AndDos\r\nParent Directory Record Number:   0x5\r\n\n============================= DATA STREAM ==============================\r\nName:                             \"\"\r\nSize:                             3085434880"
+  - delay: 14
+    content: "\r\nntfs-shell:\\>\e[1C"
+  - delay: 2172
+    content: f
+  - delay: 278
+    content: i
+  - delay: 264
+    content: l
+  - delay: 263
+    content: e
+  - delay: 218
+    content: i
+  - delay: 253
+    content: 'n'
+  - delay: 243
+    content: f
+  - delay: 262
+    content: o
+  - delay: 196
+    content: ' '
+  - delay: 187
+    content: p
+  - delay: 154
+    content: a
+  - delay: 304
+    content: g
+  - delay: 302
+    content: e
+  - delay: 193
+    content: f
+  - delay: 132
+    content: i
+  - delay: 207
+    content: l
+  - delay: 206
+    content: e
+  - delay: 223
+    content: .
+  - delay: 293
+    content: s
+  - delay: 343
+    content: 'y'
+  - delay: 270
+    content: s
+  - delay: 572
+    content: "\r\n============================= FILE RECORD ==============================\r\nAllocated Size:                   1024\r\nByte Position:                    0xc1076400\r\nData Size:                        400\r\nHard-Link Count:                  1\r\nIs Directory:                     false\r\nRecord Number:                    0x41d9\r\nSequence Number:                  62\r\n\n========================= STANDARD INFORMATION =========================\r\nAttributes:                       HIDDEN | SYSTEM | ARCHIVE\r\nAccess Time:                      2021-12-07 18:13:20 UTC\r\nCreation Time:                    2021-11-16 14:51:37 UTC\r\nModification Time:                2021-12-07 18:13:20 UTC\r\nMFT Record Modification Time:     2021-12-07 18:13:20 UTC\r\nClass ID:                         0\r\nMaximum Versions:                 0\r\nOwner ID:                         0\r\nQuota Charged:                    0\r\nSecurity ID:                      4739\r\nUSN:                              95763283628\r\nVersion:                          0\r\n\n============================= DATA STREAM ==============================\r\nName:                             \"\"\r\nSize:                             6634323968\r\n\n============================== FILE NAME ===============================\r\nName:                             \"pagefile.sys\"\r\nNamespace:                        Win32AndDos\r\nParent Directory Record Number:   0x5"
+  - delay: 15
+    content: "\r\nntfs-shell:\\>\e[1C"
+  - delay: 2030
+    content: a
+  - delay: 277
+    content: t
+  - delay: 188
+    content: t
+  - delay: 227
+    content: r
+  - delay: 195
+    content: ' '
+  - delay: 186
+    content: p
+  - delay: 138
+    content: a
+  - delay: 215
+    content: g
+  - delay: 164
+    content: e
+  - delay: 111
+    content: f
+  - delay: 157
+    content: i
+  - delay: 209
+    content: l
+  - delay: 157
+    content: e
+  - delay: 372
+    content: .
+  - delay: 151
+    content: s
+  - delay: 464
+    content: 'y'
+  - delay: 226
+    content: s
+  - delay: 290
+    content: "\r\n==============================================================================================================\e[25l\r\nINSTANCE   | TYPE                 | RESIDENT | RECORD NUMBER | START              | LENGTH        | NAME       \e[28;105H\e[?25h\r\n============================================================================================================== \b\r\n● 0        | StandardInformation  | true     |        0x41d9 |         0xc1076438 |            72 | \"\"\r\n● 3        | AttributeList        | true     |        0x41d9 |         0xc1076498 |            96 | \"\"\r\n  ○ 0      | Data                 | false    |        0x4819 |         0xc1206438 |    6634323968 | \"\"\r\n● 2        | FileName             | true     |        0x41d9 |         0xc1076510 |            90 | \"\""
+  - delay: 18
+    content: "\r\nntfs-shell:\\>\e[1C"
+  - delay: 1859
+    content: a
+  - delay: 596
+    content: t
+  - delay: 209
+    content: t
+  - delay: 242
+    content: r
+  - delay: 322
+    content: _
+  - delay: 229
+    content: r
+  - delay: 119
+    content: u
+  - delay: 221
+    content: 'n'
+  - delay: 136
+    content: s
+  - delay: 158
+    content: ' '
+  - delay: 152
+    content: p
+  - delay: 113
+    content: a
+  - delay: 153
+    content: g
+  - delay: 243
+    content: e
+  - delay: 222
+    content: f
+  - delay: 122
+    content: i
+  - delay: 196
+    content: l
+  - delay: 317
+    content: e
+  - delay: 573
+    content: .
+  - delay: 158
+    content: s
+  - delay: 415
+    content: 'y'
+  - delay: 230
+    content: s
+  - delay: 342
+    content: "\r\n==============================================================================================================\e[25l\r\nINSTANCE   | TYPE                 | RESIDENT | RECORD NUMBER | START              | LENGTH        | NAME       \e[28;105H\e[?25h\r\n============================================================================================================== \b\r\n● 0        | StandardInformation  | true     |        0x41d9 |         0xc1076438 |            72 | \"\"\r\n● 3        | AttributeList        | true     |        0x41d9 |         0xc1076498 |            96 | \"\"\r\n  ○ 0      | Data                 | false    |        0x4819 |         0xc1206438 |    6634323968 | \"\"\r\n    □ 0    | DataRun              |          |               |       0x1ff4864000 |    2756567040 |\r\n    □ 1    | DataRun              |          |               |       0x6276168000 |     196222976 |\r\n    □ 2    | DataRun              |          |               |       0x6289c86000 |         24576 |\r\n    □ 3    | DataRun              |          |               |       0x64be2dc000 |     401358848 |\r\n    □ 4    | DataRun              |          |               |       0x6cf5800000 |     397721600 |\r\n    □ 5    | DataRun              |          |               |       0x6083ee8000 |     296140800 |\r\n    □ 6    | DataRun              |          |               |       0x55ed0f0000 |     384090112 |\r\n    □ 7    | DataRun              |          |               |       0x5939fa0000 |     154939392 |\r\n    □ 8    | DataRun              |          |               |       0x60edc60000 |     384073728 |\r\n    □ 9    | DataRun              |          |               |       0x55a9b2c000 |     165298176 |\r\n    □ 10   | DataRun              |          |               |       0x65c8530000 |     377798656 |\r\n    □ 11   | DataRun              |          |               |       0x525e9e8000 |     165212160 |\r\n    □ 12   | DataRun              |          |               |       0x6109a0c000 |     361250816 |\r\n    □ 13   | DataRun              |          |               |       0x6e68300000 |     175554560 |\r\n    □ 14   | DataRun              |          |               |       0x66f9bec000 |     349519872 |\r\n    □ 15   | DataRun              |          |               |       0x4505830000 |      68550656 |\r\n● 2        | FileName             | true     |        0x41d9 |         0xc1076510 |            90 | \"\""
+  - delay: 11
+    content: "\r\nntfs-shell:\\>\e[1C"
+  - delay: 1911
+    content: f
+  - delay: 650
+    content: i
+  - delay: 184
+    content: l
+  - delay: 192
+    content: e
+  - delay: 215
+    content: i
+  - delay: 118
+    content: 'n'
+  - delay: 144
+    content: f
+  - delay: 118
+    content: o
+  - delay: 127
+    content: ' '
+  - delay: 159
+    content: w
+  - delay: 120
+    content: i
+  - delay: 116
+    content: 'n'
+  - delay: 113
+    content: d
+  - delay: 140
+    content: o
+  - delay: 101
+    content: w
+  - delay: 183
+    content: s
+  - delay: 318
+    content: "\r\n============================= FILE RECORD ==============================\r\nAllocated Size:                   1024\r\nByte Position:                    0xc8f5e800\r\nData Size:                        576\r\nHard-Link Count:                  1\r\nIs Directory:                     true\r\nRecord Number:                    0x23d7a\r\nSequence Number:                  27\r\n\n========================= STANDARD INFORMATION =========================\r\nAttributes:                       (empty)\r\nAccess Time:                      2021-12-08 20:35:10 UTC\r\nCreation Time:                    2021-11-11 08:15:11 UTC\r\nModification Time:                2021-12-04 14:07:43 UTC\r\nMFT Record Modification Time:     2021-12-04 14:07:43 UTC\r\nClass ID:                         0\r\nMaximum Versions:                 0\r\nOwner ID:                         0\r\nQuota Charged:                    0\r\nSecurity ID:                      10667\r\nUSN:                              73543275068\r\nVersion:                          0\r\n\n============================== FILE NAME ===============================\r\nName:                             \"Windows\"\r\nNamespace:                        Posix\r\nParent Directory Record Number:   0x5"
+  - delay: 10
+    content: "\r\nntfs-shell:\\>\e[1C"
+  - delay: 2276
+    content: c
+  - delay: 228
+    content: d
+  - delay: 208
+    content: ' '
+  - delay: 262
+    content: w
+  - delay: 148
+    content: i
+  - delay: 173
+    content: 'n'
+  - delay: 102
+    content: d
+  - delay: 382
+    content: o
+  - delay: 152
+    content: w
+  - delay: 200
+    content: s
+  - delay: 277
+    content: "\r\n"
+  - delay: 19
+    content: 'ntfs-shell:\Windows> '
+  - delay: 1206
+    content: c
+  - delay: 221
+    content: d
+  - delay: 113
+    content: ' '
+  - delay: 218
+    content: s
+  - delay: 286
+    content: 'y'
+  - delay: 251
+    content: s
+  - delay: 222
+    content: t
+  - delay: 127
+    content: e
+  - delay: 230
+    content: m
+  - delay: 185
+    content: '3'
+  - delay: 145
+    content: '2'
+  - delay: 314
+    content: "\r\n"
+  - delay: 30
+    content: 'ntfs-shell:\Windows\System32> '
+  - delay: 1398
+    content: c
+  - delay: 229
+    content: d
+  - delay: 161
+    content: ' '
+  - delay: 149
+    content: c
+  - delay: 146
+    content: o
+  - delay: 237
+    content: 'n'
+  - delay: 266
+    content: f
+  - delay: 143
+    content: i
+  - delay: 184
+    content: g
+  - delay: 736
+    content: "\r\n"
+  - delay: 15
+    content: 'ntfs-shell:\Windows\System32\config> '
+  - delay: 1603
+    content: f
+  - delay: 271
+    content: i
+  - delay: 255
+    content: l
+  - delay: 210
+    content: e
+  - delay: 206
+    content: i
+  - delay: 137
+    content: 'n'
+  - delay: 136
+    content: f
+  - delay: 202
+    content: o
+  - delay: 176
+    content: ' '
+  - delay: 419
+    content: S
+  - delay: 310
+    content: 'Y'
+  - delay: 262
+    content: S
+  - delay: 240
+    content: T
+  - delay: 95
+    content: E
+  - delay: 375
+    content: M
+  - delay: 551
+    content: "\r\n============================= FILE RECORD ==============================\r\nAllocated Size:                   1024\r\nByte Position:                    0x5a15f17800\r\nData Size:                        392\r\nHard-Link Count:                  1\r\nIs Directory:                     false\r\nRecord Number:                    0x143c32\r\nSequence Number:                  7\r\n\n========================= STANDARD INFORMATION =========================\r\nAttributes:                       ARCHIVE\r\nAccess Time:                      2021-11-24 20:15:07 UTC\r\nCreation Time:                    2021-11-11 08:15:11 UTC\r\nModification Time:                2021-11-24 20:15:07 UTC\r\nMFT Record Modification Time:     2021-11-20 19:08:55 UTC\r\nClass ID:                         0\r\nMaximum Versions:                 0\r\nOwner ID:                         0\r\nQuota Charged:                    0\r\nSecurity ID:                      18314\r\nUSN:                              59962183284\r\nVersion:                          0\r\n\n============================== FILE NAME ===============================\r\nName:                             \"SYSTEM\"\r\nNamespace:                        Posix\r\nParent Directory Record Number:   0x2f1af\r\n\n============================= DATA STREAM ==============================\r\nName:                             \"\"\r\nSize:                             30670848"
+  - delay: 6
+    content: "\r\nntfs-shell:\\Windows\\System32\\config>\e[1C"
+  - delay: 7214
+    content: f
+  - delay: 544
+    content: i
+  - delay: 273
+    content: l
+  - delay: 254
+    content: e
+  - delay: 169
+    content: i
+  - delay: 114
+    content: 'n'
+  - delay: 148
+    content: f
+  - delay: 160
+    content: o
+  - delay: 215
+    content: ' '
+  - delay: 290
+    content: /
+  - delay: 1402
+    content: '0x143c32'
+  - delay: 2182
+    content: "\r\n============================= FILE RECORD ==============================\r\nAllocated Size:                   1024\r\nByte Position:                    0x5a15f17800\r\nData Size:                        392\r\nHard-Link Count:                  1\r\nIs Directory:                     false\r\nRecord Number:                    0x143c32\r\nSequence Number:                  7\r\n\n========================= STANDARD INFORMATION =========================\r\nAttributes:                       ARCHIVE\r\nAccess Time:                      2021-11-24 20:15:07 UTC\r\nCreation Time:                    2021-11-11 08:15:11 UTC\r\nModification Time:                2021-11-24 20:15:07 UTC\r\nMFT Record Modification Time:     2021-11-20 19:08:55 UTC\r\nClass ID:                         0\r\nMaximum Versions:                 0\r\nOwner ID:                         0\r\nQuota Charged:                    0\r\nSecurity ID:                      18314\r\nUSN:                              59962183284\r\nVersion:                          0\r\n\n============================== FILE NAME ===============================\r\nName:                             \"SYSTEM\"\r\nNamespace:                        Posix\r\nParent Directory Record Number:   0x2f1af\r\n\n============================= DATA STREAM ==============================\r\nName:                             \"\"\r\nSize:                             30670848"
+  - delay: 23
+    content: "\r\nntfs-shell:\\Windows\\System32\\config>\e[1C"
+  - delay: 919
+    content: g
+  - delay: 262
+    content: e
+  - delay: 243
+    content: t
+  - delay: 238
+    content: ' '
+  - delay: 415
+    content: S
+  - delay: 352
+    content: 'Y'
+  - delay: 280
+    content: S
+  - delay: 240
+    content: T
+  - delay: 96
+    content: E
+  - delay: 496
+    content: M
+  - delay: 783
+    content: "\r\nSaving 30670848 bytes of data in \"SYSTEM\"..."
+  - delay: 12
+    content: "\r\n"
+  - delay: 1221
+    content: 'ntfs-shell:\Windows\System32\config> '
+  - delay: 2580
+    content: e
+  - delay: 237
+    content: x
+  - delay: 168
+    content: i
+  - delay: 118
+    content: t

@@ -1,0 +1,43 @@
+[package]
+name = "ntfs"
+version = "0.4.0"
+authors = ["Colin Finck <colin@reactos.org>"]
+description = "A low-level NTFS filesystem library"
+homepage = "https://github.com/ColinFinck/ntfs"
+repository = "https://github.com/ColinFinck/ntfs"
+documentation = "https://docs.rs/ntfs"
+readme = "README.md"
+edition = "2021"
+rust-version = "1.60"
+license = "MIT OR Apache-2.0"
+keywords = ["filesystem", "nt", "ntfs", "windows"]
+categories = ["filesystem", "no-std", "os::windows-apis", "parser-implementations"]
+
+[dependencies]
+arrayvec = { version = "0.7.2", default-features = false }
+binrw = { version = "0.11.2", default-features = false }
+byteorder = { version = "1.4.3", default-features = false }
+bitflags = "2.3.1"
+derive_more = "0.99.17"
+displaydoc = { version = "0.2.3", default-features = false }
+enumn = "0.1.3"
+memoffset = "0.9.0"
+nt-string = { version = "0.1.1", features = ["alloc"], default-features = false }
+strum_macros = "0.24.0"
+time = { version = "0.3.9", features = ["large-dates", "macros"], default-features = false, optional = true }
+
+[dev-dependencies]
+anyhow = "1.0"
+time = { version = "0.3.9", features = ["formatting", "large-dates", "macros"], default-features = false }
+
+[features]
+default = ["std"]
+std = ["arrayvec/std", "binrw/std", "byteorder/std", "nt-string/std", "time?/std"]
+
+[[example]]
+name = "ntfs-shell"
+required-features = ["time"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

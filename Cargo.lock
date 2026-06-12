@@ -2817,8 +2817,6 @@ dependencies = [
 [[package]]
 name = "ntfs"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26fe2140f3b6eef2648fa331ca7af7652da1bf3bb84f715878bf50f2f8f03c38"
 dependencies = [
  "arrayvec",
  "binrw",
