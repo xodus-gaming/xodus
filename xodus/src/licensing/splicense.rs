@@ -26,6 +26,7 @@ use std::{collections::HashMap, io, io::Read};
 use aes::cipher::{BlockCipherDecrypt, KeyInit};
 use base64::prelude::*;
 use num_enum::TryFromPrimitive;
+use thiserror::Error;
 use zerocopy::{FromBytes, IntoBytes, transmute};
 
 // pub struct Block<'a> {
@@ -121,11 +122,17 @@ fn read_vec<R: Read>(mut reader: R, len: usize) -> io::Result<Vec<u8>> {
     Ok(buf)
 }
 
+#[derive(Debug, Error)]
+pub enum DecodeError {
+    #[error("IO error: {0}")]
+    IoError(#[from] io::Error),
+}
+
 impl SPLicense {
     /// Merges a tag-length-value from the `reader` into this [`SPLicense`].
     ///
     /// Returns None if there are none TLVs left in the reader.
-    fn merge_tlv<R: Read>(&mut self, mut reader: R) -> io::Result<Option<()>> {
+    fn merge_tlv<R: Read>(&mut self, mut reader: R) -> Result<Option<()>, DecodeError> {
         let mut buffer = [0u8; 4];
 
         // Doesn't use read_u32 to allow checking for EOF without error
@@ -243,7 +250,7 @@ impl SPLicense {
         Ok(Some(()))
     }
 
-    pub fn decode<R: Read>(mut reader: R) -> io::Result<Self> {
+    pub fn decode<R: Read>(mut reader: R) -> Result<Self, DecodeError> {
         // Decode the header
         let _header: [u8; 4] = read_array(&mut reader)?;
         let _offset = read_u32(&mut reader)?;
