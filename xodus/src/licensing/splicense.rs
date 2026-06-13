@@ -131,6 +131,15 @@ pub enum DecodeError {
     PayloadLengthMismatch { expected: usize, read: usize },
 }
 
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("SPLicense decode error: {0}")]
+    DecodeError(#[from] DecodeError),
+
+    #[error("could not decode base64 string: {0}")]
+    PayloadLengthMismatch(#[from] base64::DecodeError),
+}
+
 impl SPLicense {
     /// Merges a tag-length-value from the `reader` into this [`SPLicense`].
     ///
@@ -277,6 +286,11 @@ impl SPLicense {
 
         Ok(license)
     }
+
+    pub fn parse_base64(string: String) -> Result<SPLicense, ParseError> {
+        let data = BASE64_STANDARD.decode(string)?;
+        Ok(SPLicense::decode(&*data)?)
+    }
 }
 
 impl EncryptedDeviceKey {
@@ -305,20 +319,6 @@ impl EncryptedDeviceKey {
 
         device_key.0
     }
-}
-
-#[derive(Debug, Error)]
-pub enum ParseError {
-    #[error("SPLicense decode error: {0}")]
-    DecodeError(#[from] DecodeError),
-
-    #[error("could not decode base64 string: {0}")]
-    PayloadLengthMismatch(#[from] base64::DecodeError),
-}
-
-pub fn parse_license(splicense_block: String) -> Result<SPLicense, ParseError> {
-    let data = BASE64_STANDARD.decode(splicense_block)?;
-    Ok(SPLicense::decode(&*data)?)
 }
 
 pub fn unpack_key(

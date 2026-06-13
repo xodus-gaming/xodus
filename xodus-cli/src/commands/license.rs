@@ -1,7 +1,7 @@
 use crate::{device, user};
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 use xodus::{
-    licensing::splicense::{parse_license, unpack_key},
+    licensing::splicense::{SPLicense, unpack_key},
     models::{live::ExchangeUserTokenOutcome, secrets::Token, soap},
 };
 
@@ -86,10 +86,10 @@ pub async fn run(client: &reqwest::Client, content_id: String, market: String, c
     .await
     .expect("failed to get license");
 
-    let game_splicense = parse_license(game_license.splicense_block);
+    let game_splicense = SPLicense::parse_base64(game_license.splicense_block).unwrap();
 
     let dev_license = device::get_dev_license().unwrap();
-    let device_license = parse_license(dev_license.splicense);
+    let device_license = SPLicense::parse_base64(dev_license.splicense).unwrap();
     let key = device_license
         .encrypted_device_key
         .unwrap()
