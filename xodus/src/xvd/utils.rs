@@ -204,9 +204,7 @@ fn extract_ntfs_directory<T: Read + Seek>(
 
 pub struct XvdFile {
     header: XvdHeader,
-
     drive_data_offset: u64,
-
     encrypted_section_infos: Vec<EncryptedSectionInfo>,
 }
 
@@ -224,7 +222,6 @@ pub struct EncryptedSectionInfo {
 }
 
 pub async fn parse_file(path: String) -> Result<XvdFile, Box<dyn std::error::Error>> {
-    let input_path = PathBuf::from(&path);
     let mut file = OpenOptions::new()
         .read(true)
         .open(path.clone())
@@ -394,7 +391,7 @@ pub fn unpack_file(
     destination: String,
     full_key: [u8; 32],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut sfile = std::fs::File::open(path)?;
+    let sfile = std::fs::File::open(path)?;
     let block_size = 4096; //xvd.header.block_size;
     let gp = gpt::GptConfig::new()
         .writable(false)
