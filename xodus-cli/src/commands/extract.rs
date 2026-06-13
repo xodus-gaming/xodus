@@ -1,6 +1,6 @@
 use xodus::{licensing::splicense::{unpack_key}, xvd::utils::{parse_file, unpack_file}};
 
-use crate::{device, license::get_license, user};
+use crate::{license::get_license};
 pub async fn run(client: &reqwest::Client, path: String, destination: String, content_id: String, market: String) {
     let xvd = parse_file(path.to_string()).await.expect("Failed to parse");
 
