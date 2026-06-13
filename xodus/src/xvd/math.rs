@@ -59,17 +59,17 @@ pub fn calculate_hash_block_num_for_block_num(
     let mut remaining_hash_tree_levels = hash_tree_levels - u64::from(hash_level + 1);
 
     if hash_level == 0 && remaining_hash_tree_levels > 0 {
-        result += (number_of_hashed_pages + hash_block_exponent(2) - 1) / hash_block_exponent(2);
+        result += number_of_hashed_pages.div_ceil(hash_block_exponent(2));
         remaining_hash_tree_levels -= 1;
     }
 
     if (hash_level == 0 || hash_level == 1) && remaining_hash_tree_levels > 0 {
-        result += (number_of_hashed_pages + hash_block_exponent(3) - 1) / hash_block_exponent(3);
+        result += number_of_hashed_pages.div_ceil(hash_block_exponent(3));
         remaining_hash_tree_levels -= 1;
     }
 
     if remaining_hash_tree_levels > 0 {
-        result += (number_of_hashed_pages + hash_block_exponent(4) - 1) / hash_block_exponent(4);
+        result += number_of_hashed_pages.div_ceil(hash_block_exponent(4));
     }
 
     if resilient {

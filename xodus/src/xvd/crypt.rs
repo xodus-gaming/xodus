@@ -6,7 +6,6 @@ use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
 use std::io::{Read, Seek, SeekFrom};
 
 const PAGE_SIZE: usize = 0x1000;
-const PAGE_SIZE_U64: u64 = PAGE_SIZE as u64;
 
 pub trait PageSource: Read + Seek {}
 impl<T: Read + Seek> PageSource for T {}
@@ -77,8 +76,8 @@ impl<R: PageSource> SectionReader<R> {
         let mut cur_off = offset_in_section;
 
         while remaining > 0 {
-            let page_in_section = cur_off / PAGE_SIZE_U64;
-            let in_page = (cur_off % PAGE_SIZE_U64) as usize;
+            let page_in_section = cur_off / PAGE_SIZE as u64;
+            let in_page = (cur_off % PAGE_SIZE as u64) as usize;
             let copy_len = remaining.min(PAGE_SIZE - in_page);
 
             self.ensure_page_decrypted(page_in_section)?;
@@ -100,7 +99,7 @@ impl<R: PageSource> SectionReader<R> {
 
         let file_offset = self
             .section_offset
-            .checked_add(page_in_section * PAGE_SIZE_U64)
+            .checked_add(page_in_section * PAGE_SIZE as u64)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "file offset overflow"))?;
 
         let data_unit = match &self.data_units {

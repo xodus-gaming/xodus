@@ -12,7 +12,7 @@ pub async fn run(client: &reqwest::Client, path: String, destination: String, co
     if game_splicense.content_keys.len() != 1 {
         eprintln!("unexpected number of content keys {}", game_splicense.content_keys.len())
     }
-    for (_, content_key) in game_splicense.content_keys {
+    if let Some((_, content_key)) = game_splicense.content_keys.into_iter().next() {
         let unpacked: Vec<u8> = unpack_key(&key, content_key).expect("failed to unpack");
         unpack_file(
             xvd,
@@ -21,6 +21,5 @@ pub async fn run(client: &reqwest::Client, path: String, destination: String, co
             unpacked.try_into().expect("match"),
         )
         .expect("unpack ok");
-        return;
     }
 }

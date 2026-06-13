@@ -58,8 +58,8 @@ impl Read for XvdStream {
         let to_read = remaining.min(buf.len());
 
         if let Some(encryption_info) = &self.encryption_info {
-            let mut it = encryption_info.encrypted_sections.iter();
-            while let Some(s) = it.next() {
+            let it = encryption_info.encrypted_sections.iter();
+            for s in it {
                 if self.offset + current >= s.section_offset
                     && self.offset + current < s.section_offset + s.section_length
                 {
