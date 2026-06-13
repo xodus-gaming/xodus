@@ -185,7 +185,7 @@ fn extract_ntfs_directory<T: Read + Seek>(
         let file_name = file_name?;
         let name = file_name.name().to_string()?;
 
-        if name == "." {
+        if name == "." || name.starts_with('$') {
             continue;
         }
 
@@ -451,4 +451,3 @@ pub fn unpack_file(
     extract_ntfs_directory(&ntfs, &mut fs, &root, &extract_root)?;
     Ok(())
 }
-

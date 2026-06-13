@@ -1,4 +1,5 @@
 use futures_util::StreamExt;
+use indicatif::{ProgressBar, ProgressStyle};
 use inquire::{MultiSelect, validator::Validation};
 use tokio::io::AsyncWriteExt;
 use xodus::{
@@ -118,9 +119,12 @@ pub async fn run(client: &reqwest::Client, product: String, market: Option<Strin
             println!("{}", url);
             continue;
         }
-        let file_size = file.file_size as f64;
-        let total_mib = file_size / 1024_f64 / 1024_f64;
-        let mut downloaded_size = 0_f64;
+
+        let progress_bar = ProgressBar::new(file.file_size as u64).with_style(
+            ProgressStyle::with_template("[{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) ({eta})").unwrap()
+            .progress_chars("#>-")
+        );
+
         let res = client
             .get(url)
             .send()
@@ -134,15 +138,14 @@ pub async fn run(client: &reqwest::Client, product: String, market: Option<Strin
             .await
             .unwrap();
         let mut stream = res.bytes_stream();
+
         while let Some(chunk) = stream.next().await {
             let chk = chunk.expect("Failed to stream file");
-            downloaded_size += chk.len() as f64;
             file.write_all(&chk).await.expect("Failed to write to file");
-            let percent = downloaded_size / file_size * 100_f64;
-            let downloaded_mib = downloaded_size / 1024_f64 / 1024_f64;
-            print!("{percent:02.02}% - {downloaded_mib:05.0}MiB/{total_mib:05.0}MiB\r")
+            progress_bar.inc(chk.len() as u64);
         }
-        println!();
+
+        progress_bar.finish();
     }
 
     println!("ContentID: {content_id}");
