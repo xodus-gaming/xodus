@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 mod commands;
 mod device;
 mod user;
+mod license;
 mod webview;
 
 #[derive(Subcommand)]
@@ -22,7 +23,12 @@ enum SubCommand {
         market: Option<String>,
     },
     Extract {
+        #[clap(help = "Content Id of a license")]
+        content_id: String,
         path: String,
+        destination: String,
+        #[arg(short, long)]
+        market: Option<String>,
     },
     Login,
 }
@@ -44,7 +50,7 @@ async fn main() {
         .unwrap();
     let args = CliArgs::parse();
 
-    xodus::secrets::init_secrets();
+    xodus::secrets::init_secrets().expect("Unable to initialize credentials");
     device::ensure_device_credentials(&client).await;
 
     match args.command {
@@ -69,8 +75,13 @@ async fn main() {
         SubCommand::Login => {
             commands::login::run(&client).await;
         }
-        SubCommand::Extract { path } => {
-            commands::extract::run(path).await;
+        SubCommand::Extract {
+            path,
+            destination,
+            content_id,
+            market
+        } => {
+            commands::extract::run(&client, path, destination, content_id, market.unwrap_or("neutral".to_string())).await;
         }
     }
 

@@ -28,6 +28,61 @@ pub fn page_number_to_offset(page_number: u64) -> u64 {
     page_number * PAGE_SIZE as u64
 }
 
+pub fn calculate_hash_block_num_for_block_num(
+    xvd_type: u32,
+    hash_tree_levels: u64,
+    number_of_hashed_pages: u64,
+    block_num: u64,
+    hash_level: u32,
+    resilient: bool,
+    unknown: bool,
+) -> (u64, u64) {
+    fn hash_block_exponent(block_count: u32) -> u64 {
+        0xAAu64.pow(block_count)
+    }
+
+    if xvd_type > 1 || hash_level > 3 {
+        return (0xFFFF, 0);
+    }
+
+    let entry_num_in_block = if hash_level == 0 {
+        block_num % 0xAA
+    } else {
+        (block_num / hash_block_exponent(hash_level)) % 0xAA
+    };
+
+    if hash_level == 3 {
+        return (0, entry_num_in_block);
+    }
+
+    let mut result = block_num / hash_block_exponent(hash_level + 1);
+    let mut remaining_hash_tree_levels = hash_tree_levels - u64::from(hash_level + 1);
+
+    if hash_level == 0 && remaining_hash_tree_levels > 0 {
+        result += number_of_hashed_pages.div_ceil(hash_block_exponent(2));
+        remaining_hash_tree_levels -= 1;
+    }
+
+    if (hash_level == 0 || hash_level == 1) && remaining_hash_tree_levels > 0 {
+        result += number_of_hashed_pages.div_ceil(hash_block_exponent(3));
+        remaining_hash_tree_levels -= 1;
+    }
+
+    if remaining_hash_tree_levels > 0 {
+        result += number_of_hashed_pages.div_ceil(hash_block_exponent(4));
+    }
+
+    if resilient {
+        result *= 2;
+    }
+
+    if unknown {
+        result += 1;
+    }
+
+    (result, entry_num_in_block)
+}
+
 pub fn calculate_number_of_hash_blocks_in_level(
     size: u64,
     hash_level: u64,

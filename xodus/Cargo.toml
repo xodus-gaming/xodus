@@ -17,8 +17,7 @@ base64 = "0.22.1"
 rand = "0.10.0"
 uuid = "1.23.1"
 aes = "0.9.0"
-keyring-core = "1.0.0"
-dbus-secret-service-keyring-store = { version = "1.0.0", features = ["crypto-openssl"]}
+keyring-core = { version = "1.0.0", features = ["sample"] }
 zerocopy = { version = "0.8.48", features = ["derive"] }
 bergshamra-c14n = "0.5.1"
 hmac = "0.12.0"
@@ -30,6 +29,18 @@ aes-keywrap = "0.9.0"
 num_enum = "0.7.6"
 prost = "0.14.4"
 globset = "0.4.18"
+thiserror = "2.0.18"
+ntfs = "0.4.0"
+gpt = "4.1.0"
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+smbios-lib = "0.9.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus-secret-service-keyring-store = { version = "1.0.0", features = ["crypto-openssl"]}
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1.0.0", features = ["keychain"]}
 
 [dev-dependencies]
 rsa = "0.9.10"
