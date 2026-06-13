@@ -307,8 +307,18 @@ impl EncryptedDeviceKey {
     }
 }
 
-pub fn parse_license(splicense_block: String) -> SPLicense {
-    SPLicense::decode(BASE64_STANDARD.decode(splicense_block).unwrap().as_slice()).unwrap()
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("SPLicense decode error: {0}")]
+    DecodeError(#[from] DecodeError),
+
+    #[error("could not decode base64 string: {0}")]
+    PayloadLengthMismatch(#[from] base64::DecodeError),
+}
+
+pub fn parse_license(splicense_block: String) -> Result<SPLicense, ParseError> {
+    let data = BASE64_STANDARD.decode(splicense_block)?;
+    Ok(SPLicense::decode(&*data)?)
 }
 
 pub fn unpack_key(
