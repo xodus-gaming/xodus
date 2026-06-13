@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 mod commands;
 mod device;
-mod user;
 mod license;
+mod user;
 mod webview;
 use xodus::xal::client_params::CLIENT_WINDOWS;
 
@@ -80,9 +80,16 @@ async fn main() {
             path,
             destination,
             content_id,
-            market
+            market,
         } => {
-            commands::extract::run(&client, path, destination, content_id, market.unwrap_or("neutral".to_string())).await;
+            commands::extract::run(
+                &client,
+                path,
+                destination,
+                content_id,
+                market.unwrap_or("neutral".to_string()),
+            )
+            .await;
         }
     }
 

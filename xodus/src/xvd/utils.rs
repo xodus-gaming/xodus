@@ -451,4 +451,3 @@ pub fn unpack_file(
     extract_ntfs_directory(&ntfs, &mut fs, &root, &extract_root)?;
     Ok(())
 }
-
