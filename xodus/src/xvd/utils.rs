@@ -205,10 +205,6 @@ fn extract_ntfs_directory<T: Read + Seek>(
 pub struct XvdFile {
     header: XvdHeader,
 
-    hash_tree_offset: u64,
-    user_data_offset: u64,
-    xvc_info_offset: u64,
-    dynamic_header_offset: u64,
     drive_data_offset: u64,
 
     encrypted_section_infos: Vec<EncryptedSectionInfo>,
@@ -387,10 +383,6 @@ pub async fn parse_file(path: String) -> Result<XvdFile, Box<dyn std::error::Err
     }
     Ok(XvdFile {
         header: xvd_header,
-        hash_tree_offset,
-        user_data_offset,
-        xvc_info_offset,
-        dynamic_header_offset,
         drive_data_offset,
         encrypted_section_infos: enc_sections,
     })
