@@ -130,7 +130,7 @@ impl<R: PageSource> SectionReader<R> {
         self.inner.seek(SeekFrom::Start(file_offset))?;
         self.inner.read_exact(&mut ciphertext)?;
 
-        let plaintext = decrypt_page_xts_like_csharp(
+        let plaintext = decrypt_page_xts(
             &ciphertext,
             data_unit,
             self.header_id,
@@ -145,7 +145,7 @@ impl<R: PageSource> SectionReader<R> {
     }
 }
 
-fn decrypt_page_xts_like_csharp(
+fn decrypt_page_xts(
     input: &[u8; PAGE_SIZE],
     data_unit: u32,
     header_id: u32,
