@@ -93,22 +93,6 @@ impl<R: PageSource> SectionReader<R> {
         Ok(())
     }
 
-    pub fn read_decrypted_page(&mut self, page_in_section: u64) -> io::Result<&[u8; PAGE_SIZE]> {
-        let page_start = page_in_section
-            .checked_mul(PAGE_SIZE_U64)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "page overflow"))?;
-
-        if page_start >= self.section_length {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "page outside section",
-            ));
-        }
-
-        self.ensure_page_decrypted(page_in_section)?;
-        Ok(&self.cached_page_plaintext)
-    }
-
     fn ensure_page_decrypted(&mut self, page_in_section: u64) -> io::Result<()> {
         if self.cached_page_index == Some(page_in_section) {
             return Ok(());
