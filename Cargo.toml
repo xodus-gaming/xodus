@@ -6,3 +6,6 @@ members = ["xodus", "xodus-cli"]
 chrono = "0.4.42"
 reqwest = { version = "0.11", features = ["json", "stream"] }
 tokio = { version = "1", features = ["full"] }
+
+[patch.crates-io]
+ntfs = { git = "https://github.com/xodus-gaming/ntfs.git" }

@@ -24,8 +24,8 @@ These parts are still quite scattered arround.
 - [x] User token exchange
 - [x] Licensing flow
 - [x] Xbox auth and MSIXVC downloads
-- [ ] MSIXVC parsing support
-- [ ] Decryption
+- [x] MSIXVC parsing support
+- [x] Decryption
 - [ ] On-demand .exe decryption
 - [ ] MSIXVC2 support
 
