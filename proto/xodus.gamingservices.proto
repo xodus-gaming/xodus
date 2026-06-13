@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package xodus.gamingservices;
+
+message XSTSTokenRequest {
+    string url = 1;
+}
+
+message XSTSTokenResponse {
+    string token = 1;
+    uint64 expiry = 2;
+    string relying_party = 3;
+    optional TitleSignaturePolicy policy = 4;
+}
+
+message TitleSignaturePolicy {
+    repeated string algorithms = 1;
+    repeated uint64 max_body_bytes = 2;
+    repeated string signature_types = 3;
+}

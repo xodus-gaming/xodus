@@ -4,7 +4,6 @@ mod device;
 mod license;
 mod user;
 mod webview;
-use xodus::xal::client_params::CLIENT_WINDOWS;
 
 #[derive(Subcommand)]
 enum SubCommand {
@@ -45,7 +44,7 @@ struct CliArgs {
 async fn main() {
     env_logger::init_from_env("XODUS_LOG");
     let client = reqwest::ClientBuilder::new()
-        .user_agent(CLIENT_WINDOWS().user_agent)
+        .user_agent(format!("xodus-cli/{}", env!("CARGO_PKG_VERSION")))
         .connection_verbose(true)
         .build()
         .unwrap();

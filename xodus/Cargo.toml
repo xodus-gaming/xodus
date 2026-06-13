@@ -27,6 +27,8 @@ cbc = "0.2.1"
 url = "2.5.8"
 aes-keywrap = "0.9.0"
 num_enum = "0.7.6"
+prost = "0.14.4"
+globset = "0.4.18"
 thiserror = "2.0.18"
 ntfs = "0.4.0"
 gpt = "4.1.0"
@@ -44,3 +46,6 @@ apple-native-keyring-store = { version = "1.0.0", features = ["keychain"]}
 rsa = "0.9.10"
 bergshamra = "0.5.1"
 ed25519-dalek = "2.2.0"
+
+[build-dependencies]
+prost-build = "0.14.4"
