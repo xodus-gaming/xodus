@@ -51,7 +51,7 @@ async fn main() {
         .unwrap();
     let args = CliArgs::parse();
 
-    xodus::secrets::init_secrets();
+    xodus::secrets::init_secrets().expect("Unable to initialize credentials");
     device::ensure_device_credentials(&client).await;
 
     match args.command {

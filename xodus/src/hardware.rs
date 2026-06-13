@@ -2,6 +2,7 @@
 
 use crate::{clep, models::devicecredential::Component};
 use base64::prelude::*;
+#[cfg(not(target_os = "linux"))]
 use smbioslib::{SMBiosSystemInformation, SystemUuidData, table_load_from_device};
 use std::io;
 
