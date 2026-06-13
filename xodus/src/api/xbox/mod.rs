@@ -76,7 +76,7 @@ pub async fn authenticate_xbox_user(
         properties: UserAuthProperties {
             auth_method: "RPS".to_string(),
             site_name: "user.auth.xboxlive.com".to_string(),
-            rps_ticket: format!("{rps_ticket}"),
+            rps_ticket,
         },
     };
 

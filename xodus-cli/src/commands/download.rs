@@ -92,6 +92,7 @@ pub async fn run(client: &reqwest::Client, product: String, market: Option<Strin
     };
 
     let Ok(files) = MultiSelect::new("Select files to download", package.package_files)
+        .with_page_size(30)
         .with_validator(|input: &[inquire::list_option::ListOption<&PackageFile>]| {
             if !input.is_empty() {
                 Ok(Validation::Valid)

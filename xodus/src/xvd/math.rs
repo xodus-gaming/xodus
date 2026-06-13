@@ -5,7 +5,7 @@ use crate::models::xvd::constants::{
 };
 
 pub fn bytes_to_pages(bytes: u64) -> u64 {
-    (bytes + PAGE_SIZE as u64 - 1) / PAGE_SIZE as u64
+    bytes.div_ceil(PAGE_SIZE as u64)
 }
 
 pub fn offset_to_block_number(offset: u64) -> u64 {
@@ -89,22 +89,10 @@ pub fn calculate_number_of_hash_blocks_in_level(
     resilient: bool,
 ) -> u64 {
     let hash_blocks = match hash_level {
-        0 => {
-            (size + DATA_BLOCKS_IN_LEVEL0_HASHTREE as u64 - 1)
-                / DATA_BLOCKS_IN_LEVEL0_HASHTREE as u64
-        }
-        1 => {
-            (size + DATA_BLOCKS_IN_LEVEL1_HASHTREE as u64 - 1)
-                / DATA_BLOCKS_IN_LEVEL1_HASHTREE as u64
-        }
-        2 => {
-            (size + DATA_BLOCKS_IN_LEVEL2_HASHTREE as u64 - 1)
-                / DATA_BLOCKS_IN_LEVEL2_HASHTREE as u64
-        }
-        3 => {
-            (size + DATA_BLOCKS_IN_LEVEL3_HASHTREE as u64 - 1)
-                / DATA_BLOCKS_IN_LEVEL3_HASHTREE as u64
-        }
+        0 => size.div_ceil(DATA_BLOCKS_IN_LEVEL0_HASHTREE as u64),
+        1 => size.div_ceil(DATA_BLOCKS_IN_LEVEL1_HASHTREE as u64),
+        2 => size.div_ceil(DATA_BLOCKS_IN_LEVEL2_HASHTREE as u64),
+        3 => size.div_ceil(DATA_BLOCKS_IN_LEVEL3_HASHTREE as u64),
         _ => unreachable!("There are 3 levels"),
     };
 
@@ -117,8 +105,7 @@ pub fn calculate_number_of_hash_blocks_in_level(
 
 pub fn calculate_number_of_hash_pages(hashed_pages_count: u64, resilient: bool) -> (u64, u64) {
     let mut hash_tree_levels = 1;
-    let mut hash_tree_pages =
-        (hashed_pages_count + HASH_ENTRIES_IN_PAGE as u64 - 1) / HASH_ENTRIES_IN_PAGE as u64;
+    let mut hash_tree_pages = hashed_pages_count.div_ceil(HASH_ENTRIES_IN_PAGE as u64);
     if hash_tree_pages > 1 {
         let mut result = 2;
         while result > 1 {
