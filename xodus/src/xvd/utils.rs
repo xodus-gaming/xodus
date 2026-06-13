@@ -331,7 +331,7 @@ pub async fn parse_file(path: String) -> Result<XvdFile, Box<dyn std::error::Err
 
     let sfile = std::fs::File::open(path).unwrap();
     let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
-    let mut it = region_headers.iter();
+    let it = region_headers.iter();
     for h in it {
         // let ch = h.clone();
         let key_id = h.key_id;
