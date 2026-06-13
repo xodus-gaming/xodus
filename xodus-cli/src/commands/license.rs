@@ -1,8 +1,6 @@
-use crate::{license::get_license};
+use crate::license::get_license;
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
-use xodus::{
-    licensing::splicense::{unpack_key},
-};
+use xodus::licensing::splicense::unpack_key;
 
 pub async fn run(client: &reqwest::Client, content_id: String, market: String, ciks: String) {
     let license = get_license(client, content_id, market).await;
@@ -10,6 +8,7 @@ pub async fn run(client: &reqwest::Client, content_id: String, market: String, c
         eprintln!("{}", err);
         return;
     }
+
     let (key, game_splicense) = license.unwrap();
     tokio::fs::create_dir_all(&ciks).await.unwrap();
     for (uuid, content_key) in game_splicense.content_keys {

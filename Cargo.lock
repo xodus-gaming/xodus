@@ -5929,6 +5929,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smbios-lib",
+ "thiserror 2.0.18",
  "tokio",
  "url",
  "uuid",

@@ -1,10 +1,14 @@
 use crate::{device, user};
 use xodus::{
-    licensing::splicense::{parse_license},
+    licensing::splicense::SPLicense,
     models::{live::ExchangeUserTokenOutcome, secrets::Token, soap},
 };
 
-pub async fn get_license(client: &reqwest::Client, content_id: String, market: String) -> std::result::Result<([u8; 16], xodus::licensing::splicense::SPLicense), String> {
+pub async fn get_license(
+    client: &reqwest::Client,
+    content_id: String,
+    market: String,
+) -> std::result::Result<([u8; 16], xodus::licensing::splicense::SPLicense), String> {
     let dev_token = device::get_device_token().unwrap();
     let Token::Legacy(dev_token) = dev_token else {
         return Err("Invalid STS token".to_string());
@@ -80,10 +84,12 @@ pub async fn get_license(client: &reqwest::Client, content_id: String, market: S
     .await
     .expect("failed to get license");
 
-    let game_splicense = parse_license(game_license.splicense_block);
+    let game_splicense = SPLicense::parse_base64(game_license.splicense_block)
+        .expect("could not parse base64 game SPLicense");
 
     let dev_license = device::get_dev_license().unwrap();
-    let device_license = parse_license(dev_license.splicense);
+    let device_license = SPLicense::parse_base64(dev_license.splicense)
+        .expect("could not parse base64 device SPLicense");
     let key = device_license
         .encrypted_device_key
         .unwrap()

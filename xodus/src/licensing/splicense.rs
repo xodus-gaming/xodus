@@ -26,6 +26,7 @@ use std::{collections::HashMap, io, io::Read};
 use aes::cipher::{BlockCipherDecrypt, KeyInit};
 use base64::prelude::*;
 use num_enum::TryFromPrimitive;
+use thiserror::Error;
 use zerocopy::{FromBytes, IntoBytes, transmute};
 
 // pub struct Block<'a> {
@@ -121,11 +122,29 @@ fn read_vec<R: Read>(mut reader: R, len: usize) -> io::Result<Vec<u8>> {
     Ok(buf)
 }
 
+#[derive(Debug, Error)]
+pub enum DecodeError {
+    #[error("IO error: {0}")]
+    IoError(#[from] io::Error),
+
+    #[error("expected to read {expected} bytes but only {read} were read")]
+    PayloadLengthMismatch { expected: usize, read: usize },
+}
+
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("SPLicense decode error: {0}")]
+    DecodeError(#[from] DecodeError),
+
+    #[error("could not decode base64 string: {0}")]
+    PayloadLengthMismatch(#[from] base64::DecodeError),
+}
+
 impl SPLicense {
     /// Merges a tag-length-value from the `reader` into this [`SPLicense`].
     ///
     /// Returns None if there are none TLVs left in the reader.
-    fn merge_tlv<R: Read>(&mut self, mut reader: R) -> io::Result<Option<()>> {
+    fn merge_tlv<R: Read>(&mut self, mut reader: R) -> Result<Option<()>, DecodeError> {
         let mut buffer = [0u8; 4];
 
         // Doesn't use read_u32 to allow checking for EOF without error
@@ -143,6 +162,9 @@ impl SPLicense {
         };
 
         let size = read_u32(&mut reader)? as usize;
+
+        // Create a new reader that limits the number of bytes that can be read to `size`
+        let mut reader = reader.take(size as u64);
 
         match block_id {
             Ok(BlockId::LicenseId) => {
@@ -240,10 +262,18 @@ impl SPLicense {
             }
         }
 
+        // Ensure the number of bytes read is exactly `size`
+        if reader.limit() != 0 {
+            return Err(DecodeError::PayloadLengthMismatch {
+                expected: size,
+                read: size - reader.limit() as usize,
+            });
+        }
+
         Ok(Some(()))
     }
 
-    pub fn decode<R: Read>(mut reader: R) -> io::Result<Self> {
+    pub fn decode<R: Read>(mut reader: R) -> Result<Self, DecodeError> {
         // Decode the header
         let _header: [u8; 4] = read_array(&mut reader)?;
         let _offset = read_u32(&mut reader)?;
@@ -255,6 +285,11 @@ impl SPLicense {
         while let Some(()) = license.merge_tlv(&mut reader)? {}
 
         Ok(license)
+    }
+
+    pub fn parse_base64(string: String) -> Result<SPLicense, ParseError> {
+        let data = BASE64_STANDARD.decode(string)?;
+        Ok(SPLicense::decode(&*data)?)
     }
 }
 
@@ -284,10 +319,6 @@ impl EncryptedDeviceKey {
 
         device_key.0
     }
-}
-
-pub fn parse_license(splicense_block: String) -> SPLicense {
-    SPLicense::decode(BASE64_STANDARD.decode(splicense_block).unwrap().as_slice()).unwrap()
 }
 
 pub fn unpack_key(
