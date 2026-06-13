@@ -121,7 +121,7 @@ pub async fn run(client: &reqwest::Client, product: String, market: Option<Strin
         }
 
         let progress_bar = ProgressBar::new(file.file_size as u64).with_style(
-            ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) ({eta})").unwrap()
+            ProgressStyle::with_template("[{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) ({eta})").unwrap()
             .progress_chars("#>-")
         );
 
