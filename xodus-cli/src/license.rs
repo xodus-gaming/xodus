@@ -14,7 +14,7 @@ pub async fn get_license(
         return Err("Invalid STS token".to_string());
     };
     let user = user::get_user().unwrap();
-    let user_token = user::get_token("http://Passport.NET/STS".to_string()).unwrap();
+    let user_token = user::get_token("http://Passport.NET/STS".to_string()).await.unwrap();
     let Token::Legacy(legacy) = user_token else {
         return Err("Unspported user token".to_string());
     };

@@ -63,7 +63,7 @@ pub async fn run(client: &reqwest::Client, product: String, market: Option<Strin
         eprintln!("Invalid STS token");
         return;
     };
-    let user_token = user::get_token("http://Passport.NET/STS".to_string()).unwrap();
+    let user_token = user::get_token("http://Passport.NET/STS".to_string()).await.unwrap();
     let Token::Legacy(legacy) = user_token else {
         eprintln!("Unspported user token");
         return;
