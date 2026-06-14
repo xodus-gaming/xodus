@@ -5,5 +5,5 @@ pub fn get_runtime_dir() -> String {
 
 #[cfg(target_os = "macos")]
 pub fn get_runtime_dir() -> String {
-    return "/tmp";
+    return "/tmp/".to_string();
 }
