@@ -40,6 +40,9 @@ pub async fn parse_message(
     buffer: Vec<u8>,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     match message_type {
+        XodusMessageType::Ping => {
+            Ok(buffer)
+        }
         XodusMessageType::XstsTokenRequest => {
             let string_buf = std::str::from_utf8(&buffer)?;
             let req = quick_xml::de::from_str::<XSTSTokenRequest>(string_buf)?;
