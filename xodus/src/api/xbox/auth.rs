@@ -57,8 +57,6 @@ pub async fn request_xsts_token(
 }
 
 pub fn get_xsts_auth_header(xsts: XstsResponse) -> String {
-    let uhs = xsts
-        .user_hash()
-        .expect("XSTS response missing xui claim");
+    let uhs = xsts.user_hash().expect("XSTS response missing xui claim");
     format!("XBL3.0 x={uhs};{}", xsts.token)
 }

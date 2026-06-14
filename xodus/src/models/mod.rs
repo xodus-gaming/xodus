@@ -7,4 +7,6 @@ pub mod packagespc;
 pub mod secrets;
 pub mod soap;
 pub mod xbox;
+pub mod xgameruntime;
+pub mod xodus;
 pub mod xvd;

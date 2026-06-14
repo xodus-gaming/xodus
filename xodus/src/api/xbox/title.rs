@@ -22,7 +22,7 @@ pub fn get_endpoint<'a>(url: &str, response: &'a TitleMgtResponse) -> Option<&'a
     let set = globset::GlobSet::new(hosts).ok()?;
     let matched = set.matches(parsed_url.host_str().unwrap());
     let matched: Vec<&TitleMgtEndPoint> = matched.into_iter().map(|m| filtered[m]).collect();
-    println!("Matched: {matched:?}");
+
     let index = matched
         .iter()
         .max_by_key(|&&pat| pat.host.chars().filter(|&c| c != '*').count())
@@ -52,8 +52,11 @@ mod test {
         );
         let updates =
             get_endpoint("https://update.xboxlive.com", &response).expect("No updates endpoint");
-        
+
         assert_eq!(updates.host, "update.xboxlive.com");
-        assert_eq!(updates.relying_party.as_deref(), Some("http://update.xboxlive.com"));
+        assert_eq!(
+            updates.relying_party.as_deref(),
+            Some("http://update.xboxlive.com")
+        );
     }
 }

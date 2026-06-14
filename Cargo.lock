@@ -6123,6 +6123,17 @@ dependencies = [
 [[package]]
 name = "xodus-service"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "env_logger",
+ "log",
+ "quick-xml",
+ "reqwest",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "xodus",
+]
 
 [[package]]
 name = "yasna"

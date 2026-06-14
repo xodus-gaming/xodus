@@ -13,8 +13,6 @@ pub use xal;
 
 pub mod proto {
     pub mod xodus {
-        pub mod gamingservices {
-            include!(concat!(env!("OUT_DIR"), "/xodus.gamingservices.rs"));
-        }
+        include!(concat!(env!("OUT_DIR"), "/xodus.rs"));
     }
 }

@@ -16,26 +16,30 @@ pub struct UserAuthProperties {
     pub rps_ticket: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct XstsResponse {
+    pub not_after: chrono::DateTime<chrono::Utc>,
     pub token: String,
     display_claims: DisplayClaims,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct DisplayClaims {
     xui: Vec<XuiClaim>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct XuiClaim {
     uhs: String,
 }
 
 impl XstsResponse {
     pub fn user_hash(&self) -> Option<&str> {
-        self.display_claims.xui.first().map(|claim| claim.uhs.as_str())
+        self.display_claims
+            .xui
+            .first()
+            .map(|claim| claim.uhs.as_str())
     }
 }
 
@@ -74,7 +78,7 @@ pub struct TitleMgtResponse {
     pub signature_policies: Vec<TitleMgtSignaturePolicy>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct TitleMgtEndPoint {
     pub protocol: String,
@@ -86,14 +90,14 @@ pub struct TitleMgtEndPoint {
     #[serde(default)]
     pub token_type: Option<String>,
     #[serde(default)]
-    pub signature_policy_index: Option<u8>
+    pub signature_policy_index: Option<u8>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct TitleMgtSignaturePolicy {
     pub version: u16,
     pub supported_algorithms: Vec<String>,
     pub max_body_bytes: u64,
-    pub supported_signature_types: Vec<String>
+    pub supported_signature_types: Vec<String>,
 }
