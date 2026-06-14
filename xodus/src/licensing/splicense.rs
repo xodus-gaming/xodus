@@ -99,6 +99,9 @@ pub struct EncryptedDeviceKey {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+pub struct DeviceKey([u8; 16]);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct PackedContentKey([u8; 40]);
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ContentKey([u8; 32]);
@@ -311,7 +314,7 @@ impl EncryptedDeviceKey {
         transmute!(key)
     }
 
-    pub fn derive_device_key(&self) -> [u8; 16] {
+    pub fn derive_device_key(&self) -> DeviceKey {
         assert!(self.version == 4);
 
         let decryption_key = self.decryption_key();
@@ -323,7 +326,15 @@ impl EncryptedDeviceKey {
         // Sanity check: the decrypted device key must be equal to the decryption key
         assert_eq!(device_key, decryption_key);
 
-        device_key.0
+        DeviceKey(device_key.0)
+    }
+}
+
+impl Deref for DeviceKey {
+    type Target = [u8; 16];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -332,7 +343,7 @@ impl EncryptedDeviceKey {
 pub struct ContentKeyAuthenticationFailed;
 
 impl PackedContentKey {
-    pub fn unpack(&self, key: &[u8; 16]) -> Result<ContentKey, ContentKeyAuthenticationFailed> {
+    pub fn unpack(&self, key: &DeviceKey) -> Result<ContentKey, ContentKeyAuthenticationFailed> {
         let packer = aes_keywrap::Aes128KeyWrapAligned::new(key);
 
         match packer.decapsulate(&self.0) {

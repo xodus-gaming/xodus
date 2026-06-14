@@ -1,6 +1,6 @@
 use crate::{device, user};
 use xodus::{
-    licensing::splicense::SPLicense,
+    licensing::splicense::{DeviceKey, SPLicense},
     models::{live::ExchangeUserTokenOutcome, secrets::Token, soap},
 };
 
@@ -8,7 +8,7 @@ pub async fn get_license(
     client: &reqwest::Client,
     content_id: String,
     market: String,
-) -> std::result::Result<([u8; 16], xodus::licensing::splicense::SPLicense), String> {
+) -> std::result::Result<(DeviceKey, SPLicense), String> {
     let dev_token = device::get_device_token().unwrap();
     let Token::Legacy(dev_token) = dev_token else {
         return Err("Invalid STS token".to_string());
