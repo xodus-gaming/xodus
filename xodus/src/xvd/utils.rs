@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
@@ -18,10 +19,19 @@ use crate::{
     xvd::math::page_number_to_offset,
 };
 
-#[derive(Debug)]
 struct XvdEncryptionInfo {
     full_key: [u8; 32],
     encrypted_sections: Vec<EncryptedSectionInfo>,
+}
+
+// The gpt crate requires the device to implement Debug,
+// but the content key must not be debuged
+impl Debug for XvdEncryptionInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("XvdEncryptionInfo")
+            .field("encrypted_sections", &self.encrypted_sections)
+            .finish_non_exhaustive() // prints ", .." to signal redacted fields
+    }
 }
 
 #[derive(Debug)]
