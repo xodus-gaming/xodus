@@ -128,7 +128,7 @@ fn read_vec<R: Read>(mut reader: R, len: usize) -> io::Result<Vec<u8>> {
 }
 
 #[derive(Debug, Error)]
-pub enum DecodeError {
+pub enum SPLicenseDecodeError {
     #[error("IO error: {0}")]
     IoError(#[from] io::Error),
 
@@ -137,9 +137,9 @@ pub enum DecodeError {
 }
 
 #[derive(Debug, Error)]
-pub enum ParseError {
+pub enum SPLicenseParseError {
     #[error("SPLicense decode error: {0}")]
-    DecodeError(#[from] DecodeError),
+    DecodeError(#[from] SPLicenseDecodeError),
 
     #[error("could not decode base64 string: {0}")]
     PayloadLengthMismatch(#[from] base64::DecodeError),
@@ -149,7 +149,7 @@ impl SPLicense {
     /// Merges a tag-length-value from the `reader` into this [`SPLicense`].
     ///
     /// Returns None if there are none TLVs left in the reader.
-    fn merge_tlv<R: Read>(&mut self, mut reader: R) -> Result<Option<()>, DecodeError> {
+    fn merge_tlv<R: Read>(&mut self, mut reader: R) -> Result<Option<()>, SPLicenseDecodeError> {
         let mut buffer = [0u8; 4];
 
         // Doesn't use read_u32 to allow checking for EOF without error
@@ -270,7 +270,7 @@ impl SPLicense {
 
         // Ensure the number of bytes read is exactly `size`
         if reader.limit() != 0 {
-            return Err(DecodeError::PayloadLengthMismatch {
+            return Err(SPLicenseDecodeError::PayloadLengthMismatch {
                 expected: size,
                 read: size - reader.limit() as usize,
             });
@@ -279,7 +279,7 @@ impl SPLicense {
         Ok(Some(()))
     }
 
-    pub fn decode<R: Read>(mut reader: R) -> Result<Self, DecodeError> {
+    pub fn decode<R: Read>(mut reader: R) -> Result<Self, SPLicenseDecodeError> {
         // Decode the header
         let _header: [u8; 4] = read_array(&mut reader)?;
         let _offset = read_u32(&mut reader)?;
@@ -293,7 +293,7 @@ impl SPLicense {
         Ok(license)
     }
 
-    pub fn parse_base64(string: String) -> Result<SPLicense, ParseError> {
+    pub fn parse_base64(string: String) -> Result<SPLicense, SPLicenseParseError> {
         let data = BASE64_STANDARD.decode(string)?;
         Ok(SPLicense::decode(&*data)?)
     }
