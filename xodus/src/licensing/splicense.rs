@@ -21,7 +21,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::{collections::HashMap, io, io::Read};
+use std::{collections::HashMap, io, io::Read, ops::Deref};
 
 use aes::cipher::{BlockCipherDecrypt, KeyInit};
 use base64::prelude::*;
@@ -75,7 +75,7 @@ pub struct SPLicense {
     pub signature_block: Vec<u8>,
     pub clep_sign_state: Vec<u8>,
     pub encrypted_device_key: Option<Box<EncryptedDeviceKey>>,
-    pub content_keys: HashMap<uuid::Uuid, Vec<u8>>,
+    pub content_keys: HashMap<uuid::Uuid, PackedContentKey>,
     pub keyholder_public_key: Vec<u8>,
     pub keyholder_policies: Vec<u8>,
     pub license_policies: Vec<u8>,
@@ -97,6 +97,11 @@ pub struct EncryptedDeviceKey {
     device_key: [u8; 16],
     _unknown2: [u8; 3562],
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct PackedContentKey([u8; 40]);
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct ContentKey([u8; 32]);
 
 fn read_array<const N: usize, R: Read>(mut reader: R) -> io::Result<[u8; N]> {
     let mut buf = [0u8; N];
@@ -197,14 +202,15 @@ impl SPLicense {
 
                 while offset < size {
                     let id_len = read_u16(&mut reader)? as usize;
-                    let key_len = read_u16(&mut reader)? as usize;
+                    // key_len is always 40
+                    let _key_len = read_u16(&mut reader)? as usize;
 
                     let key_id = read_uuid(&mut reader)?;
                     let _unknown = read_vec(&mut reader, id_len - 16)?;
-                    let key = read_vec(&mut reader, key_len)?;
+                    let key = PackedContentKey(read_array(&mut reader)?);
 
                     self.content_keys.insert(key_id, key);
-                    offset += 4 + id_len + key_len;
+                    offset += 4 + id_len + 40;
                 }
             }
             Ok(BlockId::ClepSignState) => {
@@ -321,10 +327,38 @@ impl EncryptedDeviceKey {
     }
 }
 
-pub fn unpack_key(
-    key: &[u8; 16],
-    content_key: Vec<u8>,
-) -> Result<Vec<u8>, aes_keywrap::KeywrapError> {
-    let packer = aes_keywrap::Aes128KeyWrapAligned::new(key);
-    packer.decapsulate(&content_key)
+#[derive(Debug, Error)]
+#[error("the ciphertext couldn't be authenticated")]
+pub struct ContentKeyAuthenticationFailed;
+
+impl PackedContentKey {
+    pub fn unpack(&self, key: &[u8; 16]) -> Result<ContentKey, ContentKeyAuthenticationFailed> {
+        let packer = aes_keywrap::Aes128KeyWrapAligned::new(key);
+
+        match packer.decapsulate(&self.0) {
+            Ok(unpaked) => Ok(ContentKey(unpaked.try_into().unwrap())),
+
+            // These errors do not make sense for decapsulate
+            Err(aes_keywrap::KeywrapError::InvalidExpectedLen)
+            | Err(aes_keywrap::KeywrapError::Unpadded) => unreachable!(),
+
+            // The input is always 40 bytes, so these errors are not possible
+            Err(aes_keywrap::KeywrapError::NotAligned)
+            | Err(aes_keywrap::KeywrapError::TooSmall)
+            | Err(aes_keywrap::KeywrapError::TooBig) => unreachable!(),
+
+            // The only possible error is a failure in the authentication of the key
+            Err(aes_keywrap::KeywrapError::AuthenticationFailed) => {
+                Err(ContentKeyAuthenticationFailed)
+            }
+        }
+    }
+}
+
+impl Deref for ContentKey {
+    type Target = [u8; 32];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }

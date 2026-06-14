@@ -10,6 +10,7 @@ use tokio::{
 };
 use zerocopy::transmute;
 
+use crate::licensing::splicense::ContentKey;
 use crate::xvd::crypt::SectionReader;
 use crate::xvd::math::{
     bytes_to_pages, calculate_hash_block_num_for_block_num, offset_to_page_number,
@@ -20,7 +21,7 @@ use crate::{
 };
 
 struct XvdEncryptionInfo {
-    full_key: [u8; 32],
+    full_key: ContentKey,
     encrypted_sections: Vec<EncryptedSectionInfo>,
 }
 
@@ -399,7 +400,7 @@ pub fn unpack_file(
     xvd: XvdFile,
     path: String,
     destination: String,
-    full_key: [u8; 32],
+    full_key: ContentKey,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let sfile = std::fs::File::open(path)?;
     let block_size = 4096; //xvd.header.block_size;

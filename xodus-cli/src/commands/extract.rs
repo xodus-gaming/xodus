@@ -1,7 +1,4 @@
-use xodus::{
-    licensing::splicense::unpack_key,
-    xvd::utils::{parse_file, unpack_file},
-};
+use xodus::xvd::utils::{parse_file, unpack_file};
 
 use crate::license::get_license;
 pub async fn run(
@@ -25,13 +22,7 @@ pub async fn run(
         )
     }
     if let Some((_, content_key)) = game_splicense.content_keys.into_iter().next() {
-        let unpacked: Vec<u8> = unpack_key(&key, content_key).expect("failed to unpack");
-        unpack_file(
-            xvd,
-            path.to_string(),
-            destination.to_string(),
-            unpacked.try_into().expect("match"),
-        )
-        .expect("unpack ok");
+        let unpacked = content_key.unpack(&key).expect("failed to unpack");
+        unpack_file(xvd, path.to_string(), destination.to_string(), unpacked).expect("unpack ok");
     }
 }

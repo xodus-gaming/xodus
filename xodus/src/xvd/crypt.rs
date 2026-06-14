@@ -5,6 +5,8 @@ use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
 
 use std::io::{Read, Seek, SeekFrom};
 
+use crate::licensing::splicense::ContentKey;
+
 const PAGE_SIZE: usize = 0x1000;
 
 pub trait PageSource: Read + Seek {}
@@ -37,7 +39,7 @@ impl<R: PageSource> SectionReader<R> {
         section_length: u64,
         header_id: u32,
         vduid: [u8; 8],
-        full_key: [u8; 32],
+        full_key: ContentKey,
         data_units: Option<Vec<u32>>,
     ) -> Self {
         let mut tweak_key = [0u8; 16];
