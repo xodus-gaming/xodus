@@ -24,8 +24,6 @@ enum SubCommand {
         market: Option<String>,
     },
     Extract {
-        #[clap(help = "Content Id of a license")]
-        content_id: String,
         path: String,
         destination: String,
         #[arg(short, long)]
@@ -79,14 +77,12 @@ async fn main() {
         SubCommand::Extract {
             path,
             destination,
-            content_id,
             market,
         } => {
             commands::extract::run(
                 &client,
                 path,
                 destination,
-                content_id,
                 market.unwrap_or("neutral".to_string()),
             )
             .await;

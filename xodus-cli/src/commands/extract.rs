@@ -8,11 +8,10 @@ pub async fn run(
     client: &reqwest::Client,
     path: String,
     destination: String,
-    content_id: String,
     market: String,
 ) {
     let xvd = parse_file(path.to_string()).await.expect("Failed to parse");
-    let license = get_license(client, content_id, market).await;
+    let license = get_license(client, xvd.content_id.clone(), market).await;
     if let Err(err) = license {
         eprintln!("{}", err);
         return;

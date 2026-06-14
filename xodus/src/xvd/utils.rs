@@ -203,6 +203,7 @@ fn extract_ntfs_directory<T: Read + Seek>(
 }
 
 pub struct XvdFile {
+    pub content_id: String,
     header: XvdHeader,
     drive_data_offset: u64,
     encrypted_section_infos: Vec<EncryptedSectionInfo>,
@@ -379,6 +380,7 @@ pub async fn parse_file(path: String) -> Result<XvdFile, Box<dyn std::error::Err
         });
     }
     Ok(XvdFile {
+        content_id: uuid::Uuid::from_bytes_le(xvd_header.vduid).to_string(),
         header: xvd_header,
         drive_data_offset,
         encrypted_section_infos: enc_sections,
