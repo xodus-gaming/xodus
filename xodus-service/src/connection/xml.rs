@@ -30,7 +30,7 @@ pub async fn handle(
         }
     };
 
-    let data = super::encode_message(XML_MAGIC, message_type as u16, out_buf);
+    let data = super::encode_message(XML_MAGIC, message_type as u16 + 1, out_buf);
     socket.write_all(&data).await
 }
 
