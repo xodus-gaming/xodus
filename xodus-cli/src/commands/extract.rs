@@ -5,7 +5,7 @@ pub async fn run(client: &reqwest::Client, path: String, destination: String, ma
     let xvd = XvdFile::parse_file(path.to_string())
         .await
         .expect("Failed to parse");
-    let license = get_license(client, xvd.content_id.clone(), market).await;
+    let license = get_license(client, xvd.content_id().to_string(), market).await;
     if let Err(err) = license {
         eprintln!("{}", err);
         return;
