@@ -69,8 +69,7 @@ impl Read for XvdStream {
         let to_read = remaining.min(buf.len());
 
         if let Some(encryption_info) = &self.encryption_info {
-            let it = encryption_info.encrypted_sections.iter();
-            for s in it {
+            for s in &encryption_info.encrypted_sections {
                 if self.offset + current >= s.section_offset
                     && self.offset + current < s.section_offset + s.section_length
                 {
@@ -343,9 +342,7 @@ pub async fn parse_file(path: String) -> Result<XvdFile, Box<dyn std::error::Err
 
     let sfile = std::fs::File::open(path).unwrap();
     let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
-    let it = region_headers.iter();
-    for h in it {
-        // let ch = h.clone();
+    for h in region_headers {
         let key_id = h.key_id;
         let offset = h.offset;
         let length = h.length;
