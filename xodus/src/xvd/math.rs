@@ -45,11 +45,7 @@ pub fn calculate_hash_block_num_for_block_num(
         return (0xFFFF, 0);
     }
 
-    let entry_num_in_block = if hash_level == 0 {
-        block_num % 0xAA
-    } else {
-        (block_num / hash_block_exponent(hash_level)) % 0xAA
-    };
+    let entry_num_in_block = (block_num / hash_block_exponent(hash_level)) % 0xAA;
 
     if hash_level == 3 {
         return (0, entry_num_in_block);
