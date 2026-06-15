@@ -232,167 +232,171 @@ pub struct EncryptedSectionInfo {
     data_units: Option<Vec<u32>>,
 }
 
-pub async fn parse_file(path: String) -> Result<XvdFile, Box<dyn std::error::Error>> {
-    let mut file = OpenOptions::new()
-        .read(true)
-        .open(path.clone())
-        .await
-        .expect("Unable to open file");
-    let mut header_buffer = [0u8; 4096];
-    let mut info_buffer = [0u8; 0xDA8];
-
-    file.read_exact(&mut header_buffer).await.unwrap();
-
-    let xvd_header: XvdHeader = transmute!(header_buffer);
-
-    // Extracts from header to avoid padding issues
-    let format_version = xvd_header.format_version;
-    let xvc_length = xvd_header.xvc_data_length;
-    let volume_flags = xvd_header.volume_flags;
-    let xvc_data_length = xvd_header.xvc_data_length;
-    let is_encrypted = xvd_header.is_encrypted();
-    let legacy_sector_size = xvd_header.is_legacy_sector_size();
-    let _content_types = xvd_header.xvd_content_type;
-    let _sector_size = xvd_header.sector_size();
-    let _number_of_metadata_pages = xvd_header.number_of_metadata_pages();
-
-    let mdu_offset = xvd_header.mdu_offset();
-    let (_hash_tree_levels, hash_tree_page_count) = xvd_header.hash_tree_info();
-    let xvc_info_offset = xvd_header.xvc_info_offset(hash_tree_page_count);
-
-    println!("Version: {}", format_version);
-    println!("XvcLength: {}", xvc_length);
-    println!("volume_flags: 0x{:X}", volume_flags);
-    println!("is_encrypted: {}", is_encrypted);
-    println!("legacy_sector_size: {}", legacy_sector_size);
-    println!("xvc_data_length: {}", xvc_data_length);
-
-    let mut region_headers: Vec<XvcRegionHeader> = Vec::new();
-    let mut update_segments: Vec<XvdUpdateSegment> = Vec::new();
-    let mut region_specifiers: Vec<XvcRegionSpecifier> = Vec::new();
-    let mut region_presence_info: Vec<u8> = Vec::new();
-
-    // TODO: Check if we have proper content type
-    if xvc_data_length > 0 {
-        file.seek(std::io::SeekFrom::Start(xvc_info_offset))
+impl XvdFile {
+    pub async fn parse_file(path: String) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut file = OpenOptions::new()
+            .read(true)
+            .open(path.clone())
             .await
-            .expect("Unable to seek");
-        file.read_exact(&mut info_buffer).await.unwrap();
-        let xvc_info: XvcInfo = transmute!(info_buffer);
+            .expect("Unable to open file");
+        let mut header_buffer = [0u8; 4096];
+        let mut info_buffer = [0u8; 0xDA8];
 
-        let region_count = xvc_info.region_count;
-        let update_segment_count = xvc_info.update_segment_count;
-        let region_specifier_count = xvc_info.region_specifier_count;
+        file.read_exact(&mut header_buffer).await.unwrap();
 
-        if xvc_info.version >= 1 {
-            let mut region_header_buf = [0u8; 0x80];
-            for _ in 0..region_count {
-                file.read_exact(&mut region_header_buf).await.unwrap();
-                let region_header: XvcRegionHeader = transmute!(region_header_buf);
-                region_headers.push(region_header);
-            }
+        let xvd_header: XvdHeader = transmute!(header_buffer);
 
-            let mut update_segment_buf = [0u8; 0xC];
-            for _ in 0..update_segment_count {
-                file.read_exact(&mut update_segment_buf).await.unwrap();
-                let update_segment: XvdUpdateSegment = transmute!(update_segment_buf);
-                update_segments.push(update_segment);
-            }
+        // Extracts from header to avoid padding issues
+        let format_version = xvd_header.format_version;
+        let xvc_length = xvd_header.xvc_data_length;
+        let volume_flags = xvd_header.volume_flags;
+        let xvc_data_length = xvd_header.xvc_data_length;
+        let is_encrypted = xvd_header.is_encrypted();
+        let legacy_sector_size = xvd_header.is_legacy_sector_size();
+        let _content_types = xvd_header.xvd_content_type;
+        let _sector_size = xvd_header.sector_size();
+        let _number_of_metadata_pages = xvd_header.number_of_metadata_pages();
 
-            if xvc_info.version >= 2 {
-                let mut region_specifier_buf = [0u8; 0x188];
-                for _ in 0..region_specifier_count {
-                    file.read_exact(&mut region_specifier_buf).await.unwrap();
-                    let region_specifier: XvcRegionSpecifier = transmute!(region_specifier_buf);
-                    region_specifiers.push(region_specifier);
+        let mdu_offset = xvd_header.mdu_offset();
+        let (_hash_tree_levels, hash_tree_page_count) = xvd_header.hash_tree_info();
+        let xvc_info_offset = xvd_header.xvc_info_offset(hash_tree_page_count);
+
+        println!("Version: {}", format_version);
+        println!("XvcLength: {}", xvc_length);
+        println!("volume_flags: 0x{:X}", volume_flags);
+        println!("is_encrypted: {}", is_encrypted);
+        println!("legacy_sector_size: {}", legacy_sector_size);
+        println!("xvc_data_length: {}", xvc_data_length);
+
+        let mut region_headers: Vec<XvcRegionHeader> = Vec::new();
+        let mut update_segments: Vec<XvdUpdateSegment> = Vec::new();
+        let mut region_specifiers: Vec<XvcRegionSpecifier> = Vec::new();
+        let mut region_presence_info: Vec<u8> = Vec::new();
+
+        // TODO: Check if we have proper content type
+        if xvc_data_length > 0 {
+            file.seek(std::io::SeekFrom::Start(xvc_info_offset))
+                .await
+                .expect("Unable to seek");
+            file.read_exact(&mut info_buffer).await.unwrap();
+            let xvc_info: XvcInfo = transmute!(info_buffer);
+
+            let region_count = xvc_info.region_count;
+            let update_segment_count = xvc_info.update_segment_count;
+            let region_specifier_count = xvc_info.region_specifier_count;
+
+            if xvc_info.version >= 1 {
+                let mut region_header_buf = [0u8; 0x80];
+                for _ in 0..region_count {
+                    file.read_exact(&mut region_header_buf).await.unwrap();
+                    let region_header: XvcRegionHeader = transmute!(region_header_buf);
+                    region_headers.push(region_header);
                 }
 
-                if xvd_header.mutable_page_count > 0 {
-                    file.seek(std::io::SeekFrom::Start(mdu_offset))
-                        .await
-                        .expect("Unable to seek");
-                    let mut byte = [0; 1];
-                    for _ in 0..region_count {
-                        file.read_exact(&mut byte).await.unwrap();
-                        region_presence_info.push(byte[0]);
+                let mut update_segment_buf = [0u8; 0xC];
+                for _ in 0..update_segment_count {
+                    file.read_exact(&mut update_segment_buf).await.unwrap();
+                    let update_segment: XvdUpdateSegment = transmute!(update_segment_buf);
+                    update_segments.push(update_segment);
+                }
+
+                if xvc_info.version >= 2 {
+                    let mut region_specifier_buf = [0u8; 0x188];
+                    for _ in 0..region_specifier_count {
+                        file.read_exact(&mut region_specifier_buf).await.unwrap();
+                        let region_specifier: XvcRegionSpecifier = transmute!(region_specifier_buf);
+                        region_specifiers.push(region_specifier);
+                    }
+
+                    if xvd_header.mutable_page_count > 0 {
+                        file.seek(std::io::SeekFrom::Start(mdu_offset))
+                            .await
+                            .expect("Unable to seek");
+                        let mut byte = [0; 1];
+                        for _ in 0..region_count {
+                            file.read_exact(&mut byte).await.unwrap();
+                            region_presence_info.push(byte[0]);
+                        }
                     }
                 }
             }
         }
-    }
 
-    let hash_tree_offset = xvd_header.mutable_data_length() + mdu_offset;
-    let user_data_offset = if xvd_header.is_data_integrity_enabled() {
-        page_number_to_offset(xvd_header.hash_tree_info().1)
-    } else {
-        0
-    } + hash_tree_offset;
-    let xvc_info_offset =
-        page_number_to_offset(xvd_header.user_data_page_count()) + user_data_offset;
-    let dynamic_header_offset =
-        page_number_to_offset(xvd_header.xvc_data_page_count()) + xvc_info_offset;
-    let drive_data_offset =
-        page_number_to_offset(xvd_header.dynamic_header_page_count()) + dynamic_header_offset;
-    let _dynamic_base_offset = xvc_info_offset;
-    let _static_data_length = if xvd_header.xvd_type == 0 {
-        0
-    } else {
-        panic!("Unsupported XvdType, TODO support Dynamic")
-    };
+        let hash_tree_offset = xvd_header.mutable_data_length() + mdu_offset;
+        let user_data_offset = if xvd_header.is_data_integrity_enabled() {
+            page_number_to_offset(xvd_header.hash_tree_info().1)
+        } else {
+            0
+        } + hash_tree_offset;
+        let xvc_info_offset =
+            page_number_to_offset(xvd_header.user_data_page_count()) + user_data_offset;
+        let dynamic_header_offset =
+            page_number_to_offset(xvd_header.xvc_data_page_count()) + xvc_info_offset;
+        let drive_data_offset =
+            page_number_to_offset(xvd_header.dynamic_header_page_count()) + dynamic_header_offset;
+        let _dynamic_base_offset = xvc_info_offset;
+        let _static_data_length = if xvd_header.xvd_type == 0 {
+            0
+        } else {
+            panic!("Unsupported XvdType, TODO support Dynamic")
+        };
 
-    let sfile = std::fs::File::open(path).unwrap();
-    let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
-    for h in region_headers {
-        let key_id = h.key_id;
-        let offset = h.offset;
-        let length = h.length;
-        println!(
-            "key_id {} ({} + {} = {})",
-            key_id,
-            offset,
-            length,
-            offset + length
-        );
-
-        if h.key_id != 0 {
-            continue;
-        }
-
-        let mut data_units: Vec<u32> = vec![];
-        let start_page = offset_to_page_number(h.offset - user_data_offset);
-        let num_pages = bytes_to_pages(length);
-        for page in 0..num_pages {
-            let mut buf = [0u8; 4];
-            let (hash_block, entry_num) = calculate_hash_block_num_for_block_num(
-                xvd_header.xvd_type,
-                _hash_tree_levels,
-                xvd_header.number_of_hashed_pages(),
-                start_page + page,
-                0,
-                false,
-                false,
+        let sfile = std::fs::File::open(path).unwrap();
+        let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
+        for h in region_headers {
+            let key_id = h.key_id;
+            let offset = h.offset;
+            let length = h.length;
+            println!(
+                "key_id {} ({} + {} = {})",
+                key_id,
+                offset,
+                length,
+                offset + length
             );
-            let read_offset =
-                hash_tree_offset + page_number_to_offset(hash_block) + (entry_num * 0x18) + 0x14;
-            sfile.read_exact_at(&mut buf, read_offset).unwrap();
-            let u = u32::from_le_bytes(buf);
-            data_units.push(u);
-        }
 
-        enc_sections.push(EncryptedSectionInfo {
-            section_offset: h.offset,
-            section_length: h.length,
-            header_id: h.region_id,
-            vduid: xvd_header.vduid[..8].try_into().unwrap(),
-            data_units: Some(data_units.clone()),
-        });
+            if h.key_id != 0 {
+                continue;
+            }
+
+            let mut data_units: Vec<u32> = vec![];
+            let start_page = offset_to_page_number(h.offset - user_data_offset);
+            let num_pages = bytes_to_pages(length);
+            for page in 0..num_pages {
+                let mut buf = [0u8; 4];
+                let (hash_block, entry_num) = calculate_hash_block_num_for_block_num(
+                    xvd_header.xvd_type,
+                    _hash_tree_levels,
+                    xvd_header.number_of_hashed_pages(),
+                    start_page + page,
+                    0,
+                    false,
+                    false,
+                );
+                let read_offset = hash_tree_offset
+                    + page_number_to_offset(hash_block)
+                    + (entry_num * 0x18)
+                    + 0x14;
+                sfile.read_exact_at(&mut buf, read_offset).unwrap();
+                let u = u32::from_le_bytes(buf);
+                data_units.push(u);
+            }
+
+            enc_sections.push(EncryptedSectionInfo {
+                section_offset: h.offset,
+                section_length: h.length,
+                header_id: h.region_id,
+                vduid: xvd_header.vduid[..8].try_into().unwrap(),
+                data_units: Some(data_units.clone()),
+            });
+        }
+        Ok(XvdFile {
+            content_id: uuid::Uuid::from_bytes_le(xvd_header.vduid).to_string(),
+            header: xvd_header,
+            drive_data_offset,
+            encrypted_section_infos: enc_sections,
+        })
     }
-    Ok(XvdFile {
-        content_id: uuid::Uuid::from_bytes_le(xvd_header.vduid).to_string(),
-        header: xvd_header,
-        drive_data_offset,
-        encrypted_section_infos: enc_sections,
-    })
 }
 
 pub fn unpack_file(
