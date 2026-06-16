@@ -1,3 +1,5 @@
+pub mod services;
+
 use crate::models::{
     live::ExchangeUserTokenOutcome,
     secrets::{LegacyToken, Token},
@@ -24,7 +26,7 @@ struct UserAuthProperties {
 #[derive(Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct XstsResponse {
-    token: String,
+    pub token: String,
     display_claims: DisplayClaims,
 }
 

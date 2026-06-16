@@ -30,6 +30,7 @@ enum SubCommand {
         market: Option<String>,
     },
     Login,
+    Library,
 }
 
 #[derive(Parser)]
@@ -86,6 +87,9 @@ async fn main() {
                 market.unwrap_or("neutral".to_string()),
             )
             .await;
+        }
+        SubCommand::Library => {
+            commands::library::run(&client).await;
         }
     }
 

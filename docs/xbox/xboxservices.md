@@ -28,6 +28,9 @@ GET https://beige.xboxservices.com/pcgafd/config/offlinepc
 
 ## MyGames
 
+>Requires x-ms-api-version header and ms-cv header
+
+
 ```
 GET https://beige.xboxservices.com/pcgafd/mygames?market={MARKET}&language={LANGUAGE}&appVersion=2605.1001.14.0
 ```
