@@ -26,7 +26,14 @@ jobs:
       - name: Install dependencies
         if: ${{runner.os == 'Linux'}}
         run: sudo apt install libwebkit2gtk-4.1-dev
-      - name: Install toolchain
-        run: rustup target install ${{ matrix.target }}
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Run check
-        run: cargo check --target ${{ matrix.target }} --workspace
+        run: cargo check --workspace
