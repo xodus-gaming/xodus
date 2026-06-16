@@ -8,7 +8,7 @@ on:
 jobs:
   fmt:
     name: Check fmt
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - run: cargo fmt --check --all

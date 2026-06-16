@@ -1,4 +1,3 @@
-
 pub static SERVICE_NAME: &str = "Xodus Service";
 
 pub fn init_secrets() -> Result<(), keyring_core::Error> {
