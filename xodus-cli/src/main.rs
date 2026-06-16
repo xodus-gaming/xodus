@@ -52,6 +52,7 @@ enum SubCommand {
         #[arg(short, long)]
         market: Option<String>,
     },
+    Library,
 }
 
 #[derive(Parser)]
@@ -129,6 +130,9 @@ async fn main() {
                 market,
             )
             .await;
+        }
+        SubCommand::Library => {
+            commands::library::run(&client).await;
         }
     }
 
