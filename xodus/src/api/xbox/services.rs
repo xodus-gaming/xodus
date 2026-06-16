@@ -29,7 +29,8 @@ pub struct ProductSummary {
 #[serde(rename_all = "camelCase")]
 pub struct ProductSummaryItem {
     alternate_ids: Vec<AlternateId>,
-    average_rating: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    average_rating: Option<f64>,
     //badges
     //box_art_image
     //bundled_product_ids
