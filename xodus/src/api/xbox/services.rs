@@ -91,14 +91,18 @@ pub struct ProductPrice {
 pub async fn get_library(
     client: &reqwest::Client,
     token: String,
-    xsts_header: String
+    xsts_header: String,
+    market: Option<String>,
 )  -> reqwest::Result<MyGames> {
 
     let cv = CorrelationVector::new();
 
     let resp = client
         .get("https://beige.xboxservices.com/pcgafd/mygames")
-        .query(&[("market", "AU"), ("language", "en-US"), ("appVersion", "2606.1001.27.0")]) // TODO
+        .query(&[
+            ("market", market.unwrap_or("neutral".to_string())), 
+            ("language", "en-US".to_string()), 
+            ("appVersion", "2606.1001.27.0".to_string())]) // TODO
         .header("x-ms-api-version", "1.2")
         .header("x-ms-authorization-social", xsts_header)
         .header("Authorization", token)
