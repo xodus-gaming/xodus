@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 mod commands;
-mod device;
 mod license;
 mod user;
 mod webview;
@@ -50,7 +49,7 @@ async fn main() {
     let args = CliArgs::parse();
 
     xodus::secrets::init_secrets().expect("Unable to initialize credentials");
-    device::ensure_device_credentials(&client).await;
+    xodus::device::ensure_device_credentials(&client).await;
 
     match args.command {
         SubCommand::Download {

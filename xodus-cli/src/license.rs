@@ -1,8 +1,9 @@
-use crate::{device, user};
+use crate::user;
 use xodus::{
     licensing::splicense::{DeviceKey, SPLicense},
-    models::{live::ExchangeUserTokenOutcome, secrets::Token, soap},
+    models::{live::ExchangeUserTokenOutcome, secrets::Token, soap}
 };
+use xodus::device;
 
 pub async fn get_license(
     client: &reqwest::Client,
