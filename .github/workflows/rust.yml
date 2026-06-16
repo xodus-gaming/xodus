@@ -31,4 +31,4 @@ jobs:
       - name: Install toolchain
         run: rustup target install ${{ matrix.target }}
       - name: Run check
-        run: cargo check --target ${{ matrix.target }}
+        run: cargo check --target ${{ matrix.target }} --workspace
