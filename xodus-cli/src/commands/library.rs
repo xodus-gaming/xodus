@@ -73,7 +73,7 @@ pub async fn run(client: &reqwest::Client) {
     }
     let xsts_header = api::xbox::get_xsts_auth_header(xsts.unwrap());
 
-    let games = api::xbox::services::get_library(client, user_token, xsts_header).await;
+    let games = api::xbox::services::get_library(client, user_token, xsts_header, None).await;
 
     println!("{:?}", games);
 }
