@@ -8,7 +8,6 @@ use tokio::{
     fs::OpenOptions,
     io::{AsyncReadExt, AsyncSeekExt},
 };
-use zerocopy::transmute;
 
 use crate::licensing::splicense::ContentKey;
 use crate::xvd::crypt::SectionReader;
@@ -16,9 +15,21 @@ use crate::xvd::math::{
     bytes_to_pages, calculate_hash_block_num_for_block_num, offset_to_page_number,
 };
 use crate::{
-    models::xvd::{XvcInfo, XvcRegionHeader, XvcRegionSpecifier, XvdHeader, XvdUpdateSegment},
+    models::xvd::{
+        XvcInfo, XvcRegionHeader, XvcRegionSpecifier, XvdHeader, XvdStruct, XvdType,
+        XvdUpdateSegment,
+    },
     xvd::math::page_number_to_offset,
 };
+
+// This is a macro because the compiler can't handle const generics
+macro_rules! read_struct {
+    ($t:ty, $reader:expr) => {{
+        let mut buf = [0u8; <$t as XvdStruct>::RAW_SIZE];
+        $reader.read_exact(&mut buf).await?;
+        TryInto::<$t>::try_into(buf)
+    }};
+}
 
 struct XvdEncryptionInfo {
     full_key: ContentKey,
@@ -233,7 +244,7 @@ pub struct EncryptedSectionInfo {
 
 impl XvdFile {
     pub fn content_id(&self) -> uuid::Uuid {
-        uuid::Uuid::from_bytes_le(self.header.vduid)
+        self.header.vduid
     }
 
     pub async fn parse_file(path: String) -> Result<Self, Box<dyn std::error::Error>> {
@@ -242,20 +253,16 @@ impl XvdFile {
             .open(path.clone())
             .await
             .expect("Unable to open file");
-        let mut header_buffer = [0u8; 4096];
-        let mut info_buffer = [0u8; 0xDA8];
 
-        file.read_exact(&mut header_buffer).await.unwrap();
-
-        let xvd_header: XvdHeader = transmute!(header_buffer);
+        let xvd_header = read_struct!(XvdHeader, file)?;
 
         // Extracts from header to avoid padding issues
         let format_version = xvd_header.format_version;
         let xvc_length = xvd_header.xvc_data_length;
         let volume_flags = xvd_header.volume_flags;
         let xvc_data_length = xvd_header.xvc_data_length;
-        let is_encrypted = xvd_header.is_encrypted();
-        let legacy_sector_size = xvd_header.is_legacy_sector_size();
+        let is_encrypted = xvd_header.volume_flags.is_encrypted();
+        let legacy_sector_size = xvd_header.volume_flags.is_legacy_sector_size();
         let _content_types = xvd_header.xvd_content_type;
         let _sector_size = xvd_header.sector_size();
         let _number_of_metadata_pages = xvd_header.number_of_metadata_pages();
@@ -281,33 +288,26 @@ impl XvdFile {
             file.seek(std::io::SeekFrom::Start(xvc_info_offset))
                 .await
                 .expect("Unable to seek");
-            file.read_exact(&mut info_buffer).await.unwrap();
-            let xvc_info: XvcInfo = transmute!(info_buffer);
+            let Ok(xvc_info) = read_struct!(XvcInfo, file);
 
             let region_count = xvc_info.region_count;
             let update_segment_count = xvc_info.update_segment_count;
             let region_specifier_count = xvc_info.region_specifier_count;
 
             if xvc_info.version >= 1 {
-                let mut region_header_buf = [0u8; 0x80];
                 for _ in 0..region_count {
-                    file.read_exact(&mut region_header_buf).await.unwrap();
-                    let region_header: XvcRegionHeader = transmute!(region_header_buf);
+                    let Ok(region_header) = read_struct!(XvcRegionHeader, file);
                     region_headers.push(region_header);
                 }
 
-                let mut update_segment_buf = [0u8; 0xC];
                 for _ in 0..update_segment_count {
-                    file.read_exact(&mut update_segment_buf).await.unwrap();
-                    let update_segment: XvdUpdateSegment = transmute!(update_segment_buf);
+                    let Ok(update_segment) = read_struct!(XvdUpdateSegment, file);
                     update_segments.push(update_segment);
                 }
 
                 if xvc_info.version >= 2 {
-                    let mut region_specifier_buf = [0u8; 0x188];
                     for _ in 0..region_specifier_count {
-                        file.read_exact(&mut region_specifier_buf).await.unwrap();
-                        let region_specifier: XvcRegionSpecifier = transmute!(region_specifier_buf);
+                        let Ok(region_specifier) = read_struct!(XvcRegionSpecifier, file);
                         region_specifiers.push(region_specifier);
                     }
 
@@ -326,7 +326,7 @@ impl XvdFile {
         }
 
         let hash_tree_offset = xvd_header.mutable_data_length() + mdu_offset;
-        let user_data_offset = if xvd_header.is_data_integrity_enabled() {
+        let user_data_offset = if xvd_header.volume_flags.is_data_integrity_enabled() {
             page_number_to_offset(xvd_header.hash_tree_info().1)
         } else {
             0
@@ -338,10 +338,9 @@ impl XvdFile {
         let drive_data_offset =
             page_number_to_offset(xvd_header.dynamic_header_page_count()) + dynamic_header_offset;
         let _dynamic_base_offset = xvc_info_offset;
-        let _static_data_length = if xvd_header.xvd_type == 0 {
-            0
-        } else {
-            panic!("Unsupported XvdType, TODO support Dynamic")
+        let _static_data_length = match xvd_header.xvd_type {
+            XvdType::Fixed => 0,
+            XvdType::Dynamic => todo!("Unsupported XvdType, TODO support Dynamic"),
         };
 
         let sfile = std::fs::File::open(path).unwrap();
@@ -368,7 +367,7 @@ impl XvdFile {
             for page in 0..num_pages {
                 let mut buf = [0u8; 4];
                 let (hash_block, entry_num) = calculate_hash_block_num_for_block_num(
-                    xvd_header.xvd_type,
+                    xvd_header.xvd_type as u32,
                     _hash_tree_levels,
                     xvd_header.number_of_hashed_pages(),
                     start_page + page,
@@ -389,7 +388,7 @@ impl XvdFile {
                 section_offset: h.offset,
                 section_length: h.length,
                 header_id: h.region_id,
-                vduid: xvd_header.vduid[..8].try_into().unwrap(),
+                vduid: xvd_header.vduid.to_bytes_le()[..8].try_into().unwrap(),
                 data_units: Some(data_units.clone()),
             });
         }
