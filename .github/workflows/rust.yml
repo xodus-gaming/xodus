@@ -1,0 +1,32 @@
+name: Rust check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  fmt:
+    name: Check fmt
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v6
+      - run: cargo fmt --check --all
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: ubuntu-latest
+          - target: x86_64-unknown-linux-gnu
+            os: windows-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install toolchain
+        run: rustup target install ${{ matrix.target }}
+      - name: Run check
+        run: cargo check --target ${{ matrix.target }}
+         
