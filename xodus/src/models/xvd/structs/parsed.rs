@@ -224,16 +224,16 @@ impl From<raw::XvdUpdateSegment> for XvdUpdateSegment {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XvcRegionSpecifier {
     pub region_id: XvcRegionId,
-    pub key: [u8; 0x80],    // UTF-16
-    pub value: [u8; 0x100], // UTF-16
+    pub key: [u16; 0x40],   // UTF-16
+    pub value: [u16; 0x80], // UTF-16
 }
 
 impl From<raw::XvcRegionSpecifier> for XvcRegionSpecifier {
     fn from(value: raw::XvcRegionSpecifier) -> Self {
         Self {
             region_id: value.region_id.get().into(),
-            key: value.key,
-            value: value.value,
+            key: value.key.map(|n| n.get()),
+            value: value.value.map(|n| n.get()),
         }
     }
 }
@@ -278,7 +278,7 @@ pub struct XvcRegionHeader {
     pub key_id: XvcKeyId,
     pub flags: u32,
     pub first_segment_index: u32,
-    pub description: [u8; 0x40], // UTF-16
+    pub description: [u16; 0x20], // UTF-16
     pub offset: u64,
     pub length: u64,
     pub hash: u64,
@@ -291,7 +291,7 @@ impl From<raw::XvcRegionHeader> for XvcRegionHeader {
             key_id: XvcKeyId::new(value.key_id.get()),
             flags: value.flags.get(),
             first_segment_index: value.first_segment_index.get(),
-            description: value.description,
+            description: value.description.map(|n| n.get()),
             offset: value.offset.get(),
             length: value.length.get(),
             hash: value.hash.get(),

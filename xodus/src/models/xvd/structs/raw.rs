@@ -101,8 +101,8 @@ pub struct XvdUpdateSegment {
 pub struct XvcRegionSpecifier {
     pub region_id: U32,
     pub padding4: U32,
-    pub key: [u8; 0x80],    // UTF-16
-    pub value: [u8; 0x100], // UTF-16
+    pub key: [U16; 0x40],   // UTF-16
+    pub value: [U16; 0x80], // UTF-16
 }
 
 #[derive(FromBytes, Debug)]
@@ -113,7 +113,7 @@ pub struct XvcRegionHeader {
     pub padding6: U16,
     pub flags: U32,
     pub first_segment_index: U32,
-    pub description: [u8; 0x40], // UTF-16
+    pub description: [U16; 0x20], // UTF-16
     pub offset: U64,
     pub length: U64,
     pub hash: U64,
