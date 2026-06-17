@@ -58,7 +58,6 @@ impl Debug for Version {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XvdHeader {
     pub signature: [u8; 0x200],
-    pub magic: [u8; 8],
     pub volume_flags: XvdVolumeFlags,
     pub format_version: u32,
     pub file_time_created: DateTime<chrono::Utc>,
@@ -97,8 +96,15 @@ pub struct XvdHeader {
     pub resilient_data_length: u32,
 }
 
+impl XvdHeader {
+    const MAGIC: [u8; 8] = *b"msft-xvd";
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum XvdHeaderParseError {
+    #[error(r#"invalid magic: expected "msft-xvd", got {0:?}"#)]
+    InvalidMagic([u8; 8]),
+
     #[error("invalid xvd type: {0}")]
     InvalidXvdType(#[from] TryFromPrimitiveError<XvdType>),
 
@@ -110,9 +116,12 @@ impl TryFrom<raw::XvdHeader> for XvdHeader {
     type Error = XvdHeaderParseError;
 
     fn try_from(value: raw::XvdHeader) -> Result<Self, Self::Error> {
+        if value.magic != Self::MAGIC {
+            return Err(XvdHeaderParseError::InvalidMagic(value.magic));
+        }
+
         Ok(Self {
             signature: value.signature,
-            magic: value.magic,
             volume_flags: XvdVolumeFlags::from_bits_retain(value.volume_flags.get()),
             format_version: value.format_version.get(),
             file_time_created: microsoft_filetime(value.file_time_created.get()),
