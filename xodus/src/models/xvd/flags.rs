@@ -47,15 +47,15 @@ bitflags! {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct XvdSegmentMetadataSegmentFlags: u16 {
-        const KEEP_ENCRYPTED_ON_DISK = 1;
+    pub struct XvcRegionPresenceInfoFlags: u8 {
+        const IS_PRESENT = 1 << 0;
+        const IS_AVAILABLE = 1 << 1;
     }
 }
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct XvcRegionPresenceInfoFlags: u8 {
-        const IS_PRESENT = 1 << 0;
-        const IS_AVAILABLE = 1 << 1;
+    pub struct XvdSegmentMetadataSegmentFlags: u16 {
+        const KEEP_ENCRYPTED_ON_DISK = 1;
     }
 }
