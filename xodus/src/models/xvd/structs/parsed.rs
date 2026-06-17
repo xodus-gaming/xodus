@@ -277,7 +277,7 @@ impl XvcKeyId {
         }
     }
 
-    fn is_unenctrypted(self) -> bool {
+    fn is_unencrypted(self) -> bool {
         self == Self::UNENCRYPTED
     }
 
@@ -286,7 +286,7 @@ impl XvcKeyId {
     /// If the returned `Option` is `Some`, then its value is guaranteed
     /// to be a number in the bounds: `0..0xC0`
     pub fn get(self) -> Option<u8> {
-        if self.is_unenctrypted() {
+        if self.is_unencrypted() {
             None
         } else {
             debug_assert!(Range::from(0..0xC0).contains(&self.0));
