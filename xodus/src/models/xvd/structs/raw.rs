@@ -68,6 +68,13 @@ pub struct XvdExtEntry {
 
 #[derive(FromBytes)]
 #[repr(C, packed)]
+pub struct XvdHashEntry {
+    pub block_hash: [u8; 0x14],
+    pub unit: U32,
+}
+
+#[derive(FromBytes)]
+#[repr(C, packed)]
 pub struct XvcInfo {
     pub content_id: [u8; 0x10],
     pub xvc_encryption_key_id: [[u8; 0x10]; 0xC0],

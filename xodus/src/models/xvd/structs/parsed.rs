@@ -193,6 +193,23 @@ impl From<raw::XvdExtEntry> for XvdExtEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XvdHashEntry {
+    /// Truncated SHA-256 hash
+    pub block_hash: [u8; 0x14],
+    /// Appears to be a counter with an offset applied
+    pub unit: u32,
+}
+
+impl From<raw::XvdHashEntry> for XvdHashEntry {
+    fn from(value: raw::XvdHashEntry) -> Self {
+        Self {
+            block_hash: value.block_hash,
+            unit: value.unit.get(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XvcInfo {
     pub content_id: Uuid,
     pub xvc_encryption_key_id: HashMap<u16, Uuid>,

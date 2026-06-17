@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
@@ -17,7 +16,7 @@ use crate::xvd::math::{
 use crate::{
     models::xvd::{
         XvcInfo, XvcRegionHeader, XvcRegionId, XvcRegionPresenceInfo, XvcRegionSpecifier,
-        XvdHeader, XvdStruct, XvdUpdateSegment,
+        XvdHashEntry, XvdHeader, XvdStruct, XvdUpdateSegment,
     },
     xvd::math::page_number_to_offset,
 };
@@ -328,7 +327,6 @@ impl XvdFile {
         let drive_data_offset =
             page_number_to_offset(xvd_header.dynamic_header_page_count()) + dynamic_header_offset;
 
-        let sfile = std::fs::File::open(path).unwrap();
         let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
         for h in region_headers {
             let key_id = h.key_id;
@@ -352,7 +350,6 @@ impl XvdFile {
             let start_page = offset_to_page_number(h.offset - user_data_offset);
             let num_pages = bytes_to_pages(length);
             for page in 0..num_pages {
-                let mut buf = [0u8; 4];
                 let (hash_block, entry_num) = calculate_hash_block_num_for_block_num(
                     xvd_header.xvd_type as u32,
                     _hash_tree_levels,
@@ -364,11 +361,12 @@ impl XvdFile {
                 );
                 let read_offset = hash_tree_offset
                     + page_number_to_offset(hash_block)
-                    + (entry_num * 0x18)
-                    + 0x14;
-                sfile.read_exact_at(&mut buf, read_offset).unwrap();
-                let u = u32::from_le_bytes(buf);
-                data_units.push(u);
+                    + (entry_num * XvdHashEntry::RAW_SIZE as u64);
+
+                file.seek(SeekFrom::Start(read_offset)).await?;
+
+                let Ok(hash) = read_struct!(XvdHashEntry, file);
+                data_units.push(hash.unit);
             }
 
             enc_sections.push(EncryptedSectionInfo {

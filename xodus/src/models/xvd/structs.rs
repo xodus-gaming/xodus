@@ -41,6 +41,7 @@ macro_rules! impl_xvd_struct {
 
 impl_xvd_struct!(XvdHeader);
 impl_xvd_struct!(XvdExtEntry);
+impl_xvd_struct!(XvdHashEntry);
 impl_xvd_struct!(XvcInfo);
 impl_xvd_struct!(XvdUpdateSegment);
 impl_xvd_struct!(XvcRegionSpecifier);
