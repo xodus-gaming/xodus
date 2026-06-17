@@ -351,8 +351,10 @@ impl XvdFile {
                 offset + length
             );
 
-            if !key_id.is_encrypted() {
-                continue;
+            match key_id.get() {
+                None => continue,
+                Some(0) => (),
+                Some(n) => todo!("KeyID other than 0 or unencrypted is not supported, found {n}"),
             }
 
             let mut data_units: Vec<u32> = vec![];
