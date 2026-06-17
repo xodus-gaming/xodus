@@ -11,7 +11,6 @@ use crate::xvd::math::{bytes_to_pages, calculate_number_of_hash_pages, page_numb
 
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
-use std::range::Range;
 
 use chrono::DateTime;
 use num_enum::TryFromPrimitiveError;
@@ -271,23 +270,21 @@ impl From<raw::XvcRegionSpecifier> for XvcRegionSpecifier {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct XvcKeyId(u8);
+pub struct XvcKeyId(Option<u8>);
 
 impl XvcKeyId {
-    const UNENCRYPTED: Self = Self(u8::MAX);
-
     fn new(key_id: u16) -> XvcKeyId {
         // `raw::XvcInfo` can hold up to 0xC0 encryption keys
         // Any key higher than that means the region is unencrypted
         if key_id < 0xC0 {
-            XvcKeyId(key_id as u8)
+            Self(Some(key_id as u8))
         } else {
-            Self::UNENCRYPTED
+            Self(None)
         }
     }
 
-    fn is_unencrypted(self) -> bool {
-        self == Self::UNENCRYPTED
+    pub fn is_encrypted(self) -> bool {
+        self.0.is_some()
     }
 
     /// Returns the index of the key, or `None` if it is unencrypted.
@@ -295,12 +292,7 @@ impl XvcKeyId {
     /// If the returned `Option` is `Some`, then its value is guaranteed
     /// to be a number in the bounds: `0..0xC0`
     pub fn get(self) -> Option<u8> {
-        if self.is_unencrypted() {
-            None
-        } else {
-            debug_assert!(Range::from(0..0xC0).contains(&self.0));
-            Some(self.0)
-        }
+        self.0
     }
 }
 

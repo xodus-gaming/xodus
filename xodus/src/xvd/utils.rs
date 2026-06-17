@@ -351,7 +351,7 @@ impl XvdFile {
                 offset + length
             );
 
-            if key_id.get().is_none() {
+            if !key_id.is_encrypted() {
                 continue;
             }
 
