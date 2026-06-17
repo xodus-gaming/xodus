@@ -154,7 +154,7 @@ pub struct XvdUserDataPackageFileEntry {
 #[derive(FromBytes)]
 #[repr(C, packed)]
 pub struct XvdSegmentMetadataHeader {
-    pub magic: U32,
+    pub magic: [u8; 4],
     pub version0: U32,
     pub version1: U32,
     pub header_length: U32,

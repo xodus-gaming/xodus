@@ -399,7 +399,6 @@ impl From<raw::XvdUserDataPackageFileEntry> for XvdUserDataPackageFileEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XvdSegmentMetadataHeader {
-    pub magic: u32,
     pub version0: u32,
     pub version1: u32,
     pub header_length: u32,
@@ -408,17 +407,34 @@ pub struct XvdSegmentMetadataHeader {
     pub pduid: Uuid,
 }
 
-impl From<raw::XvdSegmentMetadataHeader> for XvdSegmentMetadataHeader {
-    fn from(value: raw::XvdSegmentMetadataHeader) -> Self {
-        Self {
-            magic: value.magic.get(),
+impl XvdSegmentMetadataHeader {
+    const MAGIC: [u8; 4] = *b"XFP ";
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum XvdSegmentMetadataHeaderParseError {
+    #[error(r#"invalid magic: expected "XFP ", got {0:?}"#)]
+    InvalidMagic([u8; 4]),
+}
+
+impl TryFrom<raw::XvdSegmentMetadataHeader> for XvdSegmentMetadataHeader {
+    type Error = XvdSegmentMetadataHeaderParseError;
+
+    fn try_from(value: raw::XvdSegmentMetadataHeader) -> Result<Self, Self::Error> {
+        if value.magic != Self::MAGIC {
+            return Err(XvdSegmentMetadataHeaderParseError::InvalidMagic(
+                value.magic,
+            ));
+        }
+
+        Ok(Self {
             version0: value.version0.get(),
             version1: value.version1.get(),
             header_length: value.header_length.get(),
             segment_count: value.segment_count.get(),
             file_paths_length: value.file_paths_length.get(),
             pduid: Uuid::from_bytes_le(value.pduid),
-        }
+        })
     }
 }
 
