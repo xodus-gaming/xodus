@@ -304,21 +304,21 @@ impl XvdFile {
                     let Ok(update_segment) = read_struct!(XvdUpdateSegment, file);
                     update_segments.push(update_segment);
                 }
+            }
 
-                if xvc_info.version >= 2 {
-                    for _ in 0..region_specifier_count {
-                        let Ok(region_specifier) = read_struct!(XvcRegionSpecifier, file);
-                        region_specifiers.push(region_specifier);
-                    }
+            if xvc_info.version >= 2 {
+                for _ in 0..region_specifier_count {
+                    let Ok(region_specifier) = read_struct!(XvcRegionSpecifier, file);
+                    region_specifiers.push(region_specifier);
+                }
 
-                    if xvd_header.mutable_page_count > 0 {
-                        file.seek(std::io::SeekFrom::Start(mdu_offset))
-                            .await
-                            .expect("Unable to seek");
-                        for _ in 0..region_count {
-                            let Ok(region_presence) = read_struct!(XvcRegionPresenceInfo, file);
-                            region_presence_info.push(region_presence);
-                        }
+                if xvd_header.mutable_page_count > 0 {
+                    file.seek(std::io::SeekFrom::Start(mdu_offset))
+                        .await
+                        .expect("Unable to seek");
+                    for _ in 0..region_count {
+                        let Ok(region_presence) = read_struct!(XvcRegionPresenceInfo, file);
+                        region_presence_info.push(region_presence);
                     }
                 }
             }
