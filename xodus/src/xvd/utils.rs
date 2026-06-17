@@ -17,7 +17,7 @@ use crate::xvd::math::{
 use crate::{
     models::xvd::{
         XvcInfo, XvcRegionHeader, XvcRegionId, XvcRegionPresenceInfo, XvcRegionSpecifier,
-        XvdHeader, XvdStruct, XvdType, XvdUpdateSegment,
+        XvdHeader, XvdStruct, XvdUpdateSegment,
     },
     xvd::math::page_number_to_offset,
 };
@@ -256,10 +256,6 @@ impl XvdFile {
 
         let xvd_header = read_struct!(XvdHeader, file)?;
 
-        let _content_types = xvd_header.xvd_content_type;
-        let _sector_size = xvd_header.sector_size();
-        let _number_of_metadata_pages = xvd_header.number_of_metadata_pages();
-
         let mdu_offset = xvd_header.mdu_offset();
         let (_hash_tree_levels, hash_tree_page_count) = xvd_header.hash_tree_info();
         let xvc_info_offset = xvd_header.xvc_info_offset(hash_tree_page_count);
@@ -331,11 +327,6 @@ impl XvdFile {
             page_number_to_offset(xvd_header.xvc_data_page_count()) + xvc_info_offset;
         let drive_data_offset =
             page_number_to_offset(xvd_header.dynamic_header_page_count()) + dynamic_header_offset;
-        let _dynamic_base_offset = xvc_info_offset;
-        let _static_data_length = match xvd_header.xvd_type {
-            XvdType::Fixed => 0,
-            XvdType::Dynamic => todo!("Unsupported XvdType, TODO support Dynamic"),
-        };
 
         let sfile = std::fs::File::open(path).unwrap();
         let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
