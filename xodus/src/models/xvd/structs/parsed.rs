@@ -3,7 +3,9 @@ use crate::models::xvd::constants::{
     LEGACY_SECTOR_SIZE, SECTOR_SIZE, XVD_HEADER_INCL_SIGNATURE_SIZE,
 };
 use crate::models::xvd::enums::{XvcRegionId, XvdContentType, XvdType};
-use crate::models::xvd::flags::{XvcRegionPresenceInfoFlags, XvdVolumeFlags};
+use crate::models::xvd::flags::{
+    XvcRegionPresenceInfoFlags, XvdSegmentMetadataSegmentFlags, XvdVolumeFlags,
+};
 use crate::xvd::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
 
 use std::collections::HashMap;
@@ -392,7 +394,7 @@ impl From<raw::XvdSegmentMetadataHeader> for XvdSegmentMetadataHeader {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XvdSegmentMetadataSegment {
-    pub flags: u16,
+    pub flags: XvdSegmentMetadataSegmentFlags,
     pub path_length: u16,
     pub path_offset: u32,
     pub filesize: u64,
@@ -401,7 +403,7 @@ pub struct XvdSegmentMetadataSegment {
 impl From<raw::XvdSegmentMetadataSegment> for XvdSegmentMetadataSegment {
     fn from(value: raw::XvdSegmentMetadataSegment) -> Self {
         Self {
-            flags: value.flags.get(),
+            flags: XvdSegmentMetadataSegmentFlags::from_bits_retain(value.flags.get()),
             path_length: value.path_length.get(),
             path_offset: value.path_offset.get(),
             filesize: value.filesize.get(),
