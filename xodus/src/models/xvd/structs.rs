@@ -45,6 +45,7 @@ impl_xvd_struct!(XvcInfo);
 impl_xvd_struct!(XvdUpdateSegment);
 impl_xvd_struct!(XvcRegionSpecifier);
 impl_xvd_struct!(XvcRegionHeader);
+impl_xvd_struct!(XvcRegionPresenceInfo);
 impl_xvd_struct!(XvdUserDataHeader);
 impl_xvd_struct!(XvdUserDataPackageFilesHeader);
 impl_xvd_struct!(XvdUserDataPackageFileEntry);

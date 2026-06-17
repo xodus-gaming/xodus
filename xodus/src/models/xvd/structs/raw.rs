@@ -124,6 +124,10 @@ pub struct XvcRegionHeader {
 
 #[derive(FromBytes)]
 #[repr(C, packed)]
+pub struct XvcRegionPresenceInfo(pub u8);
+
+#[derive(FromBytes)]
+#[repr(C, packed)]
 pub struct XvdUserDataHeader {
     pub length: U32,
     pub version: U32,

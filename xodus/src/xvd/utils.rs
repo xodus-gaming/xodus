@@ -16,8 +16,8 @@ use crate::xvd::math::{
 };
 use crate::{
     models::xvd::{
-        XvcInfo, XvcRegionHeader, XvcRegionSpecifier, XvdHeader, XvdStruct, XvdType,
-        XvdUpdateSegment,
+        XvcInfo, XvcRegionHeader, XvcRegionPresenceInfo, XvcRegionSpecifier, XvdHeader, XvdStruct,
+        XvdType, XvdUpdateSegment,
     },
     xvd::math::page_number_to_offset,
 };
@@ -281,7 +281,7 @@ impl XvdFile {
         let mut region_headers: Vec<XvcRegionHeader> = Vec::new();
         let mut update_segments: Vec<XvdUpdateSegment> = Vec::new();
         let mut region_specifiers: Vec<XvcRegionSpecifier> = Vec::new();
-        let mut region_presence_info: Vec<u8> = Vec::new();
+        let mut region_presence_info: Vec<XvcRegionPresenceInfo> = Vec::new();
 
         // TODO: Check if we have proper content type
         if xvc_data_length > 0 {
@@ -315,10 +315,9 @@ impl XvdFile {
                         file.seek(std::io::SeekFrom::Start(mdu_offset))
                             .await
                             .expect("Unable to seek");
-                        let mut byte = [0; 1];
                         for _ in 0..region_count {
-                            file.read_exact(&mut byte).await.unwrap();
-                            region_presence_info.push(byte[0]);
+                            let Ok(region_presence) = read_struct!(XvcRegionPresenceInfo, file);
+                            region_presence_info.push(region_presence);
                         }
                     }
                 }

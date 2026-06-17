@@ -49,29 +49,6 @@ pub enum XvdContentType {
     ServerAgent = 0x25,
 }
 
-#[repr(u8)]
-pub enum XvcRegionPresenceInfo {
-    IsPresent = 1,   // not set = "not present"
-    IsAvailable = 2, // not set = "unavailable"
-
-    //value >> 4 = discnum
-    Disc1 = 0x10,
-    Disc2 = 0x20,
-    Disc3 = 0x30,
-    Disc4 = 0x40,
-    Disc5 = 0x50,
-    Disc6 = 0x60,
-    Disc7 = 0x70,
-    Disc8 = 0x80,
-    Disc9 = 0x90,
-    Disc10 = 0xA0,
-    Disc11 = 0xB0,
-    Disc12 = 0xC0,
-    Disc13 = 0xD0,
-    Disc14 = 0xE0,
-    Disc15 = 0xF0,
-}
-
 pub enum XvcRegionId {
     MetadataXvc = 0x40000001,
     MetadataFilesystem = 0x40000002,

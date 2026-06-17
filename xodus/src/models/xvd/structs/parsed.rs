@@ -3,7 +3,7 @@ use crate::models::xvd::constants::{
     LEGACY_SECTOR_SIZE, SECTOR_SIZE, XVD_HEADER_INCL_SIGNATURE_SIZE,
 };
 use crate::models::xvd::enums::{XvdContentType, XvdType};
-use crate::models::xvd::flags::XvdVolumeFlags;
+use crate::models::xvd::flags::{XvcRegionPresenceInfoFlags, XvdVolumeFlags};
 use crate::xvd::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
 
 use num_enum::TryFromPrimitiveError;
@@ -243,6 +243,21 @@ impl From<raw::XvcRegionHeader> for XvcRegionHeader {
             offset: value.offset.get(),
             length: value.length.get(),
             hash: value.hash.get(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XvcRegionPresenceInfo {
+    pub flags: XvcRegionPresenceInfoFlags,
+    pub discnum: u8,
+}
+
+impl From<raw::XvcRegionPresenceInfo> for XvcRegionPresenceInfo {
+    fn from(value: raw::XvcRegionPresenceInfo) -> Self {
+        Self {
+            flags: XvcRegionPresenceInfoFlags::from_bits_retain(value.0),
+            discnum: value.0 >> 4,
         }
     }
 }
