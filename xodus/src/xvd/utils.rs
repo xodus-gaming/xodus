@@ -256,13 +256,6 @@ impl XvdFile {
 
         let xvd_header = read_struct!(XvdHeader, file)?;
 
-        // Extracts from header to avoid padding issues
-        let format_version = xvd_header.format_version;
-        let xvc_length = xvd_header.xvc_data_length;
-        let volume_flags = xvd_header.volume_flags;
-        let xvc_data_length = xvd_header.xvc_data_length;
-        let is_encrypted = xvd_header.volume_flags.is_encrypted();
-        let legacy_sector_size = xvd_header.volume_flags.is_legacy_sector_size();
         let _content_types = xvd_header.xvd_content_type;
         let _sector_size = xvd_header.sector_size();
         let _number_of_metadata_pages = xvd_header.number_of_metadata_pages();
@@ -271,12 +264,14 @@ impl XvdFile {
         let (_hash_tree_levels, hash_tree_page_count) = xvd_header.hash_tree_info();
         let xvc_info_offset = xvd_header.xvc_info_offset(hash_tree_page_count);
 
-        println!("Version: {}", format_version);
-        println!("XvcLength: {}", xvc_length);
-        println!("volume_flags: 0x{:X}", volume_flags);
-        println!("is_encrypted: {}", is_encrypted);
-        println!("legacy_sector_size: {}", legacy_sector_size);
-        println!("xvc_data_length: {}", xvc_data_length);
+        println!("Version: {}", xvd_header.format_version);
+        println!("XvcLength: {}", xvd_header.xvc_data_length);
+        println!("volume_flags: 0x{:X}", xvd_header.volume_flags);
+        println!("is_encrypted: {}", xvd_header.volume_flags.is_encrypted());
+        println!(
+            "legacy_sector_size: {}",
+            xvd_header.volume_flags.is_legacy_sector_size()
+        );
 
         let mut region_headers: Vec<XvcRegionHeader> = Vec::new();
         let mut update_segments: Vec<XvdUpdateSegment> = Vec::new();
@@ -284,7 +279,7 @@ impl XvdFile {
         let mut region_presence_info: Vec<XvcRegionPresenceInfo> = Vec::new();
 
         // TODO: Check if we have proper content type
-        if xvc_data_length > 0 {
+        if xvd_header.xvc_data_length > 0 {
             file.seek(std::io::SeekFrom::Start(xvc_info_offset))
                 .await
                 .expect("Unable to seek");
