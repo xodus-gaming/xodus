@@ -7,6 +7,7 @@ use crate::models::xvd::flags::{XvcRegionPresenceInfoFlags, XvdVolumeFlags};
 use crate::xvd::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
 
 use std::collections::HashMap;
+use std::range::Range;
 
 use chrono::DateTime;
 use num_enum::TryFromPrimitiveError;
@@ -237,10 +238,44 @@ impl From<raw::XvcRegionSpecifier> for XvcRegionSpecifier {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct XvcKeyId(u8);
+
+impl XvcKeyId {
+    const UNENCRYPTED: Self = Self(u8::MAX);
+
+    fn new(key_id: u16) -> XvcKeyId {
+        // `raw::XvcInfo` can hold up to 0xC0 encryption keys
+        // Any key higher than that means the region is unencrypted
+        if key_id < 0xC0 {
+            XvcKeyId(key_id as u8)
+        } else {
+            Self::UNENCRYPTED
+        }
+    }
+
+    fn is_unenctrypted(self) -> bool {
+        self == Self::UNENCRYPTED
+    }
+
+    /// Returns the index of the key, or `None` if it is unencrypted.
+    ///
+    /// If the returned `Option` is `Some`, then its value is guaranteed
+    /// to be a number in the bounds: `0..0xC0`
+    pub fn get(self) -> Option<u8> {
+        if self.is_unenctrypted() {
+            None
+        } else {
+            debug_assert!(Range::from(0..0xC0).contains(&self.0));
+            Some(self.0)
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XvcRegionHeader {
     pub region_id: XvcRegionId,
-    pub key_id: u16,
+    pub key_id: XvcKeyId,
     pub flags: u32,
     pub first_segment_index: u32,
     pub description: [u8; 0x40], // UTF-16
@@ -253,7 +288,7 @@ impl From<raw::XvcRegionHeader> for XvcRegionHeader {
     fn from(value: raw::XvcRegionHeader) -> Self {
         Self {
             region_id: value.region_id.get().into(),
-            key_id: value.key_id.get(),
+            key_id: XvcKeyId::new(value.key_id.get()),
             flags: value.flags.get(),
             first_segment_index: value.first_segment_index.get(),
             description: value.description,

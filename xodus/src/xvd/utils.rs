@@ -349,14 +349,14 @@ impl XvdFile {
             let offset = h.offset;
             let length = h.length;
             println!(
-                "key_id {} ({} + {} = {})",
+                "key_id {:?} ({} + {} = {})",
                 key_id,
                 offset,
                 length,
                 offset + length
             );
 
-            if h.key_id != 0 {
+            if key_id.get().is_none() {
                 continue;
             }
 
