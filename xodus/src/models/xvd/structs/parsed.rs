@@ -10,6 +10,7 @@ use crate::models::xvd::flags::{
 use crate::xvd::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
 
 use std::collections::HashMap;
+use std::fmt::{Debug, Display};
 use std::range::Range;
 
 use chrono::DateTime;
@@ -29,12 +30,29 @@ const fn microsoft_filetime(filetime: i64) -> DateTime<chrono::Utc> {
     DateTime::from_timestamp_nanos(unix_nanos)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Version {
     pub major: u16,
     pub minor: u16,
     pub patch: u16,
     pub build: u16,
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}.{}.{}.{}",
+            self.major, self.minor, self.patch, self.build
+        )
+    }
+}
+
+impl Debug for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Use the Display implementation as the Debug one
+        write!(f, "{}", self)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
