@@ -66,7 +66,7 @@ pub struct XvdHeader {
     pub pe_catalogs: [u8; 0x80],
     pub writeable_expiration_date: u32,
     pub writeable_policy_flags: u32,
-    pub persitent_local_storage_size: u32,
+    pub persistent_local_storage_size: u32,
     pub mutable_page_count: u8,
     pub sequence_number: i64,
     pub required_system_version: Version,
@@ -125,7 +125,7 @@ impl TryFrom<raw::XvdHeader> for XvdHeader {
             pe_catalogs: value.pe_catalogs,
             writeable_expiration_date: value.writeable_expiration_date.get(),
             writeable_policy_flags: value.writeable_policy_flags.get(),
-            persitent_local_storage_size: value.persitent_local_storage_size.get(),
+            persistent_local_storage_size: value.persistent_local_storage_size.get(),
             mutable_page_count: value.mutable_page_count,
             sequence_number: value.sequence_number.get(),
             required_system_version: Version {

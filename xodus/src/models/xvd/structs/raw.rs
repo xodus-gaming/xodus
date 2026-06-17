@@ -40,7 +40,7 @@ pub struct XvdHeader {
     pub pe_catalogs: [u8; 0x80],
     pub writeable_expiration_date: U32,
     pub writeable_policy_flags: U32,
-    pub persitent_local_storage_size: U32,
+    pub persistent_local_storage_size: U32,
     pub mutable_page_count: u8,
     pub _unknown271: u8,
     pub _unknown272: [u8; 0x10],
