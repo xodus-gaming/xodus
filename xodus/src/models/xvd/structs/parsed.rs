@@ -4,7 +4,7 @@ use crate::models::xvd::constants::{
 };
 use crate::models::xvd::enums::{XvcRegionId, XvdContentType, XvdType};
 use crate::models::xvd::flags::{
-    XvcRegionPresenceInfoFlags, XvdSegmentMetadataSegmentFlags, XvdVolumeFlags,
+    XvcRegionFlags, XvcRegionPresenceInfoFlags, XvdSegmentMetadataSegmentFlags, XvdVolumeFlags,
 };
 use crate::xvd::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
 
@@ -278,7 +278,7 @@ impl XvcKeyId {
 pub struct XvcRegionHeader {
     pub region_id: XvcRegionId,
     pub key_id: XvcKeyId,
-    pub flags: u32,
+    pub flags: XvcRegionFlags,
     pub first_segment_index: u32,
     pub description: [u16; 0x20], // UTF-16
     pub offset: u64,
@@ -291,7 +291,7 @@ impl From<raw::XvcRegionHeader> for XvcRegionHeader {
         Self {
             region_id: value.region_id.get().into(),
             key_id: XvcKeyId::new(value.key_id.get()),
-            flags: value.flags.get(),
+            flags: XvcRegionFlags::from_bits_retain(value.flags.get()),
             first_segment_index: value.first_segment_index.get(),
             description: value.description.map(|n| n.get()),
             offset: value.offset.get(),
