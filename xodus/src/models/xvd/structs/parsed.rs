@@ -8,8 +8,22 @@ use crate::xvd::math::{bytes_to_pages, calculate_number_of_hash_pages, page_numb
 
 use std::collections::HashMap;
 
+use chrono::DateTime;
 use num_enum::TryFromPrimitiveError;
 use uuid::Uuid;
+
+/// Converts a Microsoft FILETIME (number of 100ns intervals since 1601-01-01 UTC)
+/// into a [`chrono::DateTime`]
+const fn microsoft_filetime(filetime: i64) -> DateTime<chrono::Utc> {
+    // FILETIME counts 100ns intervals since 1601-01-01 UTC.
+    // Unix time counts nanoseconds since 1970-01-01 UTC.
+
+    /// Number of 100 nanoseconds between FILETIME epoch and Unix time
+    const FILETIME_TO_UNIX: i64 = 116_444_736_000_000_000;
+
+    let unix_nanos = (filetime - FILETIME_TO_UNIX) * 100;
+    DateTime::from_timestamp_nanos(unix_nanos)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Version {
@@ -25,7 +39,7 @@ pub struct XvdHeader {
     pub magic: [u8; 8],
     pub volume_flags: XvdVolumeFlags,
     pub format_version: u32,
-    pub file_time_created: i64,
+    pub file_time_created: DateTime<chrono::Utc>,
     pub drive_size: u64,
     pub vduid: Uuid,
     pub uduid: Uuid,
@@ -79,7 +93,7 @@ impl TryFrom<raw::XvdHeader> for XvdHeader {
             magic: value.magic,
             volume_flags: XvdVolumeFlags::from_bits_retain(value.volume_flags.get()),
             format_version: value.format_version.get(),
-            file_time_created: value.file_time_created.get(),
+            file_time_created: microsoft_filetime(value.file_time_created.get()),
             drive_size: value.drive_size.get(),
             vduid: Uuid::from_bytes_le(value.vduid),
             uduid: Uuid::from_bytes_le(value.uduid),
@@ -157,7 +171,7 @@ pub struct XvcInfo {
     pub key_count: u16,
     pub initial_play_region_id: XvcRegionId,
     pub initial_play_offset: u64,
-    pub file_time_created: i64,
+    pub file_time_created: DateTime<chrono::Utc>,
     pub preview_region_id: XvcRegionId,
     pub update_segment_count: u32,
     pub preview_offset: u64,
@@ -182,7 +196,7 @@ impl From<raw::XvcInfo> for XvcInfo {
             key_count: value.key_count.get(),
             initial_play_region_id: value.initial_play_region_id.get().into(),
             initial_play_offset: value.initial_play_offset.get(),
-            file_time_created: value.file_time_created.get(),
+            file_time_created: microsoft_filetime(value.file_time_created.get()),
             preview_region_id: value.preview_region_id.get().into(),
             update_segment_count: value.update_segment_count.get(),
             preview_offset: value.preview_offset.get(),
