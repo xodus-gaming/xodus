@@ -34,6 +34,16 @@ impl XvdVolumeFlags {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct WriteablePolicyFlags: u32 {}
+}
+
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct XvcInfoFlags: u32 {}
+}
+
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct XvcRegionFlags: u32 {
         const RESIDENT = 1 << 0;
         const INITIAL_PLAY = 1 << 1;

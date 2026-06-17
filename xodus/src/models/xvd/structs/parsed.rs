@@ -4,7 +4,8 @@ use crate::models::xvd::constants::{
 };
 use crate::models::xvd::enums::{XvcRegionId, XvdContentType, XvdType};
 use crate::models::xvd::flags::{
-    XvcRegionFlags, XvcRegionPresenceInfoFlags, XvdSegmentMetadataSegmentFlags, XvdVolumeFlags,
+    WriteablePolicyFlags, XvcInfoFlags, XvcRegionFlags, XvcRegionPresenceInfoFlags,
+    XvdSegmentMetadataSegmentFlags, XvdVolumeFlags,
 };
 use crate::xvd::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
 
@@ -68,7 +69,7 @@ pub struct XvdHeader {
     pub pe_catalog_caps: [u16; 0x10],
     pub pe_catalogs: [u8; 0x80],
     pub writeable_expiration_date: u32,
-    pub writeable_policy_flags: u32,
+    pub writeable_policy_flags: WriteablePolicyFlags,
     pub persistent_local_storage_size: u32,
     pub mutable_page_count: u8,
     pub sequence_number: i64,
@@ -127,7 +128,9 @@ impl TryFrom<raw::XvdHeader> for XvdHeader {
             pe_catalog_caps: value.pe_catalog_caps.map(|n| n.get()),
             pe_catalogs: value.pe_catalogs,
             writeable_expiration_date: value.writeable_expiration_date.get(),
-            writeable_policy_flags: value.writeable_policy_flags.get(),
+            writeable_policy_flags: WriteablePolicyFlags::from_bits_retain(
+                value.writeable_policy_flags.get(),
+            ),
             persistent_local_storage_size: value.persistent_local_storage_size.get(),
             mutable_page_count: value.mutable_page_count,
             sequence_number: value.sequence_number.get(),
@@ -170,7 +173,7 @@ pub struct XvcInfo {
     pub description: [u8; 0x100],
     pub version: u32,
     pub region_count: u32,
-    pub flags: u32,
+    pub flags: XvcInfoFlags,
     pub key_count: u16,
     pub initial_play_region_id: XvcRegionId,
     pub initial_play_offset: u64,
@@ -195,7 +198,7 @@ impl From<raw::XvcInfo> for XvcInfo {
             description: value.description,
             version: value.version.get(),
             region_count: value.region_count.get(),
-            flags: value.flags.get(),
+            flags: XvcInfoFlags::from_bits_retain(value.flags.get()),
             key_count: value.key_count.get(),
             initial_play_region_id: value.initial_play_region_id.get().into(),
             initial_play_offset: value.initial_play_offset.get(),
