@@ -2,7 +2,7 @@ use super::raw;
 use crate::models::xvd::constants::{
     LEGACY_SECTOR_SIZE, SECTOR_SIZE, XVD_HEADER_INCL_SIGNATURE_SIZE,
 };
-use crate::models::xvd::enums::{XvdContentType, XvdType};
+use crate::models::xvd::enums::{XvcRegionId, XvdContentType, XvdType};
 use crate::models::xvd::flags::{XvcRegionPresenceInfoFlags, XvdVolumeFlags};
 use crate::xvd::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
 
@@ -155,10 +155,10 @@ pub struct XvcInfo {
     pub region_count: u32,
     pub flags: u32,
     pub key_count: u16,
-    pub initial_play_region_id: u32,
+    pub initial_play_region_id: XvcRegionId,
     pub initial_play_offset: u64,
     pub file_time_created: i64,
-    pub preview_region_id: u32,
+    pub preview_region_id: XvcRegionId,
     pub update_segment_count: u32,
     pub preview_offset: u64,
     pub region_specifier_count: u32,
@@ -180,10 +180,10 @@ impl From<raw::XvcInfo> for XvcInfo {
             region_count: value.region_count.get(),
             flags: value.flags.get(),
             key_count: value.key_count.get(),
-            initial_play_region_id: value.initial_play_region_id.get(),
+            initial_play_region_id: value.initial_play_region_id.get().into(),
             initial_play_offset: value.initial_play_offset.get(),
             file_time_created: value.file_time_created.get(),
-            preview_region_id: value.preview_region_id.get(),
+            preview_region_id: value.preview_region_id.get().into(),
             update_segment_count: value.update_segment_count.get(),
             preview_offset: value.preview_offset.get(),
             region_specifier_count: value.region_specifier_count.get(),
@@ -208,7 +208,7 @@ impl From<raw::XvdUpdateSegment> for XvdUpdateSegment {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XvcRegionSpecifier {
-    pub region_id: u32,
+    pub region_id: XvcRegionId,
     pub key: [u8; 0x80],    // UTF-16
     pub value: [u8; 0x100], // UTF-16
 }
@@ -216,7 +216,7 @@ pub struct XvcRegionSpecifier {
 impl From<raw::XvcRegionSpecifier> for XvcRegionSpecifier {
     fn from(value: raw::XvcRegionSpecifier) -> Self {
         Self {
-            region_id: value.region_id.get(),
+            region_id: value.region_id.get().into(),
             key: value.key,
             value: value.value,
         }
@@ -225,7 +225,7 @@ impl From<raw::XvcRegionSpecifier> for XvcRegionSpecifier {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XvcRegionHeader {
-    pub region_id: u32,
+    pub region_id: XvcRegionId,
     pub key_id: u16,
     pub flags: u32,
     pub first_segment_index: u32,
@@ -238,7 +238,7 @@ pub struct XvcRegionHeader {
 impl From<raw::XvcRegionHeader> for XvcRegionHeader {
     fn from(value: raw::XvcRegionHeader) -> Self {
         Self {
-            region_id: value.region_id.get(),
+            region_id: value.region_id.get().into(),
             key_id: value.key_id.get(),
             flags: value.flags.get(),
             first_segment_index: value.first_segment_index.get(),

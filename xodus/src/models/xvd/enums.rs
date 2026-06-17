@@ -1,4 +1,4 @@
-use num_enum::TryFromPrimitive;
+use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(u8)]
@@ -49,6 +49,8 @@ pub enum XvdContentType {
     ServerAgent = 0x25,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, IntoPrimitive)]
+#[repr(u32)]
 pub enum XvcRegionId {
     MetadataXvc = 0x40000001,
     MetadataFilesystem = 0x40000002,
@@ -56,4 +58,6 @@ pub enum XvcRegionId {
     EmbeddedXvd = 0x40000004,
     Header = 0x40000005,
     MutableData = 0x40000006,
+    #[num_enum(catch_all)]
+    Other(u32),
 }

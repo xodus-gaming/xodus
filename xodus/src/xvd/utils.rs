@@ -16,8 +16,8 @@ use crate::xvd::math::{
 };
 use crate::{
     models::xvd::{
-        XvcInfo, XvcRegionHeader, XvcRegionPresenceInfo, XvcRegionSpecifier, XvdHeader, XvdStruct,
-        XvdType, XvdUpdateSegment,
+        XvcInfo, XvcRegionHeader, XvcRegionId, XvcRegionPresenceInfo, XvcRegionSpecifier,
+        XvdHeader, XvdStruct, XvdType, XvdUpdateSegment,
     },
     xvd::math::page_number_to_offset,
 };
@@ -234,7 +234,7 @@ pub struct EncryptedSectionInfo {
     section_offset: u64,
     section_length: u64,
 
-    header_id: u32,
+    header_id: XvcRegionId,
     vduid: [u8; 8],
 
     // If integrity is enabled, this must contain one entry per page in the section.

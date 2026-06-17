@@ -6,6 +6,7 @@ use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
 use std::io::{Read, Seek, SeekFrom};
 
 use crate::licensing::splicense::ContentKey;
+use crate::models::xvd::XvcRegionId;
 
 const PAGE_SIZE: usize = 0x1000;
 
@@ -17,7 +18,7 @@ pub struct SectionReader<R> {
     section_offset: u64,
     section_length: u64,
 
-    header_id: u32,
+    header_id: XvcRegionId,
     vduid: [u8; 8],
 
     tweak_key: [u8; 16],
@@ -37,7 +38,7 @@ impl<R: PageSource> SectionReader<R> {
         inner: R,
         section_offset: u64,
         section_length: u64,
-        header_id: u32,
+        header_id: XvcRegionId,
         vduid: [u8; 8],
         full_key: ContentKey,
         data_units: Option<Vec<u32>>,
@@ -133,7 +134,7 @@ impl<R: PageSource> SectionReader<R> {
 fn decrypt_page_xts(
     input: &[u8; PAGE_SIZE],
     data_unit: u32,
-    header_id: u32,
+    header_id: XvcRegionId,
     vduid: [u8; 8],
     data_key: [u8; 16],
     tweak_key: [u8; 16],
@@ -143,7 +144,10 @@ fn decrypt_page_xts(
 
     let mut tweak = [0u8; 16];
     tweak[0..4].copy_from_slice(&data_unit.to_le_bytes());
-    tweak[4..8].copy_from_slice(&header_id.to_le_bytes());
+    tweak[4..8].copy_from_slice(&{
+        let header_id_int: u32 = header_id.into();
+        header_id_int.to_le_bytes()
+    });
     tweak[8..16].copy_from_slice(&vduid);
 
     let mut encrypted_tweak = tweak;
