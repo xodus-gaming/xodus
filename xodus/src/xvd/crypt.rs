@@ -156,7 +156,7 @@ impl<R: PageSource> SectionReader<R> {
             TweakSource::new(data_unit, self.header_id, self.vduid).into_tweak(self.tweak_key);
         let data_cipher = Aes128::new((&self.data_key).into());
 
-        let plaintext = decrypt_page_xts(&ciphertext, tweak, &data_cipher)?;
+        let plaintext = decrypt_page_xts(ciphertext, tweak, &data_cipher);
 
         self.cached_page_plaintext.copy_from_slice(&plaintext);
         self.cached_page_index = Some(page_in_section);
@@ -165,17 +165,12 @@ impl<R: PageSource> SectionReader<R> {
 }
 
 fn decrypt_page_xts(
-    input: &[u8; PAGE_SIZE],
+    mut page: [u8; PAGE_SIZE],
     mut tweak: Tweak,
     data_cipher: &Aes128,
-) -> io::Result<[u8; PAGE_SIZE]> {
-    let mut out = [0u8; PAGE_SIZE];
-
-    let input_blocks = input.as_chunks::<16>().0;
-    let out_blocks = out.as_chunks_mut::<16>().0;
-
-    for (input, out_block) in input_blocks.iter().zip(out_blocks) {
-        let mut out = u128::from_le_bytes(*input);
+) -> [u8; PAGE_SIZE] {
+    for block in page.as_chunks_mut::<16>().0 {
+        let mut out = u128::from_le_bytes(*block);
 
         out = tweak.apply(out);
         out = {
@@ -185,9 +180,9 @@ fn decrypt_page_xts(
         };
         out = tweak.apply(out);
 
-        *out_block = out.to_le_bytes();
+        *block = out.to_le_bytes();
         tweak.advance();
     }
 
-    Ok(out)
+    page
 }
