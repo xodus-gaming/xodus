@@ -154,8 +154,9 @@ impl<R: PageSource> SectionReader<R> {
 
         let tweak =
             TweakSource::new(data_unit, self.header_id, self.vduid).into_tweak(self.tweak_key);
+        let data_cipher = Aes128::new((&self.data_key).into());
 
-        let plaintext = decrypt_page_xts(&ciphertext, tweak, self.data_key)?;
+        let plaintext = decrypt_page_xts(&ciphertext, tweak, &data_cipher)?;
 
         self.cached_page_plaintext.copy_from_slice(&plaintext);
         self.cached_page_index = Some(page_in_section);
@@ -166,9 +167,8 @@ impl<R: PageSource> SectionReader<R> {
 fn decrypt_page_xts(
     input: &[u8; PAGE_SIZE],
     mut tweak: Tweak,
-    data_key: [u8; 16],
+    data_cipher: &Aes128,
 ) -> io::Result<[u8; PAGE_SIZE]> {
-    let data_cipher = Aes128::new((&data_key).into());
     let mut out = [0u8; PAGE_SIZE];
 
     let input_blocks = input.as_chunks::<16>().0;
