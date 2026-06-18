@@ -124,7 +124,7 @@ pub fn calculate_number_of_hash_pages(hashed_pages_count: u64, resilient: bool) 
 
 /// Multiply a polynomial by x in the Galois field `GF(2^128)`.
 #[inline]
-pub fn gf_mul_x(n: u128) -> u128 {
+pub const fn gf_mul_x(n: u128) -> u128 {
     const REDUCING_POLYNOMIAL: u128 = 0x87;
 
     // Shift all bits left by 1. If it overflows, XOR the result with the
