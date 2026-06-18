@@ -141,41 +141,36 @@ fn decrypt_page_xts(
     tweak_key: [u8; 16],
 ) -> io::Result<[u8; PAGE_SIZE]> {
     let data_cipher = Aes128::new((&data_key).into());
-    let tweak_cipher = Aes128::new((&tweak_key).into());
-
-    let mut tweak = [0u8; 16];
-    tweak[0..4].copy_from_slice(&data_unit.to_le_bytes());
-    tweak[4..8].copy_from_slice(&header_id.to_le_bytes());
-    tweak[8..16].copy_from_slice(&vduid);
-
-    let mut encrypted_tweak = tweak;
-    tweak_cipher.encrypt_block((&mut encrypted_tweak).into());
-    let tweak0 = encrypted_tweak;
-
     let mut out = [0u8; PAGE_SIZE];
 
-    for block_idx in 0..(PAGE_SIZE / 16) {
-        let off = block_idx * 16;
+    let mut tweak = {
+        // Build the tweak from the data unit, the header id and the vduid.
+        let mut tweak = [0u8; 16];
+        tweak[0..4].copy_from_slice(&data_unit.to_le_bytes());
+        tweak[4..8].copy_from_slice(&header_id.to_le_bytes());
+        tweak[8..16].copy_from_slice(&vduid);
 
-        for i in 0..16 {
-            out[off + i] = input[off + i] ^ encrypted_tweak[i];
-        }
+        // Encrypt the tweak using the tweak key.
+        let tweak_cipher = Aes128::new((&tweak_key).into());
+        tweak_cipher.encrypt_block((&mut tweak).into());
 
+        tweak
+    };
+
+    for (input, out) in input.chunks_exact(16).zip(out.chunks_exact_mut(16)) {
         let mut block = aes::Block::default();
-        block.copy_from_slice(&out[off..off + 16]);
-        data_cipher.decrypt_block(&mut block);
-        out[off..off + 16].copy_from_slice(&block);
 
-        encrypted_tweak = gf_mul_x(u128::from_le_bytes(encrypted_tweak)).to_le_bytes();
-    }
-
-    encrypted_tweak = tweak0;
-    for block_idx in 0..(PAGE_SIZE / 16) {
-        let off = block_idx * 16;
         for i in 0..16 {
-            out[off + i] ^= encrypted_tweak[i];
+            block[i] = input[i] ^ tweak[i];
         }
-        encrypted_tweak = gf_mul_x(u128::from_le_bytes(encrypted_tweak)).to_le_bytes();
+
+        data_cipher.decrypt_block(&mut block);
+
+        for i in 0..16 {
+            out[i] = block[i] ^ tweak[i];
+        }
+
+        tweak = gf_mul_x(u128::from_le_bytes(tweak)).to_le_bytes();
     }
 
     Ok(out)
