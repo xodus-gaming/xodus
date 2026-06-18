@@ -15,11 +15,11 @@ pub trait PageSource: Read + Seek {}
 impl<T: Read + Seek> PageSource for T {}
 
 #[derive(Clone, Copy)]
-struct Tweak([u8; 16]);
+struct TweakSource([u8; 16]);
 #[derive(Clone, Copy)]
-struct EncryptedTweak(u128);
+struct Tweak(u128);
 
-impl Tweak {
+impl TweakSource {
     pub fn new(data_unit: u32, header_id: XvcRegionId, vduid: [u8; 8]) -> Self {
         let mut buf = [0u8; 16];
 
@@ -30,15 +30,15 @@ impl Tweak {
         Self(buf)
     }
 
-    pub fn encrypt(self, tweak_key: [u8; 16]) -> EncryptedTweak {
+    pub fn into_tweak(self, tweak_key: [u8; 16]) -> Tweak {
         let mut block = aes::Block::from(self.0);
         let tweak_cipher = Aes128::new((&tweak_key).into());
         tweak_cipher.encrypt_block(&mut block);
-        EncryptedTweak(u128::from_le_bytes(block.0))
+        Tweak(u128::from_le_bytes(block.0))
     }
 }
 
-impl EncryptedTweak {
+impl Tweak {
     #[must_use]
     pub fn apply(self, value: u128) -> u128 {
         value ^ self.0
@@ -152,7 +152,8 @@ impl<R: PageSource> SectionReader<R> {
         self.inner.seek(SeekFrom::Start(file_offset))?;
         self.inner.read_exact(&mut ciphertext)?;
 
-        let tweak = Tweak::new(data_unit, self.header_id, self.vduid).encrypt(self.tweak_key);
+        let tweak =
+            TweakSource::new(data_unit, self.header_id, self.vduid).into_tweak(self.tweak_key);
 
         let plaintext = decrypt_page_xts(&ciphertext, tweak, self.data_key)?;
 
@@ -164,7 +165,7 @@ impl<R: PageSource> SectionReader<R> {
 
 fn decrypt_page_xts(
     input: &[u8; PAGE_SIZE],
-    mut tweak: EncryptedTweak,
+    mut tweak: Tweak,
     data_key: [u8; 16],
 ) -> io::Result<[u8; PAGE_SIZE]> {
     let data_cipher = Aes128::new((&data_key).into());
