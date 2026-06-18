@@ -137,3 +137,26 @@ pub fn gf_mul_x(n: u128) -> u128 {
     // Shift left and apply the mask.
     (n << 1) ^ mask
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gf_mul_x_test() {
+        // 0 * x = 0
+        assert_eq!(gf_mul_x(0), 0);
+
+        // 1 * x = x
+        assert_eq!(gf_mul_x(1), 2);
+
+        // High bit not set, so just a left shift.
+        assert_eq!(gf_mul_x(0b101), 0b1010);
+
+        // High bit set, so result must be reduced by XORing 0x87.
+        assert_eq!(gf_mul_x(1u128 << 127), 0x87);
+
+        // All bits are set: the shift overflows and the result is reduced.
+        assert_eq!(gf_mul_x(u128::MAX), (u128::MAX << 1) ^ 0x87);
+    }
+}
