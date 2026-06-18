@@ -145,10 +145,7 @@ fn decrypt_page_xts(
 
     let mut tweak = [0u8; 16];
     tweak[0..4].copy_from_slice(&data_unit.to_le_bytes());
-    tweak[4..8].copy_from_slice(&{
-        let header_id_int: u32 = header_id.into();
-        header_id_int.to_le_bytes()
-    });
+    tweak[4..8].copy_from_slice(&header_id.to_le_bytes());
     tweak[8..16].copy_from_slice(&vduid);
 
     let mut encrypted_tweak = tweak;

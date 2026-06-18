@@ -61,3 +61,9 @@ pub enum XvcRegionId {
     #[num_enum(catch_all)]
     Other(u32),
 }
+
+impl XvcRegionId {
+    pub fn to_le_bytes(self) -> [u8; 4] {
+        Into::<u32>::into(self).to_le_bytes()
+    }
+}
