@@ -121,3 +121,19 @@ pub fn calculate_number_of_hash_pages(hashed_pages_count: u64, resilient: bool) 
 
     (hash_tree_levels, hash_tree_pages)
 }
+
+/// Multiply a polynomial by x in the Galois field `GF(2^128)`.
+#[inline]
+pub fn gf_mul_x(n: u128) -> u128 {
+    const REDUCING_POLYNOMIAL: u128 = 0x87;
+
+    // Shift all bits left by 1. If it overflows, XOR the result with the
+    // field's reducing polynomial (excluding the leading term).
+
+    // If the high bit is set, then the mask is the reducing polynomial.
+    // If the high bit is not set, the mask is 0.
+    let mask = (n >> 127).wrapping_neg() & REDUCING_POLYNOMIAL;
+
+    // Shift left and apply the mask.
+    (n << 1) ^ mask
+}

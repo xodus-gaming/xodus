@@ -7,6 +7,7 @@ use std::io::{Read, Seek, SeekFrom};
 
 use crate::licensing::splicense::ContentKey;
 use crate::models::xvd::XvcRegionId;
+use crate::xvd::math::gf_mul_x;
 
 const PAGE_SIZE: usize = 0x1000;
 
@@ -168,7 +169,7 @@ fn decrypt_page_xts(
         data_cipher.decrypt_block(&mut block);
         out[off..off + 16].copy_from_slice(&block);
 
-        encrypted_tweak = gf_mul_x(encrypted_tweak);
+        encrypted_tweak = gf_mul_x(u128::from_le_bytes(encrypted_tweak)).to_le_bytes();
     }
 
     encrypted_tweak = tweak0;
@@ -177,27 +178,8 @@ fn decrypt_page_xts(
         for i in 0..16 {
             out[off + i] ^= encrypted_tweak[i];
         }
-        encrypted_tweak = gf_mul_x(encrypted_tweak);
+        encrypted_tweak = gf_mul_x(u128::from_le_bytes(encrypted_tweak)).to_le_bytes();
     }
 
     Ok(out)
-}
-
-fn gf_mul_x(tweak: [u8; 16]) -> [u8; 16] {
-    let mut dl = 0u8;
-    let mut out = [0u8; 16];
-
-    for i in 0..16 {
-        let cl = tweak[i];
-        let mut al = cl.wrapping_add(cl);
-        al |= dl;
-        dl = cl >> 7;
-        out[i] = al;
-    }
-
-    if dl != 0 {
-        out[0] ^= 0x87;
-    }
-
-    out
 }
