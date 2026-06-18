@@ -145,32 +145,34 @@ fn decrypt_page_xts(
 
     let mut tweak = {
         // Build the tweak from the data unit, the header id and the vduid.
-        let mut tweak = [0u8; 16];
+        let mut tweak = aes::Block::default();
         tweak[0..4].copy_from_slice(&data_unit.to_le_bytes());
         tweak[4..8].copy_from_slice(&header_id.to_le_bytes());
         tweak[8..16].copy_from_slice(&vduid);
 
         // Encrypt the tweak using the tweak key.
         let tweak_cipher = Aes128::new((&tweak_key).into());
-        tweak_cipher.encrypt_block((&mut tweak).into());
+        tweak_cipher.encrypt_block(&mut tweak);
 
-        tweak
+        u128::from_le_bytes(tweak.0)
     };
 
-    for (input, out) in input.chunks_exact(16).zip(out.chunks_exact_mut(16)) {
-        let mut block = aes::Block::default();
+    let input_blocks = input.as_chunks::<16>().0;
+    let out_blocks = out.as_chunks_mut::<16>().0;
 
-        for i in 0..16 {
-            block[i] = input[i] ^ tweak[i];
-        }
+    for (input, out_block) in input_blocks.iter().zip(out_blocks) {
+        let mut out = u128::from_le_bytes(*input);
 
-        data_cipher.decrypt_block(&mut block);
+        out ^= tweak;
+        out = {
+            let mut block = aes::Block::from(out.to_le_bytes());
+            data_cipher.decrypt_block(&mut block);
+            u128::from_le_bytes(block.0)
+        };
+        out ^= tweak;
 
-        for i in 0..16 {
-            out[i] = block[i] ^ tweak[i];
-        }
-
-        tweak = gf_mul_x(u128::from_le_bytes(tweak)).to_le_bytes();
+        *out_block = out.to_le_bytes();
+        tweak = gf_mul_x(tweak);
     }
 
     Ok(out)
