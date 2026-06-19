@@ -26,6 +26,10 @@ impl TweakSource {
         Self(buf)
     }
 
+    pub fn update_data_unit(&mut self, data_unit: u32) {
+        self.0[0..4].copy_from_slice(&data_unit.to_le_bytes());
+    }
+
     pub fn into_tweak(self, tweak_key: [u8; 16]) -> Tweak {
         let mut block = aes::Block::from(self.0);
         let tweak_cipher = Aes128::new((&tweak_key).into());
@@ -50,11 +54,10 @@ pub struct SectionReader<R> {
     section_offset: u64,
     section_length: u64,
 
-    header_id: XvcRegionId,
-    vduid: [u8; 8],
-
+    tweak_source: TweakSource,
     tweak_key: [u8; 16],
-    data_key: [u8; 16],
+
+    data_cipher: Aes128,
 
     // If integrity is enabled, this must contain one entry per page in the section.
     // If integrity is disabled, use page_in_section as the data unit instead.
@@ -84,10 +87,9 @@ impl<R: PageSource> SectionReader<R> {
             inner,
             section_offset,
             section_length,
-            header_id,
-            vduid,
+            tweak_source: TweakSource::new(0, header_id, vduid),
             tweak_key,
-            data_key,
+            data_cipher: Aes128::new((&data_key).into()),
             data_units,
             cached_page_index: None,
             cached_page_plaintext: [0u8; PAGE_SIZE],
@@ -137,22 +139,19 @@ impl<R: PageSource> SectionReader<R> {
             .checked_add(page_in_section * PAGE_SIZE as u64)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "file offset overflow"))?;
 
-        let data_unit = match &self.data_units {
+        self.tweak_source.update_data_unit(match &self.data_units {
             Some(units) => *units
                 .get(page_in_section as usize)
                 .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing data unit"))?,
             None => page_in_section as u32,
-        };
+        });
 
         let mut ciphertext = [0u8; PAGE_SIZE];
         self.inner.seek(SeekFrom::Start(file_offset))?;
         self.inner.read_exact(&mut ciphertext)?;
 
-        let tweak =
-            TweakSource::new(data_unit, self.header_id, self.vduid).into_tweak(self.tweak_key);
-        let data_cipher = Aes128::new((&self.data_key).into());
-
-        let plaintext = decrypt_page_xts(ciphertext, tweak, &data_cipher);
+        let tweak = self.tweak_source.into_tweak(self.tweak_key);
+        let plaintext = decrypt_page_xts(ciphertext, tweak, &self.data_cipher);
 
         self.cached_page_plaintext.copy_from_slice(&plaintext);
         self.cached_page_index = Some(page_in_section);
