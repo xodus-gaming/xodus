@@ -175,11 +175,7 @@ fn decrypt_page_xts(
         let mut out = u128::from_le_bytes(*block);
 
         out = tweak.apply(out);
-        out = {
-            let mut block = aes::Block::from(out.to_le_bytes());
-            data_cipher.decrypt_block(&mut block);
-            u128::from_le_bytes(block.0)
-        };
+        out = aes_decrypt(data_cipher, out);
         out = tweak.apply(out);
 
         *block = out.to_le_bytes();
@@ -187,4 +183,11 @@ fn decrypt_page_xts(
     }
 
     page
+}
+
+#[inline]
+fn aes_decrypt(cipher: &Aes128, block: u128) -> u128 {
+    let mut block = aes::Block::from(block.to_le_bytes());
+    cipher.decrypt_block(&mut block);
+    u128::from_le_bytes(block.0)
 }
