@@ -168,7 +168,7 @@ fn decrypt_page_xts(
     data_cipher: &Aes128,
 ) -> [u8; PAGE_SIZE] {
     // XTS requires the data length to be a multiple of the block size (16 bytes).
-    const { assert!(PAGE_SIZE % 16 == 0) };
+    const { assert!(PAGE_SIZE.is_multiple_of(16)) };
 
     for block in page.as_chunks_mut::<16>().0 {
         let mut out = u128::from_le_bytes(*block);
