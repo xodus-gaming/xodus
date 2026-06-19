@@ -1,13 +1,11 @@
 use crate::licensing::splicense::ContentKey;
-use crate::models::xvd::XvcRegionId;
+use crate::models::xvd::{PAGE_SIZE, XvcRegionId};
 use crate::xvd::math::gf_mul_x;
 
 use std::io::{self, Read, Seek, SeekFrom};
 
 use aes::Aes128;
 use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
-
-const PAGE_SIZE: usize = 0x1000;
 
 pub trait PageSource: Read + Seek {}
 impl<T: Read + Seek> PageSource for T {}

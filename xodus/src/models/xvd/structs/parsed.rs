@@ -502,7 +502,7 @@ impl XvdHeader {
         self.user_data_page_count() + self.xvc_data_page_count() + self.dynamic_header_page_count()
     }
 
-    pub fn sector_size(&self) -> u32 {
+    pub fn sector_size(&self) -> usize {
         if self.volume_flags.is_legacy_sector_size() {
             LEGACY_SECTOR_SIZE
         } else {
