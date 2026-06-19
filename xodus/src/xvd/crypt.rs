@@ -159,6 +159,10 @@ impl<R: PageSource> SectionReader<R> {
     }
 }
 
+/// Decrypts a page using XTS-AES (IEEE 1619-2007).
+///
+/// XTS decrypts each 16-byte block as `P = AES_dec(C ⊕ T) ⊕ T`,
+/// where `T` is the tweak, which is advanced by one GF(2¹²⁸) multiplication per block.
 fn decrypt_page_xts(
     mut page: [u8; PAGE_SIZE],
     mut tweak: Tweak,
