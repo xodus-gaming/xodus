@@ -11,11 +11,9 @@ pub trait PageSource: Read + Seek {}
 impl<T: Read + Seek> PageSource for T {}
 
 #[derive(Clone, Copy)]
-struct TweakSource([u8; 16]);
-#[derive(Clone, Copy)]
-struct Tweak(u128);
+struct Tweak([u8; 16]);
 
-impl TweakSource {
+impl Tweak {
     pub fn new(data_unit: u32, header_id: XvcRegionId, vduid: [u8; 8]) -> Self {
         let mut buf = [0u8; 16];
 
@@ -30,21 +28,10 @@ impl TweakSource {
         self.0[0..4].copy_from_slice(&data_unit.to_le_bytes());
     }
 
-    pub fn into_tweak(self, tweak_cipher: &Aes128) -> Tweak {
+    fn encrypt(self, tweak_cipher: &Aes128) -> u128 {
         let mut block = aes::Block::from(self.0);
         tweak_cipher.encrypt_block(&mut block);
-        Tweak(u128::from_le_bytes(block.0))
-    }
-}
-
-impl Tweak {
-    #[must_use]
-    pub fn apply(self, value: u128) -> u128 {
-        value ^ self.0
-    }
-
-    pub fn advance(&mut self) {
-        self.0 = gf_mul_x(self.0);
+        u128::from_le_bytes(block.0)
     }
 }
 
@@ -53,7 +40,7 @@ pub struct SectionReader<R> {
     section_offset: u64,
     section_length: u64,
 
-    tweak_source: TweakSource,
+    tweak: Tweak,
     tweak_cipher: Aes128,
 
     data_cipher: Aes128,
@@ -86,7 +73,7 @@ impl<R: PageSource> SectionReader<R> {
             inner,
             section_offset,
             section_length,
-            tweak_source: TweakSource::new(0, header_id, vduid),
+            tweak: Tweak::new(0, header_id, vduid),
             tweak_cipher: Aes128::new((&tweak_key).into()),
             data_cipher: Aes128::new((&data_key).into()),
             data_units,
@@ -138,7 +125,7 @@ impl<R: PageSource> SectionReader<R> {
             .checked_add(page_in_section * PAGE_SIZE as u64)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "file offset overflow"))?;
 
-        self.tweak_source.update_data_unit(match &self.data_units {
+        self.tweak.update_data_unit(match &self.data_units {
             Some(units) => *units
                 .get(page_in_section as usize)
                 .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing data unit"))?,
@@ -149,8 +136,12 @@ impl<R: PageSource> SectionReader<R> {
         self.inner.seek(SeekFrom::Start(file_offset))?;
         self.inner.read_exact(&mut ciphertext)?;
 
-        let tweak = self.tweak_source.into_tweak(&self.tweak_cipher);
-        let plaintext = decrypt_page_xts(ciphertext, tweak, &self.data_cipher);
+        let plaintext = decrypt_page_xts(
+            ciphertext,
+            self.tweak,
+            &self.tweak_cipher,
+            &self.data_cipher,
+        );
 
         self.cached_page_plaintext.copy_from_slice(&plaintext);
         self.cached_page_index = Some(page_in_section);
@@ -160,25 +151,29 @@ impl<R: PageSource> SectionReader<R> {
 
 /// Decrypts a page using XTS-AES (IEEE 1619-2007).
 ///
-/// XTS decrypts each 16-byte block as `P = AES_dec(C ⊕ T) ⊕ T`,
-/// where `T` is the tweak, which is advanced by one GF(2¹²⁸) multiplication per block.
+/// XTS-AES uses two keys: a tweak key to derive a per-page tweak, and a data key
+/// to decrypt the data. Each 16-byte block is decrypted as `P = AES_dec(C ⊕ T) ⊕ T`,
+/// where `T` is the AES-encrypted tweak, advanced by one GF(2¹²⁸) multiplication per block.
 fn decrypt_page_xts(
     mut page: [u8; PAGE_SIZE],
-    mut tweak: Tweak,
+    tweak: Tweak,
+    tweak_cipher: &Aes128,
     data_cipher: &Aes128,
 ) -> [u8; PAGE_SIZE] {
     // XTS requires the data length to be a multiple of the block size (16 bytes).
     const { assert!(PAGE_SIZE.is_multiple_of(16)) };
 
+    let mut tweak = tweak.encrypt(tweak_cipher);
+
     for block in page.as_chunks_mut::<16>().0 {
         let mut out = u128::from_le_bytes(*block);
 
-        out = tweak.apply(out);
+        out ^= tweak;
         out = aes_decrypt(data_cipher, out);
-        out = tweak.apply(out);
+        out ^= tweak;
 
         *block = out.to_le_bytes();
-        tweak.advance();
+        tweak = gf_mul_x(tweak);
     }
 
     page
