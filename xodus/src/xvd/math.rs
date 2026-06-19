@@ -122,7 +122,7 @@ pub fn calculate_number_of_hash_pages(hashed_pages_count: u64, resilient: bool) 
     (hash_tree_levels, hash_tree_pages)
 }
 
-/// Multiply a polynomial by `x` in the Galois field `GF(2^128)` modulo
+/// Multiplies a polynomial by `x` in the Galois field `GF(2^128)` modulo
 /// `x¹²⁸ + x⁷ + x² + x + 1`, the irreducible polynomial used by XTS-AES.
 #[inline]
 #[must_use = "unused arithmetic operation that must be used"]
