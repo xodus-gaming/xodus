@@ -122,18 +122,21 @@ pub fn calculate_number_of_hash_pages(hashed_pages_count: u64, resilient: bool) 
     (hash_tree_levels, hash_tree_pages)
 }
 
-/// Multiply a polynomial by x in the Galois field `GF(2^128)`.
+/// Multiply a polynomial by `x` in the Galois field `GF(2^128)` modulo
+/// `x¹²⁸ + x⁷ + x² + x + 1`, the irreducible polynomial used by XTS-AES.
 #[inline]
 #[must_use = "unused arithmetic operation that must be used"]
 pub const fn gf_mul_x(n: u128) -> u128 {
-    const REDUCING_POLYNOMIAL: u128 = 0x87;
-
     // Shift all bits left by 1. If it overflows, XOR the result with the
-    // field's reducing polynomial (excluding the leading term).
+    // field's irreducible polynomial (excluding the leading term).
 
-    // If the high bit is set, then the mask is the reducing polynomial.
-    // If the high bit is not set, the mask is 0.
-    let mask = (n >> 127).wrapping_neg() & REDUCING_POLYNOMIAL;
+    /// The irreducible polynomial used by XTS-AES: `x¹²⁸ + x⁷ + x² + x + 1`.
+    /// The leading term `x¹²⁸` is implicit in the overflow bit and excluded here.
+    const IRREDUCIBLE_POLYNOMIAL: u128 = 0x87;
+
+    // If the high bit is set, then the mask is the irreducible polynomial
+    // (excluding the leading term). If the high bit is not set, the mask is 0.
+    let mask = (n >> 127).wrapping_neg() & IRREDUCIBLE_POLYNOMIAL;
 
     // Shift left and apply the mask.
     (n << 1) ^ mask
