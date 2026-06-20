@@ -1,15 +1,17 @@
 use std::cmp::min;
 use std::fmt::Debug;
-use std::io::{Cursor, Error, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
+use tokio::io::BufReader;
 use tokio::{
     fs::OpenOptions,
     io::{AsyncReadExt, AsyncSeekExt},
 };
 
 use crate::licensing::splicense::ContentKey;
+use crate::models::xvd::PAGES_PER_BLOCK;
 use crate::xvd::crypt::SectionReader;
 use crate::xvd::math::{
     bytes_to_pages, calculate_hash_block_num_and_run_for_block_num, offset_to_page_number,
@@ -329,6 +331,8 @@ impl XvdFile {
             page_number_to_offset(xvd_header.dynamic_header_page_count()) + dynamic_header_offset;
 
         let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
+        let mut reader =
+            BufReader::with_capacity(PAGES_PER_BLOCK * XvdHashEntry::RAW_SIZE as usize, file);
         for h in region_headers {
             let key_id = h.key_id;
             let offset = h.offset;
@@ -371,11 +375,7 @@ impl XvdFile {
                 let read_offset = hash_tree_offset
                     + page_number_to_offset(hash_block)
                     + (entry_start * XvdHashEntry::RAW_SIZE as u64);
-                file.seek(SeekFrom::Start(read_offset)).await?;
-                let mut buf = vec![];
-                buf.resize(run_length as usize * XvdHashEntry::RAW_SIZE, 0);
-                file.read_exact(buf.as_mut_slice()).await.unwrap();
-                let mut reader = Cursor::new(buf);
+                reader.seek(SeekFrom::Start(read_offset)).await?;
                 for _ in 0..run_length {
                     let Ok(hash) = read_struct!(XvdHashEntry, reader);
                     data_units.push(hash.unit);
