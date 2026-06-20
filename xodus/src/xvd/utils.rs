@@ -4,7 +4,7 @@ use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
-use tokio::io::BufReader;
+use tokio::io::{AsyncRead, AsyncSeek, BufReader};
 use tokio::{
     fs::OpenOptions,
     io::{AsyncReadExt, AsyncSeekExt},
@@ -255,7 +255,13 @@ impl XvdFile {
             .open(path.clone())
             .await
             .expect("Unable to open file");
+        Self::parse(&mut file).await
+    }
 
+    pub async fn parse<Reader>(file: &mut Reader) -> Result<Self, Box<dyn std::error::Error>>
+    where
+        Reader: AsyncRead + AsyncSeek + Unpin,
+    {
         let xvd_header = read_struct!(XvdHeader, file)?;
 
         let mdu_offset = xvd_header.mdu_offset();
@@ -272,9 +278,9 @@ impl XvdFile {
         );
 
         let mut region_headers: Vec<XvcRegionHeader> = Vec::new();
-        let mut update_segments: Vec<XvdUpdateSegment> = Vec::new();
-        let mut region_specifiers: Vec<XvcRegionSpecifier> = Vec::new();
-        let mut region_presence_info: Vec<XvcRegionPresenceInfo> = Vec::new();
+        // let mut update_segments: Vec<XvdUpdateSegment> = Vec::new();
+        // let mut region_specifiers: Vec<XvcRegionSpecifier> = Vec::new();
+        // let mut region_presence_info: Vec<XvcRegionPresenceInfo> = Vec::new();
 
         // TODO: Check if we have proper content type
         if xvd_header.xvc_data_length > 0 {
@@ -284,35 +290,11 @@ impl XvdFile {
             let Ok(xvc_info) = read_struct!(XvcInfo, file);
 
             let region_count = xvc_info.region_count;
-            let update_segment_count = xvc_info.update_segment_count;
-            let region_specifier_count = xvc_info.region_specifier_count;
 
             if xvc_info.version >= 1 {
                 for _ in 0..region_count {
                     let Ok(region_header) = read_struct!(XvcRegionHeader, file);
                     region_headers.push(region_header);
-                }
-
-                for _ in 0..update_segment_count {
-                    let Ok(update_segment) = read_struct!(XvdUpdateSegment, file);
-                    update_segments.push(update_segment);
-                }
-            }
-
-            if xvc_info.version >= 2 {
-                for _ in 0..region_specifier_count {
-                    let Ok(region_specifier) = read_struct!(XvcRegionSpecifier, file);
-                    region_specifiers.push(region_specifier);
-                }
-
-                if xvd_header.mutable_page_count > 0 {
-                    file.seek(std::io::SeekFrom::Start(mdu_offset))
-                        .await
-                        .expect("Unable to seek");
-                    for _ in 0..region_count {
-                        let Ok(region_presence) = read_struct!(XvcRegionPresenceInfo, file);
-                        region_presence_info.push(region_presence);
-                    }
                 }
             }
         }
