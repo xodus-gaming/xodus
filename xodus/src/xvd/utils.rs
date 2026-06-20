@@ -28,7 +28,7 @@ use crate::{
 macro_rules! read_struct {
     ($t:ty, $reader:expr) => {{
         let mut buf = [0u8; <$t as XvdStruct>::RAW_SIZE];
-        AsyncReadExt::read_exact(&mut $reader, &mut buf).await?;
+        $reader.read_exact(&mut buf).await?;
         TryInto::<$t>::try_into(buf)
     }};
 }
