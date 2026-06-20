@@ -12,7 +12,7 @@ use tokio::{
 use crate::licensing::splicense::ContentKey;
 use crate::xvd::crypt::SectionReader;
 use crate::xvd::math::{
-    bytes_to_pages, calculate_hash_block_num_and_run_for_block_num, offset_to_page_number
+    bytes_to_pages, calculate_hash_block_num_and_run_for_block_num, offset_to_page_number,
 };
 use crate::{
     models::xvd::{
@@ -356,15 +356,16 @@ impl XvdFile {
                 if page >= num_pages {
                     break;
                 }
-                let (hash_block, entry_start, run_length) = calculate_hash_block_num_and_run_for_block_num(
-                    xvd_header.xvd_type as u32,
-                    _hash_tree_levels,
-                    xvd_header.number_of_hashed_pages(),
-                    start_page + page,
-                    0,
-                    false,
-                    false,
-                );
+                let (hash_block, entry_start, run_length) =
+                    calculate_hash_block_num_and_run_for_block_num(
+                        xvd_header.xvd_type as u32,
+                        _hash_tree_levels,
+                        xvd_header.number_of_hashed_pages(),
+                        start_page + page,
+                        0,
+                        false,
+                        false,
+                    );
                 let run_length = min(run_length as u64, num_pages - page);
                 page += run_length;
                 let read_offset = hash_tree_offset
