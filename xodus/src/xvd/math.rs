@@ -28,7 +28,7 @@ pub fn page_number_to_offset(page_number: u64) -> u64 {
     page_number * PAGE_SIZE as u64
 }
 
-pub fn calculate_hash_block_num_for_block_num(
+pub fn calculate_hash_block_num_and_run_for_block_num(
     xvd_type: u32,
     hash_tree_levels: u64,
     number_of_hashed_pages: u64,
@@ -36,19 +36,20 @@ pub fn calculate_hash_block_num_for_block_num(
     hash_level: u32,
     resilient: bool,
     unknown: bool,
-) -> (u64, u64) {
+) -> (u64, u64, u64) {
     fn hash_block_exponent(block_count: u32) -> u64 {
         0xAAu64.pow(block_count)
     }
 
     if xvd_type > 1 || hash_level > 3 {
-        return (0xFFFF, 0);
+        return (0xFFFF, 0, 1);
     }
 
     let entry_num_in_block = (block_num / hash_block_exponent(hash_level)) % 0xAA;
+    let run_length = 0xAA - entry_num_in_block;
 
     if hash_level == 3 {
-        return (0, entry_num_in_block);
+        return (0, entry_num_in_block, run_length);
     }
 
     let mut result = block_num / hash_block_exponent(hash_level + 1);
@@ -76,7 +77,7 @@ pub fn calculate_hash_block_num_for_block_num(
         result += 1;
     }
 
-    (result, entry_num_in_block)
+    (result, entry_num_in_block, run_length)
 }
 
 pub fn calculate_number_of_hash_blocks_in_level(

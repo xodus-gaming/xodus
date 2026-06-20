@@ -1,5 +1,6 @@
+use std::cmp::min;
 use std::fmt::Debug;
-use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{Cursor, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
@@ -11,7 +12,7 @@ use tokio::{
 use crate::licensing::splicense::ContentKey;
 use crate::xvd::crypt::SectionReader;
 use crate::xvd::math::{
-    bytes_to_pages, calculate_hash_block_num_for_block_num, offset_to_page_number,
+    bytes_to_pages, calculate_hash_block_num_and_run_for_block_num, offset_to_page_number
 };
 use crate::{
     models::xvd::{
@@ -25,7 +26,7 @@ use crate::{
 macro_rules! read_struct {
     ($t:ty, $reader:expr) => {{
         let mut buf = [0u8; <$t as XvdStruct>::RAW_SIZE];
-        $reader.read_exact(&mut buf).await?;
+        AsyncReadExt::read_exact(&mut $reader, &mut buf).await?;
         TryInto::<$t>::try_into(buf)
     }};
 }
@@ -349,8 +350,13 @@ impl XvdFile {
             let mut data_units: Vec<u32> = vec![];
             let start_page = offset_to_page_number(h.offset - user_data_offset);
             let num_pages = bytes_to_pages(length);
-            for page in 0..num_pages {
-                let (hash_block, entry_num) = calculate_hash_block_num_for_block_num(
+
+            let mut page = 0;
+            loop {
+                if page >= num_pages {
+                    break;
+                }
+                let (hash_block, entry_start, run_length) = calculate_hash_block_num_and_run_for_block_num(
                     xvd_header.xvd_type as u32,
                     _hash_tree_levels,
                     xvd_header.number_of_hashed_pages(),
@@ -359,14 +365,20 @@ impl XvdFile {
                     false,
                     false,
                 );
+                let run_length = min(run_length as u64, num_pages - page);
+                page += run_length;
                 let read_offset = hash_tree_offset
                     + page_number_to_offset(hash_block)
-                    + (entry_num * XvdHashEntry::RAW_SIZE as u64);
-
+                    + (entry_start * XvdHashEntry::RAW_SIZE as u64);
                 file.seek(SeekFrom::Start(read_offset)).await?;
-
-                let Ok(hash) = read_struct!(XvdHashEntry, file);
-                data_units.push(hash.unit);
+                let mut buf = vec![];
+                buf.resize(run_length as usize * XvdHashEntry::RAW_SIZE, 0);
+                file.read_exact(buf.as_mut_slice()).await.unwrap();
+                let mut reader = Cursor::new(buf);
+                for _ in 0..run_length {
+                    let Ok(hash) = read_struct!(XvdHashEntry, reader);
+                    data_units.push(hash.unit);
+                }
             }
 
             enc_sections.push(EncryptedSectionInfo {
