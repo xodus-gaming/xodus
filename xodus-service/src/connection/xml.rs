@@ -1,8 +1,13 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use xodus::{
-    models::xgameruntime::xuser::{
-        TitleSignatureAlgorithms, TitleSignaturePolicy, TitleSignatureTypes, XSTSTokenRequest,
-        XSTSTokenResponse,
+    models::{
+        live::ExchangeUserTokenOutcome,
+        secrets::Token,
+        soap,
+        xgameruntime::xuser::{
+            MSATokenRequest, MSATokenResponse, TitleSignatureAlgorithms, TitleSignaturePolicy,
+            TitleSignatureTypes, XSTSTokenRequest, XSTSTokenResponse,
+        },
     },
     proto::xodus::XodusMessageType,
 };
@@ -40,9 +45,7 @@ pub async fn parse_message(
     buffer: Vec<u8>,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     match message_type {
-        XodusMessageType::Ping => {
-            Ok(buffer)
-        }
+        XodusMessageType::Ping => Ok(buffer),
         XodusMessageType::XstsTokenRequest => {
             let string_buf = std::str::from_utf8(&buffer)?;
             let req = quick_xml::de::from_str::<XSTSTokenRequest>(string_buf)?;
@@ -82,6 +85,53 @@ pub async fn parse_message(
 
             let payload = quick_xml::se::to_string(&payload)?;
             Ok(payload.as_bytes().to_vec())
+        }
+        XodusMessageType::MsaTokenRequest => {
+            let string_buf = std::str::from_utf8(&buffer)?;
+            let req = quick_xml::de::from_str::<MSATokenRequest>(string_buf)?;
+            let Token::Legacy(token) = crate::user::get_token("http://Passport.NET/STS").unwrap()
+            else {
+                return Ok(vec![]);
+            };
+            let device_token = context.device_token.as_ref().unwrap();
+            let user_token = xodus::api::live::exchange_user_token(
+                &context.client,
+                token.token,
+                "USERNAME".to_string(),
+                device_token.token.clone(),
+                device_token.binary_secret.clone().unwrap(),
+                None,
+                Some("Silent".to_string()),
+                "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
+                &[(
+                    format!("scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0&clientid={}", req.client_id),
+                    Some(soap::PolicyReference::token_broker()),
+                ), ("http://Passport.NET/tb".to_string(), None)],
+            )
+            .await?;
+
+            match user_token {
+                ExchangeUserTokenOutcome::Issued(
+                    soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
+                ) => {
+                    if let Some(sts) = collection.security_tokens.pop() {
+                        log::debug!("FIXME: Store new STS token");
+                    }
+                    let token = collection.security_tokens.remove(0);
+                    let expiry = chrono::DateTime::parse_from_rfc3339(&token.lifetime.expires)?;
+                    let token: Token = token.into();
+                    let Token::Compact(user_token) = token else {
+                        return Ok(vec![]);
+                    };
+                    let payload = MSATokenResponse {
+                        token: user_token,
+                        expiry: expiry.timestamp(),
+                    };
+                    let payload = quick_xml::se::to_string(&payload)?;
+                    Ok(payload.as_bytes().to_vec())
+                }
+                _ => todo!("Error handling sill sucks"),
+            }
         }
         _ => Err("Unimplemented".into()),
     }

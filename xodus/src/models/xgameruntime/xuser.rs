@@ -32,3 +32,16 @@ pub struct TitleSignatureAlgorithms {
 pub struct TitleSignatureTypes {
     pub signature: Vec<String>,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct MSATokenRequest {
+    pub client_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct MSATokenResponse {
+    pub token: String,
+    pub expiry: i64,
+}

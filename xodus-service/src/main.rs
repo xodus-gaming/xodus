@@ -47,7 +47,7 @@ async fn main() {
             let token = cancellation.clone();
             let device_token = device_token.clone();
             tokio::spawn(
-                async move { connection::router::route(accept, token, device_token).await },
+                async move { connection::router::route(accept.0, token, device_token).await },
             );
         }
     }

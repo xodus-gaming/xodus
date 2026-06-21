@@ -12,7 +12,7 @@ use xodus::models::{
 #[derive(Debug)]
 pub struct SimpleContext {
     pub client: reqwest::Client,
-    device_token: Option<LegacyToken>,
+    pub device_token: Option<LegacyToken>,
     user_token: Option<XstsResponse>,
     cached_endpoints: Option<xodus::models::xbox::TitleMgtResponse>,
     user_token_cache: HashMap<String, XstsResponse>,
