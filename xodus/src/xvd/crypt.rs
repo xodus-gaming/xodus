@@ -11,7 +11,7 @@ pub trait PageSource: Read + Seek {}
 impl<T: Read + Seek> PageSource for T {}
 
 #[derive(Clone, Copy)]
-struct Tweak([u8; 16]);
+pub struct Tweak([u8; 16]);
 
 impl Tweak {
     pub fn new(data_unit: u32, header_id: XvcRegionId, vduid: [u8; 8]) -> Self {
@@ -154,7 +154,7 @@ impl<R: PageSource> SectionReader<R> {
 /// XTS-AES uses two keys: a tweak key to derive a per-page tweak, and a data key
 /// to decrypt the data. Each 16-byte block is decrypted as `P = AES_dec(C ⊕ T) ⊕ T`,
 /// where `T` is the AES-encrypted tweak, advanced by one GF(2¹²⁸) multiplication per block.
-fn decrypt_page_xts(
+pub fn decrypt_page_xts(
     mut page: [u8; PAGE_SIZE],
     tweak: Tweak,
     tweak_cipher: &Aes128,

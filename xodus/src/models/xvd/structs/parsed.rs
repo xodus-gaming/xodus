@@ -417,7 +417,7 @@ pub struct XvdSegmentMetadataHeader {
 }
 
 impl XvdSegmentMetadataHeader {
-    const MAGIC: [u8; 4] = *b"XFP ";
+    const MAGIC: [u8; 4] = *b" PFX";
 }
 
 #[derive(thiserror::Error, Debug)]

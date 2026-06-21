@@ -1,18 +1,23 @@
 use std::cmp::min;
+use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-
+use futures_util::StreamExt;
+use aes::Aes128;
+use aes::cipher::KeyInit;
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
-use tokio::io::{AsyncRead, AsyncSeek, BufReader};
+use reqwest::header::RANGE;
+use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::{
     fs::OpenOptions,
     io::{AsyncReadExt, AsyncSeekExt},
 };
+use zerocopy::IntoBytes;
 
 use crate::licensing::splicense::ContentKey;
-use crate::models::xvd::PAGES_PER_BLOCK;
-use crate::xvd::crypt::SectionReader;
+use crate::models::xvd::{PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment, XvdSegmentMetadataSegmentFlags, XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader};
+use crate::xvd::crypt::{SectionReader, Tweak, decrypt_page_xts};
 use crate::xvd::math::{
     bytes_to_pages, calculate_hash_block_num_and_run_for_block_num, offset_to_page_number,
 };
@@ -229,6 +234,17 @@ pub struct XvdFile {
     header: XvdHeader,
     drive_data_offset: u64,
     encrypted_section_infos: Vec<EncryptedSectionInfo>,
+    user_data_offset: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct FileSegment {
+    file_name: String,
+    data_offset: u64,
+    data_length: u64,
+    page_offset: u64,
+    page_length: u64,
+    keep_encrypted: bool,
 }
 
 #[derive(Debug)]
@@ -242,6 +258,19 @@ pub struct EncryptedSectionInfo {
     // If integrity is enabled, this must contain one entry per page in the section.
     // If integrity is disabled, use page_in_section as the data unit instead.
     data_units: Option<Vec<u32>>,
+    first_segment_index: u32,
+    data_hashs: Vec<[u8; 20]>,
+}
+
+pub struct UserPackageFile {
+    pub offset: u64,
+    pub length: u64,
+}
+
+pub struct SegmentFile {
+    pub offset: u64,
+    pub length: u64,
+    pub data_hashs: Vec<[u8; 20]>, 
 }
 
 impl XvdFile {
@@ -334,6 +363,7 @@ impl XvdFile {
             }
 
             let mut data_units: Vec<u32> = vec![];
+            let mut data_hashs = vec![];
             let start_page = offset_to_page_number(h.offset - user_data_offset);
             let num_pages = bytes_to_pages(length);
 
@@ -361,6 +391,7 @@ impl XvdFile {
                 for _ in 0..run_length {
                     let Ok(hash) = read_struct!(XvdHashEntry, reader);
                     data_units.push(hash.unit);
+                    data_hashs.push(hash.block_hash);
                 }
             }
 
@@ -370,16 +401,331 @@ impl XvdFile {
                 header_id: h.region_id,
                 vduid: xvd_header.vduid.to_bytes_le()[..8].try_into().unwrap(),
                 data_units: Some(data_units.clone()),
+                first_segment_index: h.first_segment_index,
+                data_hashs: data_hashs,
             });
         }
         Ok(XvdFile {
             header: xvd_header,
             drive_data_offset,
             encrypted_section_infos: enc_sections,
+            user_data_offset: user_data_offset,
         })
     }
+
+    pub async fn readUserPackageFiles<Reader>(&self, file: &mut Reader) -> Result<HashMap<String, UserPackageFile>, Box<dyn std::error::Error>>
+    where
+        Reader: AsyncRead + AsyncSeek + Unpin,
+    {
+        let mut files = HashMap::new();
+        
+        let user_data_offset = self.user_data_offset;
+        file.seek(SeekFrom::Start(user_data_offset)).await?;
+        let user_data_header = read_struct!(XvdUserDataHeader, file)?;
+        if user_data_header.t == 0 {
+            let mut off = user_data_offset + user_data_header.length as u64;
+            file.seek(SeekFrom::Start(off)).await?;
+            let user_data_package_files_header  =
+                read_struct!(XvdUserDataPackageFilesHeader, file)?;
+            let c = user_data_package_files_header.file_count;
+            let fullname = user_data_package_files_header.package_full_name;
+            println!(
+                "package {} / file count {}",
+                String::from_utf16(&fullname).unwrap(),
+                c
+            );
+            off += XvdUserDataPackageFilesHeader::RAW_SIZE as u64;
+            for _ in 0..user_data_package_files_header.file_count {
+                file.seek(SeekFrom::Start(off)).await?;
+                let user_data_package_file_entry =
+                    read_struct!(XvdUserDataPackageFileEntry, file)?;
+                off += XvdUserDataPackageFileEntry::RAW_SIZE as u64;
+                let o = user_data_package_file_entry.offset;
+                let s: u32 = user_data_package_file_entry.size;
+                let fullname = user_data_package_file_entry.file_path;
+                let end = fullname
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(fullname.len());
+                let pfull_name: String = String::from_utf16(&fullname[..end]).unwrap();
+                println!("file {} / file offset {} size {}", pfull_name, o, s);
+
+                files.insert(pfull_name, UserPackageFile { offset: user_data_offset + XvdUserDataHeader::RAW_SIZE as u64 + o as u64, length: s as u64 });
+            }
+        }
+        Ok(files)
+    }
+
+pub async fn parse_segment_metadata<Reader>(&mut self, file: &mut Reader, segment_metadata: UserPackageFile) -> Result<HashMap<String, SegmentFile>, Box<dyn std::error::Error>>
+where
+    Reader: AsyncRead + AsyncSeek + Unpin,
+{
+    let mut file: BufReader<&mut Reader> = BufReader::with_capacity(segment_metadata.length as usize, file);
+    file.seek(SeekFrom::Start(segment_metadata.offset)).await?;
+    let segment_header: XvdSegmentMetadataHeader = read_struct!(XvdSegmentMetadataHeader, file)?;
+    let paths_offset = segment_header.header_length as u64
+        + segment_header.segment_count as u64 * 0x10;
+
+    let mut segments = vec![];
+    for _ in 0..segment_header.segment_count {
+        let segment = read_struct!(XvdSegmentMetadataSegment, file)?;
+        segments.push(segment);
+    }
+
+    let mut files = HashMap::new(); 
+
+    for section in &self.encrypted_section_infos {
+        let segment_page_start = section.section_offset.div_ceil(PAGE_SIZE as u64);
+        let mut page_offset = segment_page_start;
+        for segment_no in section.first_segment_index..segment_header.segment_count {
+            let segment = &segments[segment_no as usize];
+            let s = segment.path_length;
+            let mut buf = vec![0u16, 0];
+            buf.resize(s as usize, 0);
+            file.seek(SeekFrom::Start(segment_metadata.offset as u64
+                        + paths_offset
+                        + segment.path_offset as u64)).await?;
+            file
+                .read_exact(
+                    buf.as_mut_bytes()).await?;
+            let file_name: String = String::from_utf16(buf.as_slice()).unwrap();
+            println!(
+                "{segment_no}/{page_offset} {} {}",
+                if segment.flags == XvdSegmentMetadataSegmentFlags::KEEP_ENCRYPTED_ON_DISK { "E" } else { " " },
+                file_name
+            );
+            let page_length = if segment.filesize == 0 {
+                1
+            } else {
+                segment.filesize.div_ceil(PAGE_SIZE as u64)
+            };
+            // section.files.push(FileSegment {
+            //     file_name,
+            //     data_offset: page_offset * PAGE_SIZE as u64,
+            //     data_length: segment.filesize,
+            //     page_offset,
+            //     page_length,
+            //     keep_encrypted: segment.flags == XvdSegmentMetadataSegmentFlags::KEEP_ENCRYPTED_ON_DISK,
+            // });
+            if !(page_offset * (PAGE_SIZE as u64)
+                < section.section_offset + section.section_length)
+            {
+                break;
+            }
+            let end = page_offset as usize - segment_page_start as usize + segment.filesize.div_ceil(PAGE_SIZE as u64) as usize;
+            // min(section.data_hashs.len(), end)
+            let mut data_hashs: Vec<[u8; 20]> = section.data_hashs[page_offset as usize - segment_page_start as usize..end].into();
+            // data_hashs.reserve_exact(end);
+            // while data_hashs.len() < end {
+            //     let page_missing = data_hashs.len();
+            //     let mut found = false;
+            //     for section in &self.encrypted_section_infos {
+            //         if (page_offset + page_missing as u64) * PAGE_SIZE as u64 >= section.section_offset && ((page_offset + page_missing as u64) * PAGE_SIZE as u64) < section.section_offset + section.section_length {
+            //             data_hashs.push(section.data_hashs[(page_offset + page_missing as u64 - section.section_offset.div_ceil(PAGE_SIZE as u64))as usize]);
+            //             found = true;
+            //             break;
+            //         }
+            //     }
+            //     if !found {
+            //         break;
+            //     }
+            // }
+            files.insert(file_name, SegmentFile { offset: page_offset * PAGE_SIZE as u64, length: segment.filesize, data_hashs: data_hashs });
+            page_offset += page_length;
+        }
+    }
+    Ok(files)
 }
 
+pub async fn download_file<Reader, Writer>(&self, file: &mut Reader, out: &mut Writer, sfile: &SegmentFile, full_key: [u8; 32]) -> Result<(), Box<dyn std::error::Error>>
+where
+    Reader: AsyncRead + AsyncSeek + Unpin,
+    Writer: AsyncWrite + Unpin,
+{
+    file.seek(SeekFrom::Start(sfile.offset)).await?;
+    for s in &self.encrypted_section_infos {
+        if sfile.offset >= s.section_offset
+            && sfile.offset < s.section_offset + s.section_length
+        {
+            let mut tweak_key = [0u8; 16];
+            let mut data_key = [0u8; 16];
+            tweak_key.copy_from_slice(&full_key[..16]);
+            data_key.copy_from_slice(&full_key[16..]);
+
+            let mut tweak = Tweak::new(0, s.header_id, s.vduid);
+            let tweak_cipher = Aes128::new((&tweak_key).into());
+            let data_cipher = Aes128::new((&data_key).into());
+            // let freader = SectionReader::new(file, sfile.offset, sfile.length, s.header_id, s.vduid, full_key, s.data_units);
+            let file_offset_in_section = sfile.offset - s.section_offset;
+            let page_start = file_offset_in_section / PAGE_SIZE as u64;
+            let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
+            // let page_start = (sfile.offset - s.section_offset).div_ceil(PAGE_SIZE as u64);
+            // let page_end = page_start + sfile.length.div_ceil(PAGE_SIZE as u64);
+
+            let mut page = [0u8; PAGE_SIZE];
+            let mut remaining = sfile.length;
+            for page_in_section in page_start..page_start + page_count {
+                tweak.update_data_unit(match &s.data_units {
+                    Some(units) => *units
+                        .get(page_in_section as usize)
+                        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, format!("{} units {} page_in_section {} ({}+{})", "missing data unit", (*units).len(), page_in_section, page_start, page_count)))?,
+                    None => page_in_section as u32,
+                });
+                file.read_exact(&mut page).await?;
+                // println!("{} {:02x?}", page_in_section, page);
+                // return Ok(());
+                page = decrypt_page_xts(page, tweak, &tweak_cipher, &data_cipher);
+                // out.write_all(&page).await?;
+                let to_write = remaining.min(PAGE_SIZE as u64) as usize;
+                out.write_all(&page[..to_write]).await?;
+                remaining -= to_write as u64;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub async fn download_file_http<Writer>(&self, client: &reqwest::Client, url: String, out: &mut Writer, sfile: &SegmentFile, full_key: [u8; 32]) -> Result<(), Box<dyn std::error::Error>>
+where
+    Writer: AsyncWrite + Unpin,
+{
+    if sfile.length == 0 {
+        return Ok(());
+    }
+    // let c: reqwest::Request = client.get(url).header(RANGE, format!("bytes={}-{}", sfile.offset, sfile.offset + sfile.length.div_ceil(PAGE_SIZE as u64) * PAGE_SIZE as u64 - 1)).build()?;
+    // if let Some(b) = c.body() {
+    //     b.
+    // }
+    // let response = client.execute(c).await?.error_for_status()?;
+    let page_length = sfile.length.div_ceil(PAGE_SIZE as u64) * PAGE_SIZE as u64;
+    let response = client.get(url).header(RANGE, format!("bytes={}-{}", sfile.offset, sfile.offset + page_length - 1)).send().await?.error_for_status()?;
+    assert_eq!(response.status(), 206);
+    println!("status: {}", response.status());
+    println!("headers:\n{:#?}", response.headers());
+    println!("content-range: {:?}", response.headers().get(reqwest::header::CONTENT_RANGE));
+    println!("content-length: {:?}", response.headers().get(reqwest::header::CONTENT_LENGTH));
+    // let mut stream = response.bytes_stream();
+    // while let Some(item) = stream.next().await {
+    //     let data = item?;
+    //     println!("Chunk: {:?}", data);
+    // }
+    let mut stream = response.bytes_stream();
+    let mut pending = bytes::BytesMut::new();
+
+    for s in &self.encrypted_section_infos {
+        if sfile.offset >= s.section_offset
+            && sfile.offset < s.section_offset + s.section_length
+        {
+            let mut tweak_key = [0u8; 16];
+            let mut data_key = [0u8; 16];
+            tweak_key.copy_from_slice(&full_key[..16]);
+            data_key.copy_from_slice(&full_key[16..]);
+
+            let mut tweak = Tweak::new(0, s.header_id, s.vduid);
+            let tweak_cipher = Aes128::new((&tweak_key).into());
+            let data_cipher = Aes128::new((&data_key).into());
+            // let freader = SectionReader::new(file, sfile.offset, sfile.length, s.header_id, s.vduid, full_key, s.data_units);
+            let file_offset_in_section = sfile.offset - s.section_offset;
+            let page_start = file_offset_in_section / PAGE_SIZE as u64;
+            let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
+            // let page_start = (sfile.offset - s.section_offset).div_ceil(PAGE_SIZE as u64);
+            // let page_end = page_start + sfile.length.div_ceil(PAGE_SIZE as u64);
+
+            let mut page = [0u8; PAGE_SIZE];
+            let mut remaining = sfile.length;
+            let mut page_in_section = page_start;
+            // for page_in_section in page_start..page_start + page_count {
+            //     tweak.update_data_unit(match &s.data_units {
+            //         Some(units) => *units
+            //             .get(page_in_section as usize)
+            //             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, format!("{} units {} page_in_section {} ({}+{})", "missing data unit", (*units).len(), page_in_section, page_start, page_count)))?,
+            //         None => page_in_section as u32,
+            //     });
+            //     file.read_exact(&mut page).await?;
+            //     page = decrypt_page_xts(page, tweak, &tweak_cipher, &data_cipher);
+            //     // out.write_all(&page).await?;
+            //     let to_write = remaining.min(PAGE_SIZE as u64) as usize;
+            //     out.write_all(&page[..to_write]).await?;
+            //     remaining -= to_write as u64;
+            // }
+            while let Some(item) = stream.next().await {
+                let data = item?;
+                pending.extend_from_slice(&data);
+
+                while pending.len() >= 4096 {
+                    let chunk = pending.split_to(4096);
+                    // println!("4096 chunk: {} bytes", chunk.len());
+
+                    page.copy_from_slice(&chunk);
+                    // println!("{} {:02x?}", page_in_section, page);
+                    // return Ok(());
+                    tweak.update_data_unit(match &s.data_units {
+                        Some(units) => *units
+                            .get(page_in_section as usize)
+                            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, format!("{} units {} page_in_section {} ({}+{})", "missing data unit", (*units).len(), page_in_section, page_start, page_count)))?,
+                        None => page_in_section as u32,
+                    });
+                    page = decrypt_page_xts(page, tweak, &tweak_cipher, &data_cipher);
+                    // out.write_all(&page).await?;
+                    let to_write = remaining.min(PAGE_SIZE as u64) as usize;
+                    out.write_all(&page[..to_write]).await?;
+                    remaining -= to_write as u64;
+
+
+                    page_in_section += 1;
+                }
+            }
+            if remaining > 0 {
+                println!("tail chunk: {} bytes", remaining);
+            }
+        }
+    }
+    if !pending.is_empty() {
+        println!("tail chunk: {} bytes", pending.len());
+    }
+    Ok(())
+}
+
+
+pub async fn download_file_sync<Reader, Writer>(&self, file: &mut Reader, out: &mut Writer, sfile: &SegmentFile, full_key: [u8; 32]) -> Result<(), Box<dyn std::error::Error>>
+where
+    Reader: Read + Seek,
+    Writer: AsyncWrite + Unpin,
+{
+    for s in &self.encrypted_section_infos {
+        if sfile.offset >= s.section_offset
+            && sfile.offset < s.section_offset + s.section_length
+        {
+            let mut freader = SectionReader::new(
+                &mut *file,
+                s.section_offset,
+                s.section_length,
+                s.header_id,
+                s.vduid,
+                full_key.into(),
+                s.data_units.clone(),
+            );
+            let file_offset_in_section = sfile.offset - s.section_offset;
+            let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
+
+            let mut page = [0u8; PAGE_SIZE];
+            let mut remaining = sfile.length;
+            for page_index in 0..page_count {
+                let page_offset = file_offset_in_section + page_index * PAGE_SIZE as u64;
+                freader.read_at(page_offset, &mut page)?;
+
+                let to_write = remaining.min(PAGE_SIZE as u64) as usize;
+                out.write_all(&page[..to_write]).await?;
+                remaining -= to_write as u64;
+            }
+            return Ok(());
+        }
+    }
+
+    Err(io::Error::new(io::ErrorKind::NotFound, "segment file not in encrypted section").into())
+}
+
+}
 pub fn unpack_file(
     xvd: XvdFile,
     path: String,
