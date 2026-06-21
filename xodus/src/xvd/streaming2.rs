@@ -128,10 +128,7 @@ impl HttpFileAsync {
         }
 
         let start = self.pos;
-        let end = min(
-            self.len,
-            start.saturating_add(self.config.read_ahead_bytes),
-        );
+        let end = min(self.len, start.saturating_add(self.config.read_ahead_bytes));
         let client = self.client.clone();
         let url = self.url.clone();
 
