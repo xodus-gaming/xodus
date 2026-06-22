@@ -1,5 +1,5 @@
 use xodus::{
-    licensing::splicense::SPLicense,
+    licensing::splicense::{DeviceKey, SPLicense},
     models::{live::ExchangeUserTokenOutcome, secrets::Token, soap},
     tokens::TokenManager,
 };
@@ -9,7 +9,7 @@ pub async fn get_license(
     tokens: &TokenManager,
     content_id: String,
     market: String,
-) -> std::result::Result<([u8; 16], xodus::licensing::splicense::SPLicense), String> {
+) -> std::result::Result<(DeviceKey, SPLicense), String> {
     let dev_token = tokens.get_device_sts_token().unwrap();
     let Token::Legacy(dev_token) = dev_token else {
         return Err("Invalid STS token".to_string());

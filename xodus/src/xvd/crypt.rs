@@ -1,25 +1,49 @@
-use std::io;
+use crate::licensing::splicense::ContentKey;
+use crate::models::xvd::{PAGE_SIZE, XvcRegionId};
+use crate::xvd::math::gf_mul_x;
+
+use std::io::{self, Read, Seek, SeekFrom};
 
 use aes::Aes128;
 use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
 
-use std::io::{Read, Seek, SeekFrom};
-
-const PAGE_SIZE: usize = 0x1000;
-
 pub trait PageSource: Read + Seek {}
 impl<T: Read + Seek> PageSource for T {}
+
+#[derive(Clone, Copy)]
+struct Tweak([u8; 16]);
+
+impl Tweak {
+    pub fn new(data_unit: u32, header_id: XvcRegionId, vduid: [u8; 8]) -> Self {
+        let mut buf = [0u8; 16];
+
+        buf[0..4].copy_from_slice(&data_unit.to_le_bytes());
+        buf[4..8].copy_from_slice(&header_id.to_le_bytes());
+        buf[8..16].copy_from_slice(&vduid);
+
+        Self(buf)
+    }
+
+    pub fn update_data_unit(&mut self, data_unit: u32) {
+        self.0[0..4].copy_from_slice(&data_unit.to_le_bytes());
+    }
+
+    fn encrypt(self, tweak_cipher: &Aes128) -> u128 {
+        let mut block = aes::Block::from(self.0);
+        tweak_cipher.encrypt_block(&mut block);
+        u128::from_le_bytes(block.0)
+    }
+}
 
 pub struct SectionReader<R> {
     inner: R,
     section_offset: u64,
     section_length: u64,
 
-    header_id: u32,
-    vduid: [u8; 8],
+    tweak: Tweak,
+    tweak_cipher: Aes128,
 
-    tweak_key: [u8; 16],
-    data_key: [u8; 16],
+    data_cipher: Aes128,
 
     // If integrity is enabled, this must contain one entry per page in the section.
     // If integrity is disabled, use page_in_section as the data unit instead.
@@ -35,9 +59,9 @@ impl<R: PageSource> SectionReader<R> {
         inner: R,
         section_offset: u64,
         section_length: u64,
-        header_id: u32,
+        header_id: XvcRegionId,
         vduid: [u8; 8],
-        full_key: [u8; 32],
+        full_key: ContentKey,
         data_units: Option<Vec<u32>>,
     ) -> Self {
         let mut tweak_key = [0u8; 16];
@@ -49,10 +73,9 @@ impl<R: PageSource> SectionReader<R> {
             inner,
             section_offset,
             section_length,
-            header_id,
-            vduid,
-            tweak_key,
-            data_key,
+            tweak: Tweak::new(0, header_id, vduid),
+            tweak_cipher: Aes128::new((&tweak_key).into()),
+            data_cipher: Aes128::new((&data_key).into()),
             data_units,
             cached_page_index: None,
             cached_page_plaintext: [0u8; PAGE_SIZE],
@@ -102,25 +125,23 @@ impl<R: PageSource> SectionReader<R> {
             .checked_add(page_in_section * PAGE_SIZE as u64)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "file offset overflow"))?;
 
-        let data_unit = match &self.data_units {
+        self.tweak.update_data_unit(match &self.data_units {
             Some(units) => *units
                 .get(page_in_section as usize)
                 .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing data unit"))?,
             None => page_in_section as u32,
-        };
+        });
 
         let mut ciphertext = [0u8; PAGE_SIZE];
         self.inner.seek(SeekFrom::Start(file_offset))?;
         self.inner.read_exact(&mut ciphertext)?;
 
         let plaintext = decrypt_page_xts(
-            &ciphertext,
-            data_unit,
-            self.header_id,
-            self.vduid,
-            self.data_key,
-            self.tweak_key,
-        )?;
+            ciphertext,
+            self.tweak,
+            &self.tweak_cipher,
+            &self.data_cipher,
+        );
 
         self.cached_page_plaintext.copy_from_slice(&plaintext);
         self.cached_page_index = Some(page_in_section);
@@ -128,70 +149,39 @@ impl<R: PageSource> SectionReader<R> {
     }
 }
 
+/// Decrypts a page using XTS-AES (IEEE 1619-2007).
+///
+/// XTS-AES uses two keys: a tweak key to derive a per-page tweak, and a data key
+/// to decrypt the data. Each 16-byte block is decrypted as `P = AES_dec(C ⊕ T) ⊕ T`,
+/// where `T` is the AES-encrypted tweak, advanced by one GF(2¹²⁸) multiplication per block.
 fn decrypt_page_xts(
-    input: &[u8; PAGE_SIZE],
-    data_unit: u32,
-    header_id: u32,
-    vduid: [u8; 8],
-    data_key: [u8; 16],
-    tweak_key: [u8; 16],
-) -> io::Result<[u8; PAGE_SIZE]> {
-    let data_cipher = Aes128::new((&data_key).into());
-    let tweak_cipher = Aes128::new((&tweak_key).into());
+    mut page: [u8; PAGE_SIZE],
+    tweak: Tweak,
+    tweak_cipher: &Aes128,
+    data_cipher: &Aes128,
+) -> [u8; PAGE_SIZE] {
+    // XTS requires the data length to be a multiple of the block size (16 bytes).
+    const { assert!(PAGE_SIZE.is_multiple_of(16)) };
 
-    let mut tweak = [0u8; 16];
-    tweak[0..4].copy_from_slice(&data_unit.to_le_bytes());
-    tweak[4..8].copy_from_slice(&header_id.to_le_bytes());
-    tweak[8..16].copy_from_slice(&vduid);
+    let mut tweak = tweak.encrypt(tweak_cipher);
 
-    let mut encrypted_tweak = tweak;
-    tweak_cipher.encrypt_block((&mut encrypted_tweak).into());
-    let tweak0 = encrypted_tweak;
+    for block in page.as_chunks_mut::<16>().0 {
+        let mut out = u128::from_le_bytes(*block);
 
-    let mut out = [0u8; PAGE_SIZE];
+        out ^= tweak;
+        out = aes_decrypt(data_cipher, out);
+        out ^= tweak;
 
-    for block_idx in 0..(PAGE_SIZE / 16) {
-        let off = block_idx * 16;
-
-        for i in 0..16 {
-            out[off + i] = input[off + i] ^ encrypted_tweak[i];
-        }
-
-        let mut block = aes::Block::default();
-        block.copy_from_slice(&out[off..off + 16]);
-        data_cipher.decrypt_block(&mut block);
-        out[off..off + 16].copy_from_slice(&block);
-
-        encrypted_tweak = gf_mul_x(encrypted_tweak);
+        *block = out.to_le_bytes();
+        tweak = gf_mul_x(tweak);
     }
 
-    encrypted_tweak = tweak0;
-    for block_idx in 0..(PAGE_SIZE / 16) {
-        let off = block_idx * 16;
-        for i in 0..16 {
-            out[off + i] ^= encrypted_tweak[i];
-        }
-        encrypted_tweak = gf_mul_x(encrypted_tweak);
-    }
-
-    Ok(out)
+    page
 }
 
-fn gf_mul_x(tweak: [u8; 16]) -> [u8; 16] {
-    let mut dl = 0u8;
-    let mut out = [0u8; 16];
-
-    for i in 0..16 {
-        let cl = tweak[i];
-        let mut al = cl.wrapping_add(cl);
-        al |= dl;
-        dl = cl >> 7;
-        out[i] = al;
-    }
-
-    if dl != 0 {
-        out[0] ^= 0x87;
-    }
-
-    out
+#[inline]
+fn aes_decrypt(cipher: &Aes128, block: u128) -> u128 {
+    let mut block = aes::Block::from(block.to_le_bytes());
+    cipher.decrypt_block(&mut block);
+    u128::from_le_bytes(block.0)
 }

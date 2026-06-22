@@ -1,16 +1,14 @@
-#[repr(u32)]
-pub enum XvdVolumeFlags {
-    ReadOnly = 1,
-    EncryptionDisabled = 2,
-    DataIntegrityDisabled = 4,
-    LegacySectorSize = 8,
-    ResiliencyEnabled = 0x10,
-    SraReadOnly = 0x20,
-    RegionIdInXts = 0x40,
-    EraSpecific = 0x80,
+use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
+#[repr(u8)]
+pub enum XvdType {
+    Fixed = 0,
+    Dynamic = 1,
 }
 
-#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
+#[repr(u8)]
 pub enum XvdContentType {
     Data = 0,
     Title = 1,
@@ -51,45 +49,8 @@ pub enum XvdContentType {
     ServerAgent = 0x25,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, IntoPrimitive)]
 #[repr(u32)]
-pub enum XvcRegionFlags {
-    Resident = 1,
-    InitialPlay = 2,
-    Preview = 4,
-    FileSystemMetadata = 8,
-    Present = 0x10,
-    OnDemand = 0x20,
-    Available = 0x40,
-}
-
-#[repr(u8)]
-pub enum XvcRegionPresenceInfo {
-    IsPresent = 1,   // not set = "not present"
-    IsAvailable = 2, // not set = "unavailable"
-
-    //value >> 4 = discnum
-    Disc1 = 0x10,
-    Disc2 = 0x20,
-    Disc3 = 0x30,
-    Disc4 = 0x40,
-    Disc5 = 0x50,
-    Disc6 = 0x60,
-    Disc7 = 0x70,
-    Disc8 = 0x80,
-    Disc9 = 0x90,
-    Disc10 = 0xA0,
-    Disc11 = 0xB0,
-    Disc12 = 0xC0,
-    Disc13 = 0xD0,
-    Disc14 = 0xE0,
-    Disc15 = 0xF0,
-}
-
-#[repr(u16)]
-pub enum XvdSegmentMetadataSegmentFlags {
-    KeepEncryptedOnDisk = 1,
-}
-
 pub enum XvcRegionId {
     MetadataXvc = 0x40000001,
     MetadataFilesystem = 0x40000002,
@@ -97,4 +58,12 @@ pub enum XvcRegionId {
     EmbeddedXvd = 0x40000004,
     Header = 0x40000005,
     MutableData = 0x40000006,
+    #[num_enum(catch_all)]
+    Other(u32),
+}
+
+impl XvcRegionId {
+    pub fn to_le_bytes(self) -> [u8; 4] {
+        Into::<u32>::into(self).to_le_bytes()
+    }
 }

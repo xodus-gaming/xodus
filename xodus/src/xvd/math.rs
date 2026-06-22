@@ -45,11 +45,7 @@ pub fn calculate_hash_block_num_for_block_num(
         return (0xFFFF, 0);
     }
 
-    let entry_num_in_block = if hash_level == 0 {
-        block_num % 0xAA
-    } else {
-        (block_num / hash_block_exponent(hash_level)) % 0xAA
-    };
+    let entry_num_in_block = (block_num / hash_block_exponent(hash_level)) % 0xAA;
 
     if hash_level == 3 {
         return (0, entry_num_in_block);
@@ -124,4 +120,47 @@ pub fn calculate_number_of_hash_pages(hashed_pages_count: u64, resilient: bool) 
     }
 
     (hash_tree_levels, hash_tree_pages)
+}
+
+/// Multiplies a polynomial by `x` in the Galois field `GF(2^128)` modulo
+/// `x¹²⁸ + x⁷ + x² + x + 1`, the irreducible polynomial used by XTS-AES.
+#[inline]
+#[must_use = "unused arithmetic operation that must be used"]
+pub const fn gf_mul_x(n: u128) -> u128 {
+    // Shift all bits left by 1. If it overflows, XOR the result with the
+    // field's irreducible polynomial (excluding the leading term).
+
+    /// The irreducible polynomial used by XTS-AES: `x¹²⁸ + x⁷ + x² + x + 1`.
+    /// The leading term `x¹²⁸` is implicit in the overflow bit and excluded here.
+    const IRREDUCIBLE_POLYNOMIAL: u128 = 0x87;
+
+    // If the high bit is set, then the mask is the irreducible polynomial
+    // (excluding the leading term). If the high bit is not set, the mask is 0.
+    let mask = (n >> 127).wrapping_neg() & IRREDUCIBLE_POLYNOMIAL;
+
+    // Shift left and apply the mask.
+    (n << 1) ^ mask
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gf_mul_x_test() {
+        // 0 * x = 0
+        assert_eq!(gf_mul_x(0), 0);
+
+        // 1 * x = x
+        assert_eq!(gf_mul_x(1), 2);
+
+        // High bit not set, so just a left shift.
+        assert_eq!(gf_mul_x(0b101), 0b1010);
+
+        // High bit set, so result must be reduced by XORing 0x87.
+        assert_eq!(gf_mul_x(1u128 << 127), 0x87);
+
+        // All bits are set: the shift overflows and the result is reduced.
+        assert_eq!(gf_mul_x(u128::MAX), (u128::MAX << 1) ^ 0x87);
+    }
 }

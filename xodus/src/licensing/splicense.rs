@@ -21,7 +21,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::{collections::HashMap, io, io::Read};
+use std::{collections::HashMap, io, io::Read, ops::Deref};
 
 use aes::cipher::{BlockCipherDecrypt, KeyInit};
 use base64::prelude::*;
@@ -75,7 +75,7 @@ pub struct SPLicense {
     pub signature_block: Vec<u8>,
     pub clep_sign_state: Vec<u8>,
     pub encrypted_device_key: Option<Box<EncryptedDeviceKey>>,
-    pub content_keys: HashMap<uuid::Uuid, Vec<u8>>,
+    pub content_keys: HashMap<uuid::Uuid, PackedContentKey>,
     pub keyholder_public_key: Vec<u8>,
     pub keyholder_policies: Vec<u8>,
     pub license_policies: Vec<u8>,
@@ -97,6 +97,14 @@ pub struct EncryptedDeviceKey {
     device_key: [u8; 16],
     _unknown2: [u8; 3562],
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct DeviceKey([u8; 16]);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct PackedContentKey([u8; 40]);
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct ContentKey([u8; 32]);
 
 fn read_array<const N: usize, R: Read>(mut reader: R) -> io::Result<[u8; N]> {
     let mut buf = [0u8; N];
@@ -123,7 +131,7 @@ fn read_vec<R: Read>(mut reader: R, len: usize) -> io::Result<Vec<u8>> {
 }
 
 #[derive(Debug, Error)]
-pub enum DecodeError {
+pub enum SPLicenseDecodeError {
     #[error("IO error: {0}")]
     IoError(#[from] io::Error),
 
@@ -132,9 +140,9 @@ pub enum DecodeError {
 }
 
 #[derive(Debug, Error)]
-pub enum ParseError {
+pub enum SPLicenseParseError {
     #[error("SPLicense decode error: {0}")]
-    DecodeError(#[from] DecodeError),
+    DecodeError(#[from] SPLicenseDecodeError),
 
     #[error("could not decode base64 string: {0}")]
     PayloadLengthMismatch(#[from] base64::DecodeError),
@@ -144,7 +152,7 @@ impl SPLicense {
     /// Merges a tag-length-value from the `reader` into this [`SPLicense`].
     ///
     /// Returns None if there are none TLVs left in the reader.
-    fn merge_tlv<R: Read>(&mut self, mut reader: R) -> Result<Option<()>, DecodeError> {
+    fn merge_tlv<R: Read>(&mut self, mut reader: R) -> Result<Option<()>, SPLicenseDecodeError> {
         let mut buffer = [0u8; 4];
 
         // Doesn't use read_u32 to allow checking for EOF without error
@@ -197,14 +205,15 @@ impl SPLicense {
 
                 while offset < size {
                     let id_len = read_u16(&mut reader)? as usize;
-                    let key_len = read_u16(&mut reader)? as usize;
+                    // key_len is always 40
+                    let _key_len = read_u16(&mut reader)? as usize;
 
                     let key_id = read_uuid(&mut reader)?;
                     let _unknown = read_vec(&mut reader, id_len - 16)?;
-                    let key = read_vec(&mut reader, key_len)?;
+                    let key = PackedContentKey(read_array(&mut reader)?);
 
                     self.content_keys.insert(key_id, key);
-                    offset += 4 + id_len + key_len;
+                    offset += 4 + id_len + 40;
                 }
             }
             Ok(BlockId::ClepSignState) => {
@@ -264,7 +273,7 @@ impl SPLicense {
 
         // Ensure the number of bytes read is exactly `size`
         if reader.limit() != 0 {
-            return Err(DecodeError::PayloadLengthMismatch {
+            return Err(SPLicenseDecodeError::PayloadLengthMismatch {
                 expected: size,
                 read: size - reader.limit() as usize,
             });
@@ -273,7 +282,7 @@ impl SPLicense {
         Ok(Some(()))
     }
 
-    pub fn decode<R: Read>(mut reader: R) -> Result<Self, DecodeError> {
+    pub fn decode<R: Read>(mut reader: R) -> Result<Self, SPLicenseDecodeError> {
         // Decode the header
         let _header: [u8; 4] = read_array(&mut reader)?;
         let _offset = read_u32(&mut reader)?;
@@ -287,7 +296,7 @@ impl SPLicense {
         Ok(license)
     }
 
-    pub fn parse_base64(string: String) -> Result<SPLicense, ParseError> {
+    pub fn parse_base64(string: String) -> Result<SPLicense, SPLicenseParseError> {
         let data = BASE64_STANDARD.decode(string)?;
         Ok(SPLicense::decode(&*data)?)
     }
@@ -305,7 +314,7 @@ impl EncryptedDeviceKey {
         transmute!(key)
     }
 
-    pub fn derive_device_key(&self) -> [u8; 16] {
+    pub fn derive_device_key(&self) -> DeviceKey {
         assert!(self.version == 4);
 
         let decryption_key = self.decryption_key();
@@ -317,14 +326,50 @@ impl EncryptedDeviceKey {
         // Sanity check: the decrypted device key must be equal to the decryption key
         assert_eq!(device_key, decryption_key);
 
-        device_key.0
+        DeviceKey(device_key.0)
     }
 }
 
-pub fn unpack_key(
-    key: &[u8; 16],
-    content_key: Vec<u8>,
-) -> Result<Vec<u8>, aes_keywrap::KeywrapError> {
-    let packer = aes_keywrap::Aes128KeyWrapAligned::new(key);
-    packer.decapsulate(&content_key)
+impl Deref for DeviceKey {
+    type Target = [u8; 16];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("the ciphertext couldn't be authenticated")]
+pub struct ContentKeyAuthenticationFailed;
+
+impl PackedContentKey {
+    pub fn unpack(&self, key: &DeviceKey) -> Result<ContentKey, ContentKeyAuthenticationFailed> {
+        let packer = aes_keywrap::Aes128KeyWrapAligned::new(key);
+
+        match packer.decapsulate(&self.0) {
+            Ok(unpaked) => Ok(ContentKey(unpaked.try_into().unwrap())),
+
+            // These errors do not make sense for decapsulate
+            Err(aes_keywrap::KeywrapError::InvalidExpectedLen)
+            | Err(aes_keywrap::KeywrapError::Unpadded) => unreachable!(),
+
+            // The input is always 40 bytes, so these errors are not possible
+            Err(aes_keywrap::KeywrapError::NotAligned)
+            | Err(aes_keywrap::KeywrapError::TooSmall)
+            | Err(aes_keywrap::KeywrapError::TooBig) => unreachable!(),
+
+            // The only possible error is a failure in the authentication of the key
+            Err(aes_keywrap::KeywrapError::AuthenticationFailed) => {
+                Err(ContentKeyAuthenticationFailed)
+            }
+        }
+    }
+}
+
+impl Deref for ContentKey {
+    type Target = [u8; 32];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
