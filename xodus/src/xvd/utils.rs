@@ -685,7 +685,7 @@ impl XvdFile {
                         {
                             if response.status() == 206 {
                                 stream = Some(response.bytes_stream());
-                                break;
+                                continue;
                             }
                         }
                         continue;
@@ -735,7 +735,7 @@ impl XvdFile {
                 if remaining > 0 {
                     return Err(Box::new(std::io::Error::new(
                         ErrorKind::Other,
-                        format!("{} of {} missing", remaining, sfile.length),
+                        format!("{} of {} missing have {}", remaining, sfile.length, v),
                     )));
                 }
                 return Ok(());
