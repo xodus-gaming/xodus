@@ -39,8 +39,12 @@ pub struct HttpRead<'t> {
 }
 
 impl<'t> HttpRead<'t> {
-    pub async fn open<Progress>(client: reqwest::Client, url: impl Into<String>, progress: Option<Progress>) -> std::io::Result<Self>
-    where 
+    pub async fn open<Progress>(
+        client: reqwest::Client,
+        url: impl Into<String>,
+        progress: Option<Progress>,
+    ) -> std::io::Result<Self>
+    where
         Progress: FnMut(u64, u64) + Send + 't,
     {
         let url = url.into();
@@ -59,10 +63,10 @@ impl<'t> HttpRead<'t> {
             }),
             pending_chunk: None,
             pending_chunk_offset: 0,
-            progress: progress.map(|v| Box::new(v) as Box<dyn FnMut(u64, u64) + Send + 't >),
+            progress: progress.map(|v| Box::new(v) as Box<dyn FnMut(u64, u64) + Send + 't>),
         })
     }
- 
+
     pub fn len(&self) -> u64 {
         self.len
     }
@@ -609,12 +613,12 @@ async fn open_http_stream(
             let (range, total) = content_range
                 .split_once('/')
                 .ok_or_else(|| Error::new(ErrorKind::InvalidData, "invalid Content-Range"))?;
-            let range = range
-                .strip_prefix("bytes ")
-                .ok_or_else(|| Error::new(ErrorKind::InvalidData, "invalid Content-Range prefix"))?;
-            let (start_s, _) = range
-                .split_once('-')
-                .ok_or_else(|| Error::new(ErrorKind::InvalidData, "invalid Content-Range bounds"))?;
+            let range = range.strip_prefix("bytes ").ok_or_else(|| {
+                Error::new(ErrorKind::InvalidData, "invalid Content-Range prefix")
+            })?;
+            let (start_s, _) = range.split_once('-').ok_or_else(|| {
+                Error::new(ErrorKind::InvalidData, "invalid Content-Range bounds")
+            })?;
             let actual_start = start_s
                 .parse::<u64>()
                 .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
@@ -822,8 +826,11 @@ mod tests {
         (0..16384).map(|i| (i % 251) as u8).collect()
     }
 
-    async fn open_cached_reader<'t>(server: &TestServer, cache: &PathBuf) -> PrefixCacheFile<HttpRead<'t>> {
-        let http = HttpRead::open(reqwest::Client::new(), &server.url, Some(|_,_|{}))
+    async fn open_cached_reader<'t>(
+        server: &TestServer,
+        cache: &PathBuf,
+    ) -> PrefixCacheFile<HttpRead<'t>> {
+        let http = HttpRead::open(reqwest::Client::new(), &server.url, Some(|_, _| {}))
             .await
             .unwrap();
         let len = http.len();

@@ -523,8 +523,8 @@ mod tests {
     use std::io;
     use std::io::SeekFrom;
     use std::path::PathBuf;
-    use std::sync::{Arc, Mutex};
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
@@ -702,7 +702,9 @@ mod tests {
         let server = spawn_server(test_body(), None, 0).await.unwrap();
         let cache = cache_path("small-prefix");
         let client = reqwest::Client::new();
-        let mut file = HttpFileAsync::open(client, &server.url, &cache).await.unwrap();
+        let mut file = HttpFileAsync::open(client, &server.url, &cache)
+            .await
+            .unwrap();
 
         let mut buf = [0u8; 64];
         file.read_exact(&mut buf).await.unwrap();
@@ -718,7 +720,9 @@ mod tests {
         let server = spawn_server(body.clone(), None, 0).await.unwrap();
         let cache = cache_path("populate-cache");
         let client = reqwest::Client::new();
-        let mut file = HttpFileAsync::open(client, &server.url, &cache).await.unwrap();
+        let mut file = HttpFileAsync::open(client, &server.url, &cache)
+            .await
+            .unwrap();
 
         let mut buf = [0u8; 512];
         file.read_exact(&mut buf).await.unwrap();
@@ -734,7 +738,9 @@ mod tests {
         let server = spawn_server(body.clone(), None, 0).await.unwrap();
         let cache = cache_path("backward-seek");
         let client = reqwest::Client::new();
-        let mut file = HttpFileAsync::open(client, &server.url, &cache).await.unwrap();
+        let mut file = HttpFileAsync::open(client, &server.url, &cache)
+            .await
+            .unwrap();
 
         let mut first = [0u8; 128];
         file.read_exact(&mut first).await.unwrap();
@@ -755,7 +761,9 @@ mod tests {
         let server = spawn_server(body.clone(), Some(96), 0).await.unwrap();
         let cache = cache_path("resume");
         let client = reqwest::Client::new();
-        let mut file = HttpFileAsync::open(client, &server.url, &cache).await.unwrap();
+        let mut file = HttpFileAsync::open(client, &server.url, &cache)
+            .await
+            .unwrap();
 
         let mut buf = [0u8; 256];
         file.read_exact(&mut buf).await.unwrap();
@@ -773,7 +781,9 @@ mod tests {
         let server = spawn_server(test_body(), Some(96), 1).await.unwrap();
         let cache = cache_path("resume-mismatch");
         let client = reqwest::Client::new();
-        let mut file = HttpFileAsync::open(client, &server.url, &cache).await.unwrap();
+        let mut file = HttpFileAsync::open(client, &server.url, &cache)
+            .await
+            .unwrap();
 
         let mut buf = [0u8; 256];
         let err = file.read_exact(&mut buf).await.unwrap_err();

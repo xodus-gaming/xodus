@@ -1,4 +1,4 @@
-use inquire::{Select};
+use inquire::Select;
 use xodus::{
     XBOX_LIVE_PACKAGES_PC,
     api::displaycatalog::find_products_by_id,
@@ -10,7 +10,11 @@ use xodus::{
 
 use crate::{device, user};
 
-pub async fn get_content_id(client: &reqwest::Client, product: String, market: Option<String>) -> Result<String, Box<dyn std::error::Error>> {
+pub async fn get_content_id(
+    client: &reqwest::Client,
+    product: String,
+    market: Option<String>,
+) -> Result<String, Box<dyn std::error::Error>> {
     let displaycatalog = find_products_by_id(
         client,
         product,
@@ -56,31 +60,49 @@ pub async fn get_content_id(client: &reqwest::Client, product: String, market: O
                 .with_page_size(30)
                 .prompt()
             else {
-                return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Selection failed")));
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Selection failed",
+                )));
             };
             return Box::pin(get_content_id(client, item, market)).await;
         }
 
-        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Windows.Desktop package not found, if you believe this is an error, please report it")));
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Windows.Desktop package not found, if you believe this is an error, please report it",
+        )));
     };
 
     let Some(content_id) = &package.content_id else {
         log::error!("ContentId not found, if you believe this is an error, please report it");
-        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "ContentId not found, if you believe this is an error, please report it")));
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "ContentId not found, if you believe this is an error, please report it",
+        )));
     };
     Ok(content_id.to_owned())
 }
 
-pub async fn get_packages(client: &reqwest::Client, content_id: String) -> Result<PackageDetails, Box<dyn std::error::Error>> {
+pub async fn get_packages(
+    client: &reqwest::Client,
+    content_id: String,
+) -> Result<PackageDetails, Box<dyn std::error::Error>> {
     let dev_token = device::get_device_token().unwrap();
     let Token::Legacy(dev_token) = dev_token else {
         eprintln!("Invalid STS token");
-        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Invalid STS token")));
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Invalid STS token",
+        )));
     };
     let user_token = user::get_token("http://Passport.NET/STS".to_string()).unwrap();
     let Token::Legacy(legacy) = user_token else {
         eprintln!("Unspported user token");
-        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Unsupported user token")));
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Unsupported user token",
+        )));
     };
 
     let xsts_token =
@@ -102,7 +124,10 @@ pub async fn get_packages(client: &reqwest::Client, content_id: String) -> Resul
     let res: PackageResponse = response.json().await.expect("Failed to get data");
 
     let PackageResponse::Found(package) = res else {
-        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Package was not found, is it owned by the user?")));
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Package was not found, is it owned by the user?",
+        )));
     };
     Ok(package)
 }

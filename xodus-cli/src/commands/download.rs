@@ -2,13 +2,9 @@ use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use inquire::{MultiSelect, validator::Validation};
 use tokio::io::AsyncWriteExt;
-use xodus::{
-    models::{
-        packagespc::{PackageFile},
-    },
-};
+use xodus::models::packagespc::PackageFile;
 
-use crate::{package::{get_content_id, get_packages}};
+use crate::package::{get_content_id, get_packages};
 
 pub async fn run(client: &reqwest::Client, product: String, market: Option<String>, dry_run: bool) {
     let content_id_task = get_content_id(client, product, market).await;

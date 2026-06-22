@@ -3,19 +3,21 @@ use std::{collections::HashMap, path::Path};
 use fs2::available_space;
 use futures_util::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use tokio::{
-    fs::OpenOptions,
-};
+use tokio::fs::OpenOptions;
 use uuid::Uuid;
 use xodus::{
     models::xvd::PAGE_SIZE,
     xvd::{
         // streaming3::HttpFileAsync,
-        streaming4, utils::{SegmentFile, XvdFile}
+        streaming4,
+        utils::{SegmentFile, XvdFile},
     },
 };
 
-use crate::{license::get_license, package::{get_content_id, get_packages}};
+use crate::{
+    license::get_license,
+    package::{get_content_id, get_packages},
+};
 
 struct Job {
     name: String,
@@ -26,10 +28,16 @@ enum ProgressEvent {
     Started { id: usize, name: String, total: u64 },
     Advanced { id: usize, delta: u64 },
     Finished { id: usize },
-    UpdateRemaining { name: String, total: u64 }
+    UpdateRemaining { name: String, total: u64 },
 }
 
-pub async fn run(client: &reqwest::Client, source: String, destination: String, parallel: Option<usize>, market: Option<String>) {
+pub async fn run(
+    client: &reqwest::Client,
+    source: String,
+    destination: String,
+    parallel: Option<usize>,
+    market: Option<String>,
+) {
     let vurl = if source.starts_with("http://") || source.starts_with("https://") {
         source
     } else {
@@ -56,7 +64,12 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
             eprintln!("{}", err.to_string());
             return;
         };
-        let Some(file) = package.package_files.iter().filter(|p| p.file_name.ends_with(".msixvc")).next() else {
+        let Some(file) = package
+            .package_files
+            .iter()
+            .filter(|p| p.file_name.ends_with(".msixvc"))
+            .next()
+        else {
             eprintln!("No .msixvc file found");
             return;
         };
@@ -69,11 +82,20 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
     let url = &vurl;
     let (tx, mut rx) = tokio::sync::mpsc::channel::<ProgressEvent>(256);
     let mut pos = 0;
-    let http_file = streaming4::HttpRead::open(client.clone(), url, Some(|c, _| {
-        if let Ok(_) = tx.try_send(ProgressEvent::Advanced { id: usize::MAX, delta:  c - pos}) {
-            pos = c;
-        }
-    })).await.expect("ok");
+    let http_file = streaming4::HttpRead::open(
+        client.clone(),
+        url,
+        Some(|c, _| {
+            if let Ok(_) = tx.try_send(ProgressEvent::Advanced {
+                id: usize::MAX,
+                delta: c - pos,
+            }) {
+                pos = c;
+            }
+        }),
+    )
+    .await
+    .expect("ok");
     let l = http_file.len();
     tokio::spawn(async move {
         let multi_progress = MultiProgress::new();
@@ -123,13 +145,9 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
     let cache_path = out.join(".xodus-streaming-tmp.msixvc");
     let final_path = out.join(".xodus-streaming.msixvc");
 
-    let mut remote_file = streaming4::PrefixCacheFile::new(
-        http_file,
-        l,
-        cache_path.clone(),
-    )
-    .await
-    .expect("no err");
+    let mut remote_file = streaming4::PrefixCacheFile::new(http_file, l, cache_path.clone())
+        .await
+        .expect("no err");
     let mut remote_xvd = XvdFile::parse(&mut remote_file).await.expect("no err");
     let mut rfiles: HashMap<String, SegmentFile> = HashMap::new();
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();
@@ -180,7 +198,12 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
     // kv.seek(std::io::SeekFrom::Start(16)).await.expect("ok");
     // let mut full_key = [0u8; 32];
     // kv.read_exact(&mut full_key).await.expect("ok");
-    let license = get_license(client, remote_xvd.content_id().to_string(), market.unwrap_or("neutral".to_string())).await;
+    let license = get_license(
+        client,
+        remote_xvd.content_id().to_string(),
+        market.unwrap_or("neutral".to_string()),
+    )
+    .await;
     if let Err(err) = license {
         eprintln!("{}", err);
         return;
@@ -196,28 +219,28 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
     let Some((_, content_key)) = game_splicense.content_keys.into_iter().next() else {
         return;
     };
-        
+
     let full_key = content_key.unpack(&key).expect("failed to unpack");
-    
+
     for (k, v1) in &rfiles {
         if if let Some(v2) = lfiles.get(k) {
             v1.data_hashs != v2.data_hashs
         } else {
             true
-        } {
-        }
+        } {}
     }
     let total_size = rfiles
-    .iter()
-    .filter(|(k, v1)| {
-        if let Some(v2) = lfiles.get(*k) {
-            v1.data_hashs != v2.data_hashs
-        } else {
-            true
-        }
-    })
-    .map(|(_, v)| v.length)    
-    .reduce(|old, c|old+c).map_or(0, |x|x);
+        .iter()
+        .filter(|(k, v1)| {
+            if let Some(v2) = lfiles.get(*k) {
+                v1.data_hashs != v2.data_hashs
+            } else {
+                true
+            }
+        })
+        .map(|(_, v)| v.length)
+        .reduce(|old, c| old + c)
+        .map_or(0, |x| x);
 
     let remaining_cache_size = l.saturating_sub(remote_file.cached_len());
     let required_free_space = remaining_cache_size.saturating_add(total_size);
@@ -245,19 +268,35 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
         return;
     }
 
-    tx.send(ProgressEvent::UpdateRemaining { name: "Downloading".to_owned(), total: total_size }).await.ok();
+    tx.send(ProgressEvent::UpdateRemaining {
+        name: "Downloading".to_owned(),
+        total: total_size,
+    })
+    .await
+    .ok();
 
     let remote_xvd_ref = &remote_xvd;
-    stream::iter(rfiles
-    .iter()
-    .filter(|(k, v1)| {
-        if let Some(v2) = lfiles.get(*k) {
-            v1.data_hashs != v2.data_hashs
-        } else {
-            true
-        }
-    })
-    .map(|(n, v)| Job{ name: n.clone(), content: SegmentFile { offset: v.offset, length: v.length, data_hashs: vec![] } }).enumerate()).for_each_concurrent(parallel.unwrap_or(4), |(id, job)| {
+    stream::iter(
+        rfiles
+            .iter()
+            .filter(|(k, v1)| {
+                if let Some(v2) = lfiles.get(*k) {
+                    v1.data_hashs != v2.data_hashs
+                } else {
+                    true
+                }
+            })
+            .map(|(n, v)| Job {
+                name: n.clone(),
+                content: SegmentFile {
+                    offset: v.offset,
+                    length: v.length,
+                    data_hashs: vec![],
+                },
+            })
+            .enumerate(),
+    )
+    .for_each_concurrent(parallel.unwrap_or(4), |(id, job)| {
         let tx = tx.clone();
         async move {
             let client = reqwest::Client::new();
@@ -274,8 +313,11 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
                 .expect("ok");
             let mut lp = 0;
 
-            let progress = |pos,_|{
-                if let Ok(_) = tx.try_send(ProgressEvent::Advanced { id: id, delta: pos - lp }) {
+            let progress = |pos, _| {
+                if let Ok(_) = tx.try_send(ProgressEvent::Advanced {
+                    id: id,
+                    delta: pos - lp,
+                }) {
                     lp = pos;
                 }
             };
@@ -285,15 +327,29 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
             } else {
                 path.clone()
             };
-            tx.send(ProgressEvent::Started { id, name: shown, total: job.content.length }).await.ok();
+            tx.send(ProgressEvent::Started {
+                id,
+                name: shown,
+                total: job.content.length,
+            })
+            .await
+            .ok();
 
             remote_xvd_ref
-                .download_file_http(&client, url.to_owned(), &mut fout, &job.content, *full_key, progress)
+                .download_file_http(
+                    &client,
+                    url.to_owned(),
+                    &mut fout,
+                    &job.content,
+                    *full_key,
+                    progress,
+                )
                 .await
                 .expect("msg");
             tx.send(ProgressEvent::Finished { id }).await.ok();
         }
-    }).await;
+    })
+    .await;
 
     std::fs::remove_file(&final_path).ok();
     std::fs::rename(&cache_path, &final_path).expect("ok");

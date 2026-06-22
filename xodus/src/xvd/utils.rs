@@ -1,16 +1,16 @@
 use aes::Aes128;
 use aes::cipher::KeyInit;
 use bytes::Bytes;
-use futures_util::{StreamExt};
+use futures_util::StreamExt;
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
 use reqwest::header::RANGE;
-use tokio::time::{sleep, timeout};
 use std::cmp::min;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::time::{sleep, timeout};
 use tokio::{
     fs::OpenOptions,
     io::{AsyncReadExt, AsyncSeekExt},
@@ -20,8 +20,7 @@ use zerocopy::IntoBytes;
 use crate::licensing::splicense::ContentKey;
 use crate::models::xvd::{
     PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment,
-    XvdUserDataHeader, XvdUserDataPackageFileEntry,
-    XvdUserDataPackageFilesHeader,
+    XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,
 };
 use async_trait::async_trait;
 
@@ -36,7 +35,6 @@ use crate::{
     },
     xvd::math::page_number_to_offset,
 };
-
 
 #[async_trait]
 pub trait AsyncReadSeek {
@@ -309,10 +307,7 @@ impl XvdFile {
     }
 
     pub async fn parse_file(path: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let mut file = OpenOptions::new()
-            .read(true)
-            .open(path.clone())
-            .await?;
+        let mut file = OpenOptions::new().read(true).open(path.clone()).await?;
         Self::parse(&mut file).await
     }
 
@@ -325,7 +320,6 @@ impl XvdFile {
         let mdu_offset = xvd_header.mdu_offset();
         let (_hash_tree_levels, hash_tree_page_count) = xvd_header.hash_tree_info();
         let xvc_info_offset = xvd_header.xvc_info_offset(hash_tree_page_count);
-
 
         let mut region_headers: Vec<XvcRegionHeader> = Vec::new();
         // let mut update_segments: Vec<XvdUpdateSegment> = Vec::new();
@@ -603,7 +597,7 @@ impl XvdFile {
     ) -> Result<(), Box<dyn std::error::Error>>
     where
         Writer: AsyncWrite + Unpin,
-        Progress: FnMut(u64, u64)
+        Progress: FnMut(u64, u64),
     {
         if sfile.length == 0 {
             return Ok(());
@@ -632,19 +626,28 @@ impl XvdFile {
                 let mut remaining = sfile.length;
                 let mut page_in_section = page_start;
                 let page_length = sfile.length.div_ceil(PAGE_SIZE as u64) * PAGE_SIZE as u64;
-                let mut stream= None;
+                let mut stream = None;
                 let mut pending = bytes::BytesMut::new();
                 let mut v: u64 = 0;
 
                 let stall_timeout = tokio::time::Duration::from_secs(5);
-                if let Ok(Ok(Ok(response))) = timeout(stall_timeout, client
-                    .get(url.clone())
-                    .header(
-                        RANGE,
-                        format!("bytes={}-{}", sfile.offset + v, sfile.offset + page_length - 1),
-                    )
-                    .send())
-                    .await.map(|o| o.map(|o|o.error_for_status())) {
+                if let Ok(Ok(Ok(response))) = timeout(
+                    stall_timeout,
+                    client
+                        .get(url.clone())
+                        .header(
+                            RANGE,
+                            format!(
+                                "bytes={}-{}",
+                                sfile.offset + v,
+                                sfile.offset + page_length - 1
+                            ),
+                        )
+                        .send(),
+                )
+                .await
+                .map(|o| o.map(|o| o.error_for_status()))
+                {
                     if response.status() == 206 {
                         stream = Some(response.bytes_stream());
                     }
@@ -653,20 +656,33 @@ impl XvdFile {
                     if page_in_section >= page_start + page_count || remaining == 0 {
                         break;
                     }
-                    let next = if stream.is_none() { Ok(None) } else { timeout(stall_timeout, stream.as_mut().unwrap().next()).await };
+                    let next = if stream.is_none() {
+                        Ok(None)
+                    } else {
+                        timeout(stall_timeout, stream.as_mut().unwrap().next()).await
+                    };
                     let data: Bytes;
                     if let Ok(Some(Ok(b))) = next {
                         data = b;
                     } else {
                         // error
-                        if let Ok(Ok(Ok(response))) = timeout(stall_timeout, client
-                            .get(url.clone())
-                            .header(
-                                RANGE,
-                                format!("bytes={}-{}", sfile.offset + v, sfile.offset + page_length - 1),
-                            )
-                            .send())
-                            .await.map(|o| o.map(|o|o.error_for_status())) {
+                        if let Ok(Ok(Ok(response))) = timeout(
+                            stall_timeout,
+                            client
+                                .get(url.clone())
+                                .header(
+                                    RANGE,
+                                    format!(
+                                        "bytes={}-{}",
+                                        sfile.offset + v,
+                                        sfile.offset + page_length - 1
+                                    ),
+                                )
+                                .send(),
+                        )
+                        .await
+                        .map(|o| o.map(|o| o.error_for_status()))
+                        {
                             if response.status() == 206 {
                                 stream = Some(response.bytes_stream());
                                 break;
@@ -717,12 +733,18 @@ impl XvdFile {
                     }
                 }
                 if remaining > 0 {
-                    return Err(Box::new(std::io::Error::new(ErrorKind::Other, format!("{} of {} missing", remaining, sfile.length))));
+                    return Err(Box::new(std::io::Error::new(
+                        ErrorKind::Other,
+                        format!("{} of {} missing", remaining, sfile.length),
+                    )));
                 }
                 return Ok(());
             }
         }
-        return Err(Box::new(std::io::Error::new(ErrorKind::NotFound, "File not found in encrypted section")));
+        return Err(Box::new(std::io::Error::new(
+            ErrorKind::NotFound,
+            "File not found in encrypted section",
+        )));
     }
 
     pub async fn download_file_sync<Reader, Writer>(

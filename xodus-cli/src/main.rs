@@ -2,9 +2,9 @@ use clap::{Parser, Subcommand};
 mod commands;
 mod device;
 mod license;
+mod package;
 mod user;
 mod webview;
-mod package;
 use xodus::xal::client_params::CLIENT_WINDOWS;
 
 #[derive(Subcommand)]
@@ -35,8 +35,10 @@ enum SubCommand {
         source: String,
         destination: String,
         #[arg(short, long)]
+        parallel: Option<usize>,
+        #[arg(short, long)]
         market: Option<String>,
-    }
+    },
 }
 
 #[derive(Parser)]
@@ -94,14 +96,13 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::Streaming { source, destination, market } => {
-            commands::streaming::run(
-                &client,
-                source,
-                destination,
-                market,
-            )
-            .await;
+        SubCommand::Streaming {
+            source,
+            destination,
+            market,
+            parallel,
+        } => {
+            commands::streaming::run(&client, source, destination, parallel, market).await;
         }
     }
 
