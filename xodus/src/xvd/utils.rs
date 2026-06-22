@@ -1,7 +1,7 @@
 use aes::Aes128;
 use aes::cipher::KeyInit;
 use bytes::Bytes;
-use futures_util::StreamExt;
+use futures_util::{StreamExt};
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
 use reqwest::header::RANGE;
 use tokio::time::timeout;
@@ -632,65 +632,47 @@ impl XvdFile {
                 let mut remaining = sfile.length;
                 let mut page_in_section = page_start;
                 let page_length = sfile.length.div_ceil(PAGE_SIZE as u64) * PAGE_SIZE as u64;
-                let response = client
-                    .get(url.clone())
-                    .header(
-                        RANGE,
-                        format!("bytes={}-{}", sfile.offset, sfile.offset + page_length - 1),
-                    )
-                    .send()
-                    .await?
-                    .error_for_status()?;
-                assert_eq!(response.status(), 206);
-                let mut stream = response.bytes_stream();
+                let mut stream= None;
                 let mut pending = bytes::BytesMut::new();
                 let mut v: u64 = 0;
 
                 let stall_timeout = tokio::time::Duration::from_secs(5);
-                // println!("ddd");
+                if let Ok(Ok(Ok(response))) = timeout(stall_timeout, client
+                    .get(url.clone())
+                    .header(
+                        RANGE,
+                        format!("bytes={}-{}", sfile.offset + v, sfile.offset + page_length - 1),
+                    )
+                    .send())
+                    .await.map(|o| o.map(|o|o.error_for_status())) {
+                    if response.status() == 206 {
+                        stream = Some(response.bytes_stream());
+                    }
+                }
                 loop {
                     if page_in_section >= page_start + page_count || remaining == 0 {
                         break;
                     }
-                    let next = timeout(stall_timeout, stream.next()).await;
+                    let next = if stream.is_none() { Ok(None) } else { timeout(stall_timeout, stream.as_mut().unwrap().next()).await };
                     let data: Bytes;
-                    match next {
-                        Ok(Some(Ok(b))) => {
-                            data = b;
+                    if let Ok(Some(Ok(b))) = next {
+                        data = b;
+                    } else {
+                        // error
+                        if let Ok(Ok(Ok(response))) = timeout(stall_timeout, client
+                            .get(url.clone())
+                            .header(
+                                RANGE,
+                                format!("bytes={}-{}", sfile.offset + v, sfile.offset + page_length - 1),
+                            )
+                            .send())
+                            .await.map(|o| o.map(|o|o.error_for_status())) {
+                            if response.status() == 206 {
+                                stream = Some(response.bytes_stream());
+                                break;
+                            }
                         }
-                        Ok(Some(Err(_))) => {
-                            // error
-                            let response = client
-                                .get(url.clone())
-                                .header(
-                                    RANGE,
-                                    format!("bytes={}-{}", sfile.offset + v, sfile.offset + page_length - 1),
-                                )
-                                .send()
-                                .await?
-                                .error_for_status()?;
-                            assert_eq!(response.status(), 206);
-                            stream = response.bytes_stream();
-                            continue;
-                        }
-                        Ok(None) => {
-                            break;
-                        }
-                        Err(_) => {
-                            // timed out: reopen from current byte offset
-                            let response = client
-                                .get(url.clone())
-                                .header(
-                                    RANGE,
-                                    format!("bytes={}-{}", sfile.offset + v, sfile.offset + page_length - 1),
-                                )
-                                .send()
-                                .await?
-                                .error_for_status()?;
-                            assert_eq!(response.status(), 206);
-                            stream = response.bytes_stream();
-                            continue;
-                        }
+                        continue;
                     }
 
                     v += data.len() as u64;
