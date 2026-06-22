@@ -5,8 +5,7 @@ use xodus::{
         secrets::Token,
         soap,
         xgameruntime::xuser::{
-            MSATokenRequest, MSATokenResponse, TitleSignatureAlgorithms, TitleSignaturePolicy,
-            TitleSignatureTypes, XSTSTokenRequest, XSTSTokenResponse,
+            MSATokenRequest, MSATokenResponse
         },
     },
     proto::xodus::XodusMessageType,
@@ -46,51 +45,10 @@ pub async fn parse_message(
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     match message_type {
         XodusMessageType::Ping => Ok(buffer),
-        XodusMessageType::XstsTokenRequest => {
-            let string_buf = std::str::from_utf8(&buffer)?;
-            let req = quick_xml::de::from_str::<XSTSTokenRequest>(string_buf)?;
-            log::debug!("Getting title config {}", req.url);
-            let (title_cfg, policy) = context
-                .get_title_config(&req.url)
-                .await
-                .ok_or::<String>("Failed to get title cfg".into())?;
-            log::debug!("Got title config for {}", title_cfg.host);
-            let relying_party = title_cfg
-                .relying_party
-                .unwrap_or("http://xboxlive.com".to_string());
-            log::debug!("Getting token {relying_party}");
-            let user_token = context
-                .get_token(&relying_party)
-                .await
-                .ok_or::<String>("Failed to get user cfg".into())?;
-
-            let payload = XSTSTokenResponse {
-                token: format!(
-                    "XBL3.0 x={};{}",
-                    user_token.user_hash().unwrap(),
-                    user_token.token
-                ),
-                expiry: user_token.not_after.timestamp(),
-                relying_party,
-                signature_policy: TitleSignaturePolicy {
-                    algorithms: TitleSignatureAlgorithms {
-                        algorithm: policy.supported_algorithms,
-                    },
-                    signature_types: TitleSignatureTypes {
-                        signature: policy.supported_signature_types,
-                    },
-                    max_body_bytes: policy.max_body_bytes,
-                },
-            };
-
-            let payload = quick_xml::se::to_string(&payload)?;
-            Ok(payload.as_bytes().to_vec())
-        }
         XodusMessageType::MsaTokenRequest => {
             let string_buf = std::str::from_utf8(&buffer)?;
             let req = quick_xml::de::from_str::<MSATokenRequest>(string_buf)?;
-            let Token::Legacy(token) = crate::user::get_token("http://Passport.NET/STS").unwrap()
-            else {
+            let Token::Legacy(token) = context.tokens().get_user_sts_token()? else {
                 return Ok(vec![]);
             };
             let device_token = context.device_token.as_ref().unwrap();
@@ -115,7 +73,16 @@ pub async fn parse_message(
                     soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
                 ) => {
                     if let Some(sts) = collection.security_tokens.pop() {
-                        log::debug!("FIXME: Store new STS token");
+                        let address = sts.applies_to.endpoint_reference.address.clone();
+                        let sts: Token = sts.into();
+                        let address = if let Token::Legacy(legacy) = &sts {
+                            legacy.key_name.clone().unwrap_or(address)
+                        } else {
+                            address
+                        };
+                        if let Err(err) = context.tokens().save_user_token(address, sts) {
+                            log::warn!("Failed to persist refreshed STS token: {err}");
+                        }
                     }
                     let token = collection.security_tokens.remove(0);
                     let expiry = chrono::DateTime::parse_from_rfc3339(&token.lifetime.expires)?;

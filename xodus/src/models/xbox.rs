@@ -16,7 +16,7 @@ pub struct UserAuthProperties {
     pub rps_ticket: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct XstsResponse {
     pub not_after: chrono::DateTime<chrono::Utc>,
@@ -24,14 +24,24 @@ pub struct XstsResponse {
     display_claims: DisplayClaims,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 struct DisplayClaims {
     xui: Vec<XuiClaim>,
+    xti: Vec<XtiClaim>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 struct XuiClaim {
     uhs: String,
+    gtg: Option<String>,
+    xid: Option<String>,
+    mgt: Option<String>,
+    agg: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct XtiClaim {
+    tid: Option<String>,
 }
 
 impl XstsResponse {

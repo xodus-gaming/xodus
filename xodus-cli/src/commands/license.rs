@@ -1,9 +1,15 @@
 use crate::license::get_license;
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
-use xodus::licensing::splicense::unpack_key;
+use xodus::{licensing::splicense::unpack_key, tokens::TokenManager};
 
-pub async fn run(client: &reqwest::Client, content_id: String, market: String, ciks: String) {
-    let license = get_license(client, content_id, market).await;
+pub async fn run(
+    client: &reqwest::Client,
+    tokens: &TokenManager,
+    content_id: String,
+    market: String,
+    ciks: String,
+) {
+    let license = get_license(client, tokens, content_id, market).await;
     if let Err(err) = license {
         eprintln!("{}", err);
         return;

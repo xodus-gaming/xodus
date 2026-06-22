@@ -1,12 +1,11 @@
-use std::{fs::Permissions, os::unix::fs::PermissionsExt};
+use std::{fs::Permissions, os::unix::fs::PermissionsExt, sync::Arc};
 
 use tokio::net::UnixListener;
 use tokio_util::sync::CancellationToken;
+use xodus::tokens::TokenManager;
 
 mod connection;
-mod device;
 mod simple_context;
-mod user;
 mod utils;
 
 const XML_MAGIC: u32 = 0x58445358;
@@ -15,8 +14,10 @@ const PROTO_MAGIC: u32 = 0x58445350;
 #[tokio::main]
 async fn main() {
     xodus::secrets::init_secrets().expect("Failed to init keychain");
-    device::ensure_device_credentials(&reqwest::Client::new()).await;
-    let xodus::models::secrets::Token::Legacy(device_token) = device::get_device_token().unwrap()
+    let tokens = Arc::new(TokenManager::with_keychain_and_memory());
+    xodus::tokens::device::ensure_device_credentials(&reqwest::Client::new(), &tokens).await;
+    let xodus::models::secrets::Token::Legacy(device_token) =
+        tokens.get_device_sts_token().unwrap()
     else {
         panic!("Device token isnt legacy")
     };
@@ -46,9 +47,10 @@ async fn main() {
 
             let token = cancellation.clone();
             let device_token = device_token.clone();
-            tokio::spawn(
-                async move { connection::router::route(accept.0, token, device_token).await },
-            );
+            let tokens = tokens.clone();
+            tokio::spawn(async move {
+                connection::router::route(accept.0, token, device_token, tokens).await
+            });
         }
     }
 

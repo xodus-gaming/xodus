@@ -5,6 +5,7 @@ pub mod hardware;
 pub mod licensing;
 pub mod models;
 pub mod secrets;
+pub mod tokens;
 pub mod xvd;
 
 pub const XBOX_LIVE_PACKAGES_PC: &str = "https://packagespc.xboxlive.com";

@@ -1,18 +1,20 @@
 use xodus::{
     licensing::splicense::unpack_key,
+    tokens::TokenManager,
     xvd::utils::{parse_file, unpack_file},
 };
 
 use crate::license::get_license;
 pub async fn run(
     client: &reqwest::Client,
+    tokens: &TokenManager,
     path: String,
     destination: String,
     content_id: String,
     market: String,
 ) {
     let xvd = parse_file(path.to_string()).await.expect("Failed to parse");
-    let license = get_license(client, content_id, market).await;
+    let license = get_license(client, tokens, content_id, market).await;
     if let Err(err) = license {
         eprintln!("{}", err);
         return;
