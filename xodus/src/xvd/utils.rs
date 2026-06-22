@@ -4,7 +4,7 @@ use bytes::Bytes;
 use futures_util::{StreamExt};
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
 use reqwest::header::RANGE;
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 use std::cmp::min;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -706,7 +706,11 @@ impl XvdFile {
                         });
                         page = decrypt_page_xts(page, tweak, &tweak_cipher, &data_cipher);
                         let to_write = remaining.min(PAGE_SIZE as u64) as usize;
-                        out.write_all(&page[..to_write]).await?;
+                        while let Err(err) = out.write_all(&page[..to_write]).await {
+                            eprintln!("Error write file {} waiting 30s", err);
+                            println!("Error write file {} waiting 30s", err);
+                            sleep(tokio::time::Duration::from_secs(30)).await;
+                        }
                         remaining -= to_write as u64;
 
                         page_in_section += 1;
