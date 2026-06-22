@@ -76,7 +76,6 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
     })).await.expect("ok");
     let l = http_file.len();
     tokio::spawn(async move {
-
         let multi_progress = MultiProgress::new();
         let total_progess = multi_progress.add(ProgressBar::new(l as u64).with_style(
             ProgressStyle::with_template("{msg:30!} {bytes:>12}/{total_bytes:>12} {bytes_per_sec:>12} [{bar:40.cyan/blue}] {percent:>3}%").unwrap()
@@ -296,6 +295,6 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
         }
     }).await;
 
-    std::fs::remove_file(&final_path).expect("ok");
+    std::fs::remove_file(&final_path).ok();
     std::fs::rename(&cache_path, &final_path).expect("ok");
 }

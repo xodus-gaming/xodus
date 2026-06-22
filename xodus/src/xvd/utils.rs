@@ -1,8 +1,10 @@
 use aes::Aes128;
 use aes::cipher::KeyInit;
+use bytes::Bytes;
 use futures_util::StreamExt;
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
 use reqwest::header::RANGE;
+use tokio::time::timeout;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -606,20 +608,6 @@ impl XvdFile {
         if sfile.length == 0 {
             return Ok(());
         }
-        let page_length = sfile.length.div_ceil(PAGE_SIZE as u64) * PAGE_SIZE as u64;
-        let response = client
-            .get(url)
-            .header(
-                RANGE,
-                format!("bytes={}-{}", sfile.offset, sfile.offset + page_length - 1),
-            )
-            .send()
-            .await?
-            .error_for_status()?;
-        assert_eq!(response.status(), 206);
-        let mut stream = response.bytes_stream();
-        let mut pending = bytes::BytesMut::new();
-        let mut v: u64 = 0;
 
         for s in &self.encrypted_section_infos {
             if sfile.offset >= s.section_offset
@@ -643,8 +631,67 @@ impl XvdFile {
                 let mut page = [0u8; PAGE_SIZE];
                 let mut remaining = sfile.length;
                 let mut page_in_section = page_start;
-                while let Some(item) = stream.next().await {
-                    let data = item?;
+                let page_length = sfile.length.div_ceil(PAGE_SIZE as u64) * PAGE_SIZE as u64;
+                let response = client
+                    .get(url.clone())
+                    .header(
+                        RANGE,
+                        format!("bytes={}-{}", sfile.offset, sfile.offset + page_length - 1),
+                    )
+                    .send()
+                    .await?
+                    .error_for_status()?;
+                assert_eq!(response.status(), 206);
+                let mut stream = response.bytes_stream();
+                let mut pending = bytes::BytesMut::new();
+                let mut v: u64 = 0;
+
+                let stall_timeout = tokio::time::Duration::from_secs(5);
+                // println!("ddd");
+                loop {
+                    if page_in_section >= page_start + page_count || remaining == 0 {
+                        break;
+                    }
+                    let next = timeout(stall_timeout, stream.next()).await;
+                    let data: Bytes;
+                    match next {
+                        Ok(Some(Ok(b))) => {
+                            data = b;
+                        }
+                        Ok(Some(Err(_))) => {
+                            // error
+                            let response = client
+                                .get(url.clone())
+                                .header(
+                                    RANGE,
+                                    format!("bytes={}-{}", v, sfile.offset + page_length - 1),
+                                )
+                                .send()
+                                .await?
+                                .error_for_status()?;
+                            assert_eq!(response.status(), 206);
+                            stream = response.bytes_stream();
+                            continue;
+                        }
+                        Ok(None) => {
+                            break;
+                        }
+                        Err(_) => {
+                            // timed out: reopen from current byte offset
+                            let response = client
+                                .get(url.clone())
+                                .header(
+                                    RANGE,
+                                    format!("bytes={}-{}", v, sfile.offset + page_length - 1),
+                                )
+                                .send()
+                                .await?
+                                .error_for_status()?;
+                            assert_eq!(response.status(), 206);
+                            stream = response.bytes_stream();
+                            continue;
+                        }
+                    }
 
                     v += data.len() as u64;
                     progress(min(v, sfile.length), sfile.length);
@@ -652,12 +699,11 @@ impl XvdFile {
                     pending.extend_from_slice(&data);
 
                     while pending.len() >= 4096 {
+                        if page_in_section >= page_start + page_count || remaining == 0 {
+                            break;
+                        }
                         let chunk = pending.split_to(4096);
-                        // println!("4096 chunk: {} bytes", chunk.len());
-
                         page.copy_from_slice(&chunk);
-                        // println!("{} {:02x?}", page_in_section, page);
-                        // return Ok(());
                         tweak.update_data_unit(match &s.data_units {
                             Some(units) => {
                                 *units.get(page_in_section as usize).ok_or_else(|| {
@@ -677,7 +723,6 @@ impl XvdFile {
                             None => page_in_section as u32,
                         });
                         page = decrypt_page_xts(page, tweak, &tweak_cipher, &data_cipher);
-                        // out.write_all(&page).await?;
                         let to_write = remaining.min(PAGE_SIZE as u64) as usize;
                         out.write_all(&page[..to_write]).await?;
                         remaining -= to_write as u64;
