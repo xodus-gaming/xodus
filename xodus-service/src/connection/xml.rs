@@ -4,9 +4,7 @@ use xodus::{
         live::ExchangeUserTokenOutcome,
         secrets::Token,
         soap,
-        xgameruntime::xuser::{
-            MSATokenRequest, MSATokenResponse
-        },
+        xgameruntime::xuser::{MSATokenRequest, MSATokenResponse},
     },
     proto::xodus::XodusMessageType,
 };

@@ -8,12 +8,12 @@ from xml.sax.saxutils import escape
 
 
 XML_MAGIC = 0x58445358
-XSTS_TOKEN_REQUEST = 3
+XSTS_TOKEN_REQUEST = 5
 
 
 def build_xml(url: str) -> bytes:
-    # Match serde PascalCase field naming in XSTSTokenRequest.
-    xml = f"<XSTSTokenRequest><Url>{escape(url)}</Url></XSTSTokenRequest>"
+    # Match serde PascalCase field naming in MSATokenRequest.
+    xml = f"<MSATokenRequest><ClientId>{escape(url)}</ClientId></MSATokenRequest>"
     return xml.encode("utf-8")
 
 
@@ -27,10 +27,10 @@ def build_packet(payload: bytes) -> bytes:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Send an XSTS_TOKEN_REQUEST XML message to a Unix socket"
+        description="Send an MSA_TOKEN_REQUEST XML message to a Unix socket"
     )
     parser.add_argument("socket_path", help="Path to Unix socket (for example /run/user/1000/xodus.sock)")
-    parser.add_argument("url", help="Url field value for XSTSTokenRequest")
+    parser.add_argument("clientid", help="ClientId field value for MSATokenRequest")
     args = parser.parse_args()
 
     payload = build_xml(args.url)
