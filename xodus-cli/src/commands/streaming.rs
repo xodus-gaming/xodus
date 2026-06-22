@@ -1,5 +1,6 @@
 use std::{collections::HashMap, path::Path};
 
+use fs2::available_space;
 use futures_util::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use tokio::{
@@ -28,7 +29,7 @@ enum ProgressEvent {
     UpdateRemaining { name: String, total: u64 }
 }
 
-pub async fn run(client: &reqwest::Client, source: String, destination: String, market: Option<String>) {
+pub async fn run(client: &reqwest::Client, source: String, destination: String, parallel: Option<usize>, market: Option<String>) {
     let vurl = if source.starts_with("http://") || source.starts_with("https://") {
         source
     } else {
@@ -219,6 +220,32 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
     .map(|(_, v)| v.length)    
     .reduce(|old, c|old+c).map_or(0, |x|x);
 
+    let remaining_cache_size = l.saturating_sub(remote_file.cached_len());
+    let required_free_space = remaining_cache_size.saturating_add(total_size);
+    let available_free_space = match available_space(out) {
+        Ok(space) => space,
+        Err(err) => {
+            eprintln!(
+                "failed to determine available space for {}: {}",
+                out.display(),
+                err
+            );
+            return;
+        }
+    };
+
+    if available_free_space < required_free_space {
+        eprintln!(
+            "not enough free disk space on {}: need {} bytes, have {} bytes (remaining cache: {}, files: {})",
+            out.display(),
+            required_free_space,
+            available_free_space,
+            remaining_cache_size,
+            total_size
+        );
+        return;
+    }
+
     tx.send(ProgressEvent::UpdateRemaining { name: "Downloading".to_owned(), total: total_size }).await.ok();
 
     let remote_xvd_ref = &remote_xvd;
@@ -231,7 +258,7 @@ pub async fn run(client: &reqwest::Client, source: String, destination: String, 
             true
         }
     })
-    .map(|(n, v)| Job{ name: n.clone(), content: SegmentFile { offset: v.offset, length: v.length, data_hashs: vec![] } }).enumerate()).for_each_concurrent(4, |(id, job)| {
+    .map(|(n, v)| Job{ name: n.clone(), content: SegmentFile { offset: v.offset, length: v.length, data_hashs: vec![] } }).enumerate()).for_each_concurrent(parallel.unwrap_or(4), |(id, job)| {
         let tx = tx.clone();
         async move {
             let client = reqwest::Client::new();

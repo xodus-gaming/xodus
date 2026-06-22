@@ -685,9 +685,13 @@ impl XvdFile {
                         page_in_section += 1;
                     }
                 }
+                if remaining > 0 {
+                    return Err(Box::new(std::io::Error::new(ErrorKind::Other, format!("{} of {} missing", remaining, sfile.length))));
+                }
+                return Ok(());
             }
         }
-        Ok(())
+        return Err(Box::new(std::io::Error::new(ErrorKind::NotFound, "File not found in encrypted section")));
     }
 
     pub async fn download_file_sync<Reader, Writer>(
