@@ -664,7 +664,7 @@ impl XvdFile {
                                 .get(url.clone())
                                 .header(
                                     RANGE,
-                                    format!("bytes={}-{}", v, sfile.offset + page_length - 1),
+                                    format!("bytes={}-{}", sfile.offset + v, sfile.offset + page_length - 1),
                                 )
                                 .send()
                                 .await?
@@ -682,7 +682,7 @@ impl XvdFile {
                                 .get(url.clone())
                                 .header(
                                     RANGE,
-                                    format!("bytes={}-{}", v, sfile.offset + page_length - 1),
+                                    format!("bytes={}-{}", sfile.offset + v, sfile.offset + page_length - 1),
                                 )
                                 .send()
                                 .await?
