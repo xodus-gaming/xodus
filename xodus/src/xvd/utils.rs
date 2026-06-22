@@ -18,7 +18,7 @@ use zerocopy::IntoBytes;
 use crate::licensing::splicense::ContentKey;
 use crate::models::xvd::{
     PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment,
-    XvdSegmentMetadataSegmentFlags, XvdUserDataHeader, XvdUserDataPackageFileEntry,
+    XvdUserDataHeader, XvdUserDataPackageFileEntry,
     XvdUserDataPackageFilesHeader,
 };
 use async_trait::async_trait;
@@ -310,8 +310,7 @@ impl XvdFile {
         let mut file = OpenOptions::new()
             .read(true)
             .open(path.clone())
-            .await
-            .expect("Unable to open file");
+            .await?;
         Self::parse(&mut file).await
     }
 
@@ -325,14 +324,6 @@ impl XvdFile {
         let (_hash_tree_levels, hash_tree_page_count) = xvd_header.hash_tree_info();
         let xvc_info_offset = xvd_header.xvc_info_offset(hash_tree_page_count);
 
-        println!("Version: {}", xvd_header.format_version);
-        println!("XvcLength: {}", xvd_header.xvc_data_length);
-        println!("volume_flags: 0x{:X}", xvd_header.volume_flags);
-        println!("is_encrypted: {}", xvd_header.volume_flags.is_encrypted());
-        println!(
-            "legacy_sector_size: {}",
-            xvd_header.volume_flags.is_legacy_sector_size()
-        );
 
         let mut region_headers: Vec<XvcRegionHeader> = Vec::new();
         // let mut update_segments: Vec<XvdUpdateSegment> = Vec::new();
@@ -374,16 +365,7 @@ impl XvdFile {
             BufReader::with_capacity(PAGES_PER_BLOCK * XvdHashEntry::RAW_SIZE as usize, file);
         for h in region_headers {
             let key_id = h.key_id;
-            let offset = h.offset;
             let length = h.length;
-            println!(
-                "key_id {:?} ({} + {} = {})",
-                key_id,
-                offset,
-                length,
-                offset + length
-            );
-
             match key_id.get() {
                 None => continue,
                 Some(0) => (),
@@ -457,13 +439,6 @@ impl XvdFile {
             let mut off = user_data_offset + user_data_header.length as u64;
             file.seek(SeekFrom::Start(off)).await?;
             let user_data_package_files_header = read_struct!(XvdUserDataPackageFilesHeader, file)?;
-            let c = user_data_package_files_header.file_count;
-            let fullname = user_data_package_files_header.package_full_name;
-            println!(
-                "package {} / file count {}",
-                String::from_utf16(&fullname).unwrap(),
-                c
-            );
             off += XvdUserDataPackageFilesHeader::RAW_SIZE as u64;
             for _ in 0..user_data_package_files_header.file_count {
                 file.seek(SeekFrom::Start(off)).await?;
@@ -477,7 +452,6 @@ impl XvdFile {
                     .position(|&c| c == 0)
                     .unwrap_or(fullname.len());
                 let pfull_name: String = String::from_utf16(&fullname[..end]).unwrap();
-                println!("file {} / file offset {} size {}", pfull_name, o, s);
 
                 files.insert(
                     pfull_name,
@@ -529,28 +503,11 @@ impl XvdFile {
                 .await?;
                 file.read_exact(buf.as_mut_bytes()).await?;
                 let file_name: String = String::from_utf16(buf.as_slice()).unwrap();
-                println!(
-                    "{segment_no}/{page_offset} {} {}",
-                    if segment.flags == XvdSegmentMetadataSegmentFlags::KEEP_ENCRYPTED_ON_DISK {
-                        "E"
-                    } else {
-                        " "
-                    },
-                    file_name
-                );
                 let page_length = if segment.filesize == 0 {
                     1
                 } else {
                     segment.filesize.div_ceil(PAGE_SIZE as u64)
                 };
-                // section.files.push(FileSegment {
-                //     file_name,
-                //     data_offset: page_offset * PAGE_SIZE as u64,
-                //     data_length: segment.filesize,
-                //     page_offset,
-                //     page_length,
-                //     keep_encrypted: segment.flags == XvdSegmentMetadataSegmentFlags::KEEP_ENCRYPTED_ON_DISK,
-                // });
                 if !(page_offset * (PAGE_SIZE as u64)
                     < section.section_offset + section.section_length)
                 {
@@ -558,25 +515,9 @@ impl XvdFile {
                 }
                 let end = page_offset as usize - segment_page_start as usize
                     + segment.filesize.div_ceil(PAGE_SIZE as u64) as usize;
-                // min(section.data_hashs.len(), end)
-                let mut data_hashs: Vec<[u8; 20]> = section.data_hashs
+                let data_hashs: Vec<[u8; 20]> = section.data_hashs
                     [page_offset as usize - segment_page_start as usize..end]
                     .into();
-                // data_hashs.reserve_exact(end);
-                // while data_hashs.len() < end {
-                //     let page_missing = data_hashs.len();
-                //     let mut found = false;
-                //     for section in &self.encrypted_section_infos {
-                //         if (page_offset + page_missing as u64) * PAGE_SIZE as u64 >= section.section_offset && ((page_offset + page_missing as u64) * PAGE_SIZE as u64) < section.section_offset + section.section_length {
-                //             data_hashs.push(section.data_hashs[(page_offset + page_missing as u64 - section.section_offset.div_ceil(PAGE_SIZE as u64))as usize]);
-                //             found = true;
-                //             break;
-                //         }
-                //     }
-                //     if !found {
-                //         break;
-                //     }
-                // }
                 files.insert(
                     file_name,
                     SegmentFile {
@@ -615,12 +556,9 @@ impl XvdFile {
                 let mut tweak = Tweak::new(0, s.header_id, s.vduid);
                 let tweak_cipher = Aes128::new((&tweak_key).into());
                 let data_cipher = Aes128::new((&data_key).into());
-                // let freader = SectionReader::new(file, sfile.offset, sfile.length, s.header_id, s.vduid, full_key, s.data_units);
                 let file_offset_in_section = sfile.offset - s.section_offset;
                 let page_start = file_offset_in_section / PAGE_SIZE as u64;
                 let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
-                // let page_start = (sfile.offset - s.section_offset).div_ceil(PAGE_SIZE as u64);
-                // let page_end = page_start + sfile.length.div_ceil(PAGE_SIZE as u64);
 
                 let mut page = [0u8; PAGE_SIZE];
                 let mut remaining = sfile.length;
@@ -642,10 +580,7 @@ impl XvdFile {
                         None => page_in_section as u32,
                     });
                     file.read_exact(&mut page).await?;
-                    // println!("{} {:02x?}", page_in_section, page);
-                    // return Ok(());
                     page = decrypt_page_xts(page, tweak, &tweak_cipher, &data_cipher);
-                    // out.write_all(&page).await?;
                     let to_write = remaining.min(PAGE_SIZE as u64) as usize;
                     out.write_all(&page[..to_write]).await?;
                     remaining -= to_write as u64;
@@ -655,25 +590,22 @@ impl XvdFile {
         Ok(())
     }
 
-    pub async fn download_file_http<Writer>(
+    pub async fn download_file_http<Writer, Progress>(
         &self,
         client: &reqwest::Client,
         url: String,
         out: &mut Writer,
         sfile: &SegmentFile,
         full_key: [u8; 32],
+        mut progress: Progress,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
         Writer: AsyncWrite + Unpin,
+        Progress: FnMut(u64, u64)
     {
         if sfile.length == 0 {
             return Ok(());
         }
-        // let c: reqwest::Request = client.get(url).header(RANGE, format!("bytes={}-{}", sfile.offset, sfile.offset + sfile.length.div_ceil(PAGE_SIZE as u64) * PAGE_SIZE as u64 - 1)).build()?;
-        // if let Some(b) = c.body() {
-        //     b.
-        // }
-        // let response = client.execute(c).await?.error_for_status()?;
         let page_length = sfile.length.div_ceil(PAGE_SIZE as u64) * PAGE_SIZE as u64;
         let response = client
             .get(url)
@@ -685,23 +617,9 @@ impl XvdFile {
             .await?
             .error_for_status()?;
         assert_eq!(response.status(), 206);
-        println!("status: {}", response.status());
-        println!("headers:\n{:#?}", response.headers());
-        println!(
-            "content-range: {:?}",
-            response.headers().get(reqwest::header::CONTENT_RANGE)
-        );
-        println!(
-            "content-length: {:?}",
-            response.headers().get(reqwest::header::CONTENT_LENGTH)
-        );
-        // let mut stream = response.bytes_stream();
-        // while let Some(item) = stream.next().await {
-        //     let data = item?;
-        //     println!("Chunk: {:?}", data);
-        // }
         let mut stream = response.bytes_stream();
         let mut pending = bytes::BytesMut::new();
+        let mut v: u64 = 0;
 
         for s in &self.encrypted_section_infos {
             if sfile.offset >= s.section_offset
@@ -725,22 +643,12 @@ impl XvdFile {
                 let mut page = [0u8; PAGE_SIZE];
                 let mut remaining = sfile.length;
                 let mut page_in_section = page_start;
-                // for page_in_section in page_start..page_start + page_count {
-                //     tweak.update_data_unit(match &s.data_units {
-                //         Some(units) => *units
-                //             .get(page_in_section as usize)
-                //             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, format!("{} units {} page_in_section {} ({}+{})", "missing data unit", (*units).len(), page_in_section, page_start, page_count)))?,
-                //         None => page_in_section as u32,
-                //     });
-                //     file.read_exact(&mut page).await?;
-                //     page = decrypt_page_xts(page, tweak, &tweak_cipher, &data_cipher);
-                //     // out.write_all(&page).await?;
-                //     let to_write = remaining.min(PAGE_SIZE as u64) as usize;
-                //     out.write_all(&page[..to_write]).await?;
-                //     remaining -= to_write as u64;
-                // }
                 while let Some(item) = stream.next().await {
                     let data = item?;
+
+                    v += data.len() as u64;
+                    progress(min(v, sfile.length), sfile.length);
+
                     pending.extend_from_slice(&data);
 
                     while pending.len() >= 4096 {
@@ -777,13 +685,7 @@ impl XvdFile {
                         page_in_section += 1;
                     }
                 }
-                if remaining > 0 {
-                    println!("tail chunk: {} bytes", remaining);
-                }
             }
-        }
-        if !pending.is_empty() {
-            println!("tail chunk: {} bytes", pending.len());
         }
         Ok(())
     }
@@ -869,10 +771,6 @@ pub fn unpack_file(
 
         let part_start = part.bytes_start(*gp.logical_block_size()).unwrap();
         let part_len = part.bytes_len(*gp.logical_block_size()).unwrap();
-        println!(
-            "#{index}: '{}' start={} len={}",
-            part.name, part_start, part_len,
-        );
 
         if ntfs_partition.is_none() {
             ntfs_partition = Some((index, part.name.clone(), part_start, part_len));

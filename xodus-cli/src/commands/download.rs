@@ -3,92 +3,31 @@ use indicatif::{ProgressBar, ProgressStyle};
 use inquire::{MultiSelect, validator::Validation};
 use tokio::io::AsyncWriteExt;
 use xodus::{
-    XBOX_LIVE_PACKAGES_PC,
-    api::displaycatalog::find_products_by_id,
     models::{
-        packagespc::{PackageFile, PackageResponse},
-        secrets::Token,
+        packagespc::{PackageFile},
     },
 };
 
-use crate::{device, user};
+use crate::{package::{get_content_id, get_packages}};
 
 pub async fn run(client: &reqwest::Client, product: String, market: Option<String>, dry_run: bool) {
-    let displaycatalog = find_products_by_id(
-        client,
-        product,
-        market.unwrap_or("neutral".to_owned()),
-        vec!["en".to_string(), "neutral".to_string()],
-    )
-    .await;
-
-    let displaycatalog = match displaycatalog {
-        Ok(dc) => dc,
-        Err(err) => {
-            log::error!("Failed to load displaycatalog {err:?}");
+    let content_id_task = get_content_id(client, product, market).await;
+    let Ok(content_id) = content_id_task else {
+        let Err(err) = content_id_task else {
+            eprintln!("Unknown Error");
             return;
-        }
-    };
-
-    let product_details = displaycatalog.product;
-
-    let mut found_package = None;
-    'o: for availability in &product_details.display_sku_availabilities {
-        for package in &availability.sku.properties.packages {
-            if package
-                .platform_dependencies
-                .iter()
-                .any(|dep| dep.platform_name == "Windows.Desktop")
-            {
-                found_package = Some(package);
-                break 'o;
-            }
-        }
-    }
-
-    let Some(package) = found_package else {
-        log::error!(
-            "Windows.Desktop package not found, if you believe this is an error, please report it"
-        );
+        };
+        eprintln!("{}", err.to_string());
         return;
     };
 
-    let Some(content_id) = &package.content_id else {
-        log::error!("ContentId not found, if you believe this is an error, please report it");
-        return;
-    };
-
-    let dev_token = device::get_device_token().unwrap();
-    let Token::Legacy(dev_token) = dev_token else {
-        eprintln!("Invalid STS token");
-        return;
-    };
-    let user_token = user::get_token("http://Passport.NET/STS".to_string()).unwrap();
-    let Token::Legacy(legacy) = user_token else {
-        eprintln!("Unspported user token");
-        return;
-    };
-
-    let xsts_token =
-        xodus::api::xbox::run(client, dev_token, legacy, "http://update.xboxlive.com").await;
-
-    let response = client
-        .get(format!(
-            "{XBOX_LIVE_PACKAGES_PC}/GetBasePackage/{content_id}"
-        ))
-        .header("x-xbl-contract-version", "3")
-        .header(
-            "Authorization",
-            xodus::api::xbox::get_xsts_auth_header(xsts_token),
-        )
-        .send()
-        .await
-        .unwrap();
-
-    let res: PackageResponse = response.json().await.expect("Failed to get data");
-
-    let PackageResponse::Found(package) = res else {
-        log::error!("Package was not found, is it owned by the user?");
+    let package_result = get_packages(client, content_id.clone()).await;
+    let Ok(package) = package_result else {
+        let Err(err) = package_result else {
+            eprintln!("Unknown Error");
+            return;
+        };
+        eprintln!("{}", err.to_string());
         return;
     };
 

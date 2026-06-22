@@ -4,6 +4,7 @@ mod device;
 mod license;
 mod user;
 mod webview;
+mod package;
 use xodus::xal::client_params::CLIENT_WINDOWS;
 
 #[derive(Subcommand)]
@@ -30,6 +31,12 @@ enum SubCommand {
         market: Option<String>,
     },
     Login,
+    Streaming {
+        source: String,
+        destination: String,
+        #[arg(short, long)]
+        market: Option<String>,
+    }
 }
 
 #[derive(Parser)]
@@ -84,6 +91,15 @@ async fn main() {
                 path,
                 destination,
                 market.unwrap_or("neutral".to_string()),
+            )
+            .await;
+        }
+        SubCommand::Streaming { source, destination, market } => {
+            commands::streaming::run(
+                &client,
+                source,
+                destination,
+                market,
             )
             .await;
         }

@@ -26,7 +26,7 @@ struct OpenedHttpStream {
     stream: ByteStream,
 }
 
-pub struct HttpRead {
+pub struct HttpRead<'t> {
     client: reqwest::Client,
     url: String,
     len: u64,
@@ -35,10 +35,14 @@ pub struct HttpRead {
     active: Option<ActiveHttpStream>,
     pending_chunk: Option<Bytes>,
     pending_chunk_offset: usize,
+    progress: Option<Box<dyn FnMut(u64, u64) + Send + 't>>,
 }
 
-impl HttpRead {
-    pub async fn open(client: reqwest::Client, url: impl Into<String>) -> std::io::Result<Self> {
+impl<'t> HttpRead<'t> {
+    pub async fn open<Progress>(client: reqwest::Client, url: impl Into<String>, progress: Option<Progress>) -> std::io::Result<Self>
+    where 
+        Progress: FnMut(u64, u64) + Send + 't,
+    {
         let url = url.into();
         let initial = open_http_stream(client.clone(), url.clone(), None).await?;
 
@@ -55,9 +59,10 @@ impl HttpRead {
             }),
             pending_chunk: None,
             pending_chunk_offset: 0,
+            progress: progress.map(|v| Box::new(v) as Box<dyn FnMut(u64, u64) + Send + 't >),
         })
     }
-
+ 
     pub fn len(&self) -> u64 {
         self.len
     }
@@ -122,6 +127,10 @@ impl HttpRead {
         self.pending_chunk_offset += to_copy;
         self.pos += to_copy as u64;
 
+        if let Some(progress) = self.progress.as_mut() {
+            progress(self.pos, self.len);
+        }
+
         if self.pending_chunk_offset >= chunk.len() {
             self.pending_chunk = None;
             self.pending_chunk_offset = 0;
@@ -131,7 +140,7 @@ impl HttpRead {
     }
 }
 
-impl AsyncRead for HttpRead {
+impl<'t> AsyncRead for HttpRead<'t> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -813,8 +822,8 @@ mod tests {
         (0..16384).map(|i| (i % 251) as u8).collect()
     }
 
-    async fn open_cached_reader(server: &TestServer, cache: &PathBuf) -> PrefixCacheFile<HttpRead> {
-        let http = HttpRead::open(reqwest::Client::new(), &server.url)
+    async fn open_cached_reader<'t>(server: &TestServer, cache: &PathBuf) -> PrefixCacheFile<HttpRead<'t>> {
+        let http = HttpRead::open(reqwest::Client::new(), &server.url, Some(|_,_|{}))
             .await
             .unwrap();
         let len = http.len();
