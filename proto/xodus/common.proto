@@ -6,7 +6,6 @@ enum XodusMessageType {
     UNKNOWN = 0;
     PING = 1;
     PONG = 2;
-    reserved 3,4;
-    MSA_TOKEN_REQUEST=5;
-    MSA_TOKEN_RESPONSE=6;
+    MSA_TOKEN_REQUEST=3;
+    MSA_TOKEN_RESPONSE=4;
 }
