@@ -26,7 +26,9 @@ pub struct XstsResponse {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct DisplayClaims {
+    #[serde(default)]
     xui: Vec<XuiClaim>,
+    #[serde(default)]
     xti: Vec<XtiClaim>,
 }
 
