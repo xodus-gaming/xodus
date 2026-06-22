@@ -1,4 +1,7 @@
-use xodus::xvd::{streaming2::HttpFileAsync, utils::{XvdFile, unpack_file}};
+use xodus::xvd::{
+    streaming2::HttpFileAsync,
+    utils::{XvdFile, unpack_file},
+};
 
 use crate::license::get_license;
 pub async fn run(client: &reqwest::Client, path: String, destination: String, market: String) {
