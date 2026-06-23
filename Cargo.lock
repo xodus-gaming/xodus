@@ -534,9 +534,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.11.1"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
+checksum = "8ae3f5d315924270530207e2a68396c3cc547f6dca3fbdca317cfb1a51edb593"
 
 [[package]]
 name = "cairo-rs"
@@ -1580,6 +1580,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "fs2"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -5960,10 +5970,12 @@ dependencies = [
  "bergshamra",
  "bergshamra-c14n",
  "bitflags 2.13.0",
+ "bytes",
  "cbc 0.2.1",
  "chrono",
  "dbus-secret-service-keyring-store",
  "ed25519-dalek",
+ "futures-util",
  "gpt",
  "hmac 0.12.1",
  "keyring-core",
@@ -5979,6 +5991,7 @@ dependencies = [
  "smbios-lib",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
  "url",
  "uuid",
  "xal",
@@ -5993,6 +6006,7 @@ dependencies = [
  "chrono",
  "clap",
  "env_logger",
+ "fs2",
  "futures-util",
  "indicatif",
  "inquire",
