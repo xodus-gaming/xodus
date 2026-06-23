@@ -8,12 +8,12 @@ from xml.sax.saxutils import escape
 
 
 XML_MAGIC = 0x58445358
-XSTS_TOKEN_REQUEST = 5
+XSTS_TOKEN_REQUEST = 3
 
 
 def build_xml(url: str) -> bytes:
     # Match serde PascalCase field naming in MSATokenRequest.
-    xml = f"<MSATokenRequest><ClientId>{escape(url)}</ClientId></MSATokenRequest>"
+    xml = f"<?xml version=\"1.0\"?><MSATokenRequest><ClientId>{escape(url)}</ClientId></MSATokenRequest>"
     return xml.encode("utf-8")
 
 
@@ -33,7 +33,7 @@ def main() -> int:
     parser.add_argument("clientid", help="ClientId field value for MSATokenRequest")
     args = parser.parse_args()
 
-    payload = build_xml(args.url)
+    payload = build_xml(args.clientid)
     packet = build_packet(payload)
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
