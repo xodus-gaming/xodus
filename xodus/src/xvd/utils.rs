@@ -351,9 +351,9 @@ impl XvdFile {
                 Some(n) => todo!("KeyID other than 0 or unencrypted is not supported, found {n}"),
             }
 
-            let mut data_units: Vec<u32> = vec![];
             let start_page = offset_to_page_number(h.offset - user_data_offset);
             let num_pages = bytes_to_pages(length);
+            let mut data_units: Vec<u32> = Vec::with_capacity(num_pages as usize);
 
             let mut page = 0;
             loop {
