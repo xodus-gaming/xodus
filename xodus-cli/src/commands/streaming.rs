@@ -174,7 +174,14 @@ pub async fn run(
             rfiles = sfiles;
             // add unencrypted files of parse_user_package_files
             for (k, v) in &files {
-                rfiles.insert(k.clone(), SegmentFile { offset: v.offset, length: v.length, data_hashs: vec![] });
+                rfiles.insert(
+                    k.clone(),
+                    SegmentFile {
+                        offset: v.offset,
+                        length: v.length,
+                        data_hashs: vec![],
+                    },
+                );
             }
         }
     }
@@ -252,7 +259,14 @@ pub async fn run(
                 lfiles = sfiles;
                 // add unencrypted files of parse_user_package_files
                 for (k, v) in &files {
-                    lfiles.insert(k.clone(), SegmentFile { offset: v.offset, length: v.length, data_hashs: vec![] });
+                    lfiles.insert(
+                        k.clone(),
+                        SegmentFile {
+                            offset: v.offset,
+                            length: v.length,
+                            data_hashs: vec![],
+                        },
+                    );
                 }
             }
         }

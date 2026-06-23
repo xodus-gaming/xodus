@@ -1,8 +1,10 @@
 use std::io::{Read, Seek};
 use std::path::{Path, PathBuf};
 
+use ntfs::attribute_value::{
+    NtfsAttributeListNonResidentAttributeValue, NtfsAttributeValue, NtfsDataRun,
+};
 use ntfs::{Ntfs, NtfsAttributeType, NtfsFile};
-use ntfs::attribute_value::{NtfsAttributeListNonResidentAttributeValue, NtfsAttributeValue, NtfsDataRun};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NtfsDataRunReport {
@@ -134,7 +136,10 @@ where
                 resident_data: false,
                 resident_data_length: 0,
                 value_length,
-                data_runs: value.data_runs().map(data_run_report_from_run).collect::<ntfs::Result<_>>()?,
+                data_runs: value
+                    .data_runs()
+                    .map(data_run_report_from_run)
+                    .collect::<ntfs::Result<_>>()?,
             },
             NtfsAttributeValue::AttributeListNonResident(value) => NtfsStreamLayoutReport {
                 file_record_number: file.file_record_number(),
@@ -142,7 +147,11 @@ where
                 resident_data: false,
                 resident_data_length: 0,
                 value_length,
-                data_runs: synthesize_data_runs_from_value(fs, value, file.ntfs().cluster_size() as usize)?,
+                data_runs: synthesize_data_runs_from_value(
+                    fs,
+                    value,
+                    file.ntfs().cluster_size() as usize,
+                )?,
             },
         };
 
@@ -165,7 +174,10 @@ where
     let mut buf = vec![0u8; cluster_size.max(1)];
 
     loop {
-        let start = attached.data_position().value().map(|position| position.get());
+        let start = attached
+            .data_position()
+            .value()
+            .map(|position| position.get());
         let bytes_read = attached.read(&mut buf)?;
         if bytes_read == 0 {
             break;
@@ -194,10 +206,15 @@ fn append_run_segment(runs: &mut Vec<NtfsDataRunReport>, start: Option<u64>, len
     }
 }
 
-fn data_run_report_from_run(data_run: ntfs::Result<NtfsDataRun>) -> ntfs::Result<NtfsDataRunReport> {
+fn data_run_report_from_run(
+    data_run: ntfs::Result<NtfsDataRun>,
+) -> ntfs::Result<NtfsDataRunReport> {
     let data_run = data_run?;
     Ok(NtfsDataRunReport {
-        start: data_run.data_position().value().map(|position| position.get()),
+        start: data_run
+            .data_position()
+            .value()
+            .map(|position| position.get()),
         length: data_run.allocated_size(),
     })
 }

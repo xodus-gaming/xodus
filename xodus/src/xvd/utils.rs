@@ -10,14 +10,14 @@ use std::fmt::Debug;
 use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::task::block_in_place;
 use tokio::time::{sleep, timeout};
 use tokio::{
     fs::OpenOptions,
     io::{AsyncReadExt, AsyncSeekExt},
 };
-use zerocopy::IntoBytes;
 use tokio_util::io::SyncIoBridge;
-use tokio::task::block_in_place;
+use zerocopy::IntoBytes;
 
 use crate::licensing::splicense::ContentKey;
 use crate::models::xvd::{
@@ -106,24 +106,24 @@ impl<R: Seek> Seek for SyncSubstream<R> {
             SeekFrom::Start(offset) => offset,
             SeekFrom::Current(delta) => {
                 if delta >= 0 {
-                    self.pos
-                        .checked_add(delta as u64)
-                        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid relative seek"))?
+                    self.pos.checked_add(delta as u64).ok_or_else(|| {
+                        Error::new(ErrorKind::InvalidInput, "invalid relative seek")
+                    })?
                 } else {
-                    self.pos
-                        .checked_sub(delta.unsigned_abs())
-                        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid relative seek"))?
+                    self.pos.checked_sub(delta.unsigned_abs()).ok_or_else(|| {
+                        Error::new(ErrorKind::InvalidInput, "invalid relative seek")
+                    })?
                 }
             }
             SeekFrom::End(delta) => {
                 if delta >= 0 {
-                    self.len
-                        .checked_add(delta as u64)
-                        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid end-relative seek"))?
+                    self.len.checked_add(delta as u64).ok_or_else(|| {
+                        Error::new(ErrorKind::InvalidInput, "invalid end-relative seek")
+                    })?
                 } else {
-                    self.len
-                        .checked_sub(delta.unsigned_abs())
-                        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid end-relative seek"))?
+                    self.len.checked_sub(delta.unsigned_abs()).ok_or_else(|| {
+                        Error::new(ErrorKind::InvalidInput, "invalid end-relative seek")
+                    })?
                 }
             }
         };
@@ -452,7 +452,9 @@ impl XvdFile {
 
         for section in &self.encrypted_section_infos {
             let section_start = section.section_offset;
-            let section_end = section.section_offset.saturating_add(section.section_length);
+            let section_end = section
+                .section_offset
+                .saturating_add(section.section_length);
 
             if section_end <= start || section_start >= end {
                 continue;
@@ -708,7 +710,9 @@ impl XvdFile {
             };
 
             let file_end = file.offset.saturating_add(file.length);
-            let section_end = section.section_offset.saturating_add(section.section_length);
+            let section_end = section
+                .section_offset
+                .saturating_add(section.section_length);
             if file_end > section_end {
                 return Err(io::Error::new(
                     ErrorKind::InvalidInput,
@@ -720,21 +724,18 @@ impl XvdFile {
                 .into());
             }
 
-            let segment_page_start =
-                section.section_offset.div_ceil(PAGE_SIZE as u64);
+            let segment_page_start = section.section_offset.div_ceil(PAGE_SIZE as u64);
             let page_offset = file.offset.div_ceil(PAGE_SIZE as u64);
             let page_count = file.length.div_ceil(PAGE_SIZE as u64) as usize;
-            let start = page_offset
-                .checked_sub(segment_page_start)
-                .ok_or_else(|| {
-                    io::Error::new(
-                        ErrorKind::InvalidInput,
-                        format!(
-                            "segment page offset before section start: {} ({})",
-                            name, file.offset
-                        ),
-                    )
-                })? as usize;
+            let start = page_offset.checked_sub(segment_page_start).ok_or_else(|| {
+                io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!(
+                        "segment page offset before section start: {} ({})",
+                        name, file.offset
+                    ),
+                )
+            })? as usize;
             let end = start + page_count;
 
             if end > section.data_hashs.len() {
@@ -796,7 +797,9 @@ impl XvdFile {
                 .partitions()
                 .iter()
                 .find(|(_, part)| part.is_used())
-                .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "no used GPT partition found"))?;
+                .ok_or_else(|| {
+                    io::Error::new(ErrorKind::NotFound, "no used GPT partition found")
+                })?;
 
             let part_start = part.bytes_start(*gp.logical_block_size()).unwrap();
             let part_len = part.bytes_len(*gp.logical_block_size()).unwrap();
@@ -924,8 +927,9 @@ impl XvdFile {
             return Ok(());
         }
 
-        let s =  &self.encrypted_section_infos.iter().find(|s| sfile.offset >= s.section_offset
-                && sfile.offset < s.section_offset + s.section_length);
+        let s = &self.encrypted_section_infos.iter().find(|s| {
+            sfile.offset >= s.section_offset && sfile.offset < s.section_offset + s.section_length
+        });
 
         let mut tweak = None;
         let mut tweak_cipher = None;
@@ -1032,24 +1036,27 @@ impl XvdFile {
                 page.copy_from_slice(&chunk);
                 if let Some(tweak) = tweak.as_mut() {
                     tweak.update_data_unit(match &s.unwrap().data_units {
-                        Some(units) => {
-                            *units.get(page_in_section as usize).ok_or_else(|| {
-                                io::Error::new(
-                                    io::ErrorKind::InvalidInput,
-                                    format!(
-                                        "{} units {} page_in_section {} ({}+{})",
-                                        "missing data unit",
-                                        (*units).len(),
-                                        page_in_section,
-                                        page_start,
-                                        page_count
-                                    ),
-                                )
-                            })?
-                        }
+                        Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                format!(
+                                    "{} units {} page_in_section {} ({}+{})",
+                                    "missing data unit",
+                                    (*units).len(),
+                                    page_in_section,
+                                    page_start,
+                                    page_count
+                                ),
+                            )
+                        })?,
                         None => page_in_section as u32,
                     });
-                    page = decrypt_page_xts(page, *tweak, &tweak_cipher.as_ref().unwrap(), &data_cipher.as_ref().unwrap());
+                    page = decrypt_page_xts(
+                        page,
+                        *tweak,
+                        &tweak_cipher.as_ref().unwrap(),
+                        &data_cipher.as_ref().unwrap(),
+                    );
                 }
                 let to_write = remaining.min(PAGE_SIZE as u64) as usize;
                 while let Err(err) = out.write_all(&page[..to_write]).await {
