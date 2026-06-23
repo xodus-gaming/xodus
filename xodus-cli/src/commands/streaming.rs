@@ -306,18 +306,11 @@ pub async fn run(
 
     let full_key = content_key.unpack(&key).expect("failed to unpack");
 
-    for (k, v1) in &rfiles {
-        if if let Some(v2) = lfiles.get(k) {
-            v1.data_hashs != v2.data_hashs
-        } else {
-            true
-        } {}
-    }
     let total_size = rfiles
         .iter()
         .filter(|(k, v1)| {
             if let Some(v2) = lfiles.get(*k) {
-                v1.data_hashs != v2.data_hashs
+                v1.data_hashs != v2.data_hashs || v1.data_hashs.len() == 0
             } else {
                 true
             }
@@ -365,7 +358,7 @@ pub async fn run(
             .iter()
             .filter(|(k, v1)| {
                 if let Some(v2) = lfiles.get(*k) {
-                    v1.data_hashs != v2.data_hashs
+                    v1.data_hashs != v2.data_hashs || v1.data_hashs.len() == 0
                 } else {
                     true
                 }
