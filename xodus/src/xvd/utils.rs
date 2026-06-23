@@ -16,12 +16,15 @@ use tokio::{
     io::{AsyncReadExt, AsyncSeekExt},
 };
 use zerocopy::IntoBytes;
+use tokio_util::io::SyncIoBridge;
+use tokio::task::block_in_place;
 
 use crate::licensing::splicense::ContentKey;
 use crate::models::xvd::{
     PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment,
     XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,
 };
+use crate::xvd::streaming_ntfs::collect_ntfs_stream_layouts;
 use async_trait::async_trait;
 
 use crate::xvd::crypt::{SectionReader, Tweak, decrypt_page_xts};
@@ -35,6 +38,128 @@ use crate::{
     },
     xvd::math::page_number_to_offset,
 };
+
+pub struct SyncSubstream<R> {
+    inner: R,
+    start: u64,
+    len: u64,
+    pos: u64,
+}
+
+impl<R> Debug for SyncSubstream<R> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SyncSubstream")
+            .field("start", &self.start)
+            .field("len", &self.len)
+            .field("pos", &self.pos)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<R> SyncSubstream<R> {
+    pub fn new(inner: R, start: u64, len: u64) -> Self {
+        Self {
+            inner,
+            start,
+            len,
+            pos: 0,
+        }
+    }
+
+    pub fn len(&self) -> u64 {
+        self.len
+    }
+
+    pub fn into_inner(self) -> R {
+        self.inner
+    }
+
+    pub fn get_ref(&self) -> &R {
+        &self.inner
+    }
+
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.inner
+    }
+}
+
+impl<R: Read + Seek> Read for SyncSubstream<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.pos >= self.len {
+            return Ok(0);
+        }
+
+        let remaining = usize::try_from(self.len - self.pos)
+            .map_err(|_| Error::new(ErrorKind::InvalidData, "remaining range too large"))?;
+        let to_read = remaining.min(buf.len());
+
+        self.inner.seek(SeekFrom::Start(self.start + self.pos))?;
+        let read = self.inner.read(&mut buf[..to_read])?;
+        self.pos += read as u64;
+        Ok(read)
+    }
+}
+
+impl<R: Seek> Seek for SyncSubstream<R> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        let next = match pos {
+            SeekFrom::Start(offset) => offset,
+            SeekFrom::Current(delta) => {
+                if delta >= 0 {
+                    self.pos
+                        .checked_add(delta as u64)
+                        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid relative seek"))?
+                } else {
+                    self.pos
+                        .checked_sub(delta.unsigned_abs())
+                        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid relative seek"))?
+                }
+            }
+            SeekFrom::End(delta) => {
+                if delta >= 0 {
+                    self.len
+                        .checked_add(delta as u64)
+                        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid end-relative seek"))?
+                } else {
+                    self.len
+                        .checked_sub(delta.unsigned_abs())
+                        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid end-relative seek"))?
+                }
+            }
+        };
+
+        if next > self.len {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "seek past substream end",
+            ));
+        }
+
+        self.pos = next;
+        Ok(self.pos)
+    }
+}
+
+impl<R: Write + Seek> Write for SyncSubstream<R> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if self.pos >= self.len {
+            return Ok(0);
+        }
+
+        let remaining = usize::try_from(self.len - self.pos)
+            .map_err(|_| Error::new(ErrorKind::InvalidData, "remaining range too large"))?;
+        let to_write = remaining.min(buf.len());
+
+        self.inner.seek(SeekFrom::Start(self.start + self.pos))?;
+        let written = self.inner.write(&buf[..to_write])?;
+        self.pos += written as u64;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
 
 #[async_trait]
 pub trait AsyncReadSeek {
@@ -81,29 +206,44 @@ impl Debug for XvdEncryptionInfo {
     }
 }
 
-#[derive(Debug)]
-struct XvdStream {
-    file: std::fs::File,
+struct XvdStream<R> {
+    inner: R,
     offset: u64,
     end_offset: u64,
 
     encryption_info: Option<XvdEncryptionInfo>,
 }
 
-impl XvdStream {
+impl<R> Debug for XvdStream<R> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("XvdStream")
+            .field("offset", &self.offset)
+            .field("end_offset", &self.end_offset)
+            .field("encryption_info", &self.encryption_info)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<R> XvdStream<R> {
     fn len(&self) -> u64 {
         self.end_offset - self.offset
     }
 
+    fn into_inner(self) -> R {
+        self.inner
+    }
+}
+
+impl<R: Seek> XvdStream<R> {
     fn current_relative_pos(&mut self) -> std::io::Result<u64> {
-        let absolute = self.file.stream_position()?;
+        let absolute = self.inner.stream_position()?;
         absolute
             .checked_sub(self.offset)
             .ok_or_else(|| Error::new(ErrorKind::InvalidData, "stream before virtual start"))
     }
 }
 
-impl Read for XvdStream {
+impl<R: Read + Seek> Read for XvdStream<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let current = self.current_relative_pos()?;
         if current >= self.len() {
@@ -124,7 +264,7 @@ impl Read for XvdStream {
                         todo!("Reading outside of the encrypted section in one go is Unsupported");
                     }
                     let mut reader = SectionReader::new(
-                        &self.file,
+                        &mut self.inner,
                         s.section_offset,
                         s.section_length,
                         s.header_id,
@@ -142,11 +282,11 @@ impl Read for XvdStream {
             }
         }
 
-        self.file.read(&mut buf[..to_read])
+        self.inner.read(&mut buf[..to_read])
     }
 }
 
-impl Seek for XvdStream {
+impl<R: Seek> Seek for XvdStream<R> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         let new_relative = match pos {
             SeekFrom::Start(n) => n,
@@ -177,13 +317,13 @@ impl Seek for XvdStream {
             ));
         }
 
-        self.file
+        self.inner
             .seek(SeekFrom::Start(self.offset + new_relative))?;
         Ok(new_relative)
     }
 }
 
-impl Write for XvdStream {
+impl<R> Write for XvdStream<R> {
     fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
         Err(Error::new(
             ErrorKind::PermissionDenied,
@@ -306,6 +446,29 @@ impl XvdFile {
         self.header.vduid
     }
 
+    fn non_encrypted_prefix_len(&self, start: u64, len: u64) -> u64 {
+        let end = start.saturating_add(len);
+        let mut prefix_len = len;
+
+        for section in &self.encrypted_section_infos {
+            let section_start = section.section_offset;
+            let section_end = section.section_offset.saturating_add(section.section_length);
+
+            if section_end <= start || section_start >= end {
+                continue;
+            }
+
+            if start >= section_start {
+                return 0;
+            }
+
+            prefix_len = section_start.saturating_sub(start);
+            break;
+        }
+
+        prefix_len
+    }
+
     pub async fn parse_file(path: String) -> Result<Self, Box<dyn std::error::Error>> {
         let mut file = OpenOptions::new().read(true).open(path.clone()).await?;
         Self::parse(&mut file).await
@@ -419,7 +582,7 @@ impl XvdFile {
         })
     }
 
-    pub async fn readUserPackageFiles<Reader>(
+    pub async fn parse_user_package_files<Reader>(
         &self,
         file: &mut Reader,
     ) -> Result<HashMap<String, UserPackageFile>, Box<dyn std::error::Error>>
@@ -464,7 +627,7 @@ impl XvdFile {
     pub async fn parse_segment_metadata<Reader>(
         &mut self,
         file: &mut Reader,
-        segment_metadata: UserPackageFile,
+        segment_metadata: &UserPackageFile,
     ) -> Result<HashMap<String, SegmentFile>, Box<dyn std::error::Error>>
     where
         Reader: AsyncRead + AsyncSeek + Unpin,
@@ -526,6 +689,164 @@ impl XvdFile {
             }
         }
         Ok(files)
+    }
+
+    pub fn populate_segment_hashes(
+        &self,
+        files: &mut HashMap<String, SegmentFile>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for (name, file) in files.iter_mut() {
+            if !file.data_hashs.is_empty() {
+                continue;
+            }
+
+            let Some(section) = self.encrypted_section_infos.iter().find(|section| {
+                file.offset >= section.section_offset
+                    && file.offset < section.section_offset + section.section_length
+            }) else {
+                continue;
+            };
+
+            let file_end = file.offset.saturating_add(file.length);
+            let section_end = section.section_offset.saturating_add(section.section_length);
+            if file_end > section_end {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!(
+                        "segment file spans beyond encrypted section: {} ({}..{} > {}..{})",
+                        name, file.offset, file_end, section.section_offset, section_end
+                    ),
+                )
+                .into());
+            }
+
+            let segment_page_start =
+                section.section_offset.div_ceil(PAGE_SIZE as u64);
+            let page_offset = file.offset.div_ceil(PAGE_SIZE as u64);
+            let page_count = file.length.div_ceil(PAGE_SIZE as u64) as usize;
+            let start = page_offset
+                .checked_sub(segment_page_start)
+                .ok_or_else(|| {
+                    io::Error::new(
+                        ErrorKind::InvalidInput,
+                        format!(
+                            "segment page offset before section start: {} ({})",
+                            name, file.offset
+                        ),
+                    )
+                })? as usize;
+            let end = start + page_count;
+
+            if end > section.data_hashs.len() {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!(
+                        "missing data hashes for {}: need [{}..{}], have {}",
+                        name,
+                        start,
+                        end,
+                        section.data_hashs.len()
+                    ),
+                )
+                .into());
+            }
+
+            file.data_hashs = section.data_hashs[start..end].into();
+        }
+
+        Ok(())
+    }
+
+    pub async fn parse_ntfs_segment_metadata<Reader>(
+        &self,
+        file: &mut Reader,
+    ) -> Result<HashMap<String, SegmentFile>, Box<dyn std::error::Error>>
+    where
+        Reader: AsyncRead + AsyncSeek + Unpin,
+    {
+        let drive_data_offset = self.drive_data_offset;
+        let drive_size = self.header.drive_size;
+        let drive_plain_len = self.non_encrypted_prefix_len(drive_data_offset, drive_size);
+
+        block_in_place(|| {
+            let block_size = 4096;
+            let drive = SyncSubstream::new(
+                XvdStream {
+                    inner: SyncIoBridge::new(file),
+                    offset: drive_data_offset,
+                    end_offset: drive_data_offset + drive_plain_len,
+                    encryption_info: None,
+                },
+                0,
+                drive_plain_len,
+            );
+
+            let gp = gpt::GptConfig::new()
+                .writable(false)
+                .logical_block_size(if block_size == 512 {
+                    gpt::disk::LogicalBlockSize::Lb512
+                } else if block_size == 4096 {
+                    gpt::disk::LogicalBlockSize::Lb4096
+                } else {
+                    todo!("unsupported block_size: {}", block_size)
+                })
+                .open_from_device(drive)?;
+
+            let (_, part) = gp
+                .partitions()
+                .iter()
+                .find(|(_, part)| part.is_used())
+                .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "no used GPT partition found"))?;
+
+            let part_start = part.bytes_start(*gp.logical_block_size()).unwrap();
+            let part_len = part.bytes_len(*gp.logical_block_size()).unwrap();
+
+            let bridge = gp.take_device().into_inner().into_inner();
+            let partition_offset = drive_data_offset + part_start;
+            let partition_plain_len = self.non_encrypted_prefix_len(partition_offset, part_len);
+            let mut fs = SyncSubstream::new(
+                XvdStream {
+                    inner: bridge,
+                    offset: partition_offset,
+                    end_offset: partition_offset + partition_plain_len,
+                    encryption_info: None,
+                },
+                0,
+                partition_plain_len,
+            );
+
+            let reports = collect_ntfs_stream_layouts(&mut fs)?;
+            let mut files = HashMap::new();
+
+            for report in reports {
+                if report.path.starts_with('$') || report.path.contains(':') {
+                    continue;
+                }
+                if report.resident_data || report.data_runs.len() != 1 {
+                    continue;
+                }
+
+                let Some(data_run) = report.data_runs.first() else {
+                    continue;
+                };
+                let Some(start) = data_run.start else {
+                    continue;
+                };
+
+                files.insert(
+                    report.path.replace("/", "\\"),
+                    SegmentFile {
+                        offset: partition_offset + start,
+                        length: report.value_length,
+                        data_hashs: vec![],
+                    },
+                );
+            }
+
+            self.populate_segment_hashes(&mut files)?;
+
+            Ok(files)
+        })
     }
 
     pub async fn download_file<Reader, Writer>(
@@ -603,34 +924,76 @@ impl XvdFile {
             return Ok(());
         }
 
-        for s in &self.encrypted_section_infos {
-            if sfile.offset >= s.section_offset
-                && sfile.offset < s.section_offset + s.section_length
-            {
-                let mut tweak_key = [0u8; 16];
-                let mut data_key = [0u8; 16];
-                tweak_key.copy_from_slice(&full_key[..16]);
-                data_key.copy_from_slice(&full_key[16..]);
+        let s =  &self.encrypted_section_infos.iter().find(|s| sfile.offset >= s.section_offset
+                && sfile.offset < s.section_offset + s.section_length);
 
-                let mut tweak = Tweak::new(0, s.header_id, s.vduid);
-                let tweak_cipher = Aes128::new((&tweak_key).into());
-                let data_cipher = Aes128::new((&data_key).into());
-                // let freader = SectionReader::new(file, sfile.offset, sfile.length, s.header_id, s.vduid, full_key, s.data_units);
-                let file_offset_in_section = sfile.offset - s.section_offset;
-                let page_start = file_offset_in_section / PAGE_SIZE as u64;
-                let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
-                // let page_start = (sfile.offset - s.section_offset).div_ceil(PAGE_SIZE as u64);
-                // let page_end = page_start + sfile.length.div_ceil(PAGE_SIZE as u64);
+        let mut tweak = None;
+        let mut tweak_cipher = None;
+        let mut data_cipher = None;
 
-                let mut page = [0u8; PAGE_SIZE];
-                let mut remaining = sfile.length;
-                let mut page_in_section = page_start;
-                let page_length = sfile.length.div_ceil(PAGE_SIZE as u64) * PAGE_SIZE as u64;
-                let mut stream = None;
-                let mut pending = bytes::BytesMut::new();
-                let mut v: u64 = 0;
+        let file_offset_in_section;
 
-                let stall_timeout = tokio::time::Duration::from_secs(5);
+        if let Some(s) = s {
+            let mut tweak_key = [0u8; 16];
+            let mut data_key = [0u8; 16];
+            tweak_key.copy_from_slice(&full_key[..16]);
+            data_key.copy_from_slice(&full_key[16..]);
+
+            tweak = Some(Tweak::new(0, s.header_id, s.vduid));
+            tweak_cipher = Some(Aes128::new((&tweak_key).into()));
+            data_cipher = Some(Aes128::new((&data_key).into()));
+            file_offset_in_section = sfile.offset - s.section_offset;
+        } else {
+            // TODO for data integrity we need a section for unencrypted sections...
+            file_offset_in_section = sfile.offset;
+        }
+        let page_start = file_offset_in_section / PAGE_SIZE as u64;
+        let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
+
+        let mut page = [0u8; PAGE_SIZE];
+        let mut remaining = sfile.length;
+        let mut page_in_section = page_start;
+        let page_length = sfile.length.div_ceil(PAGE_SIZE as u64) * PAGE_SIZE as u64;
+        let mut stream = None;
+        let mut pending = bytes::BytesMut::new();
+        let mut v: u64 = 0;
+
+        let stall_timeout = tokio::time::Duration::from_secs(5);
+        if let Ok(Ok(Ok(response))) = timeout(
+            stall_timeout,
+            client
+                .get(url.clone())
+                .header(
+                    RANGE,
+                    format!(
+                        "bytes={}-{}",
+                        sfile.offset + v,
+                        sfile.offset + page_length - 1
+                    ),
+                )
+                .send(),
+        )
+        .await
+        .map(|o| o.map(|o| o.error_for_status()))
+        {
+            if response.status() == 206 {
+                stream = Some(response.bytes_stream());
+            }
+        }
+        loop {
+            if page_in_section >= page_start + page_count || remaining == 0 {
+                break;
+            }
+            let next = if stream.is_none() {
+                Ok(None)
+            } else {
+                timeout(stall_timeout, stream.as_mut().unwrap().next()).await
+            };
+            let data: Bytes;
+            if let Ok(Some(Ok(b))) = next {
+                data = b;
+            } else {
+                // error
                 if let Ok(Ok(Ok(response))) = timeout(
                     stall_timeout,
                     client
@@ -650,101 +1013,62 @@ impl XvdFile {
                 {
                     if response.status() == 206 {
                         stream = Some(response.bytes_stream());
-                    }
-                }
-                loop {
-                    if page_in_section >= page_start + page_count || remaining == 0 {
-                        break;
-                    }
-                    let next = if stream.is_none() {
-                        Ok(None)
-                    } else {
-                        timeout(stall_timeout, stream.as_mut().unwrap().next()).await
-                    };
-                    let data: Bytes;
-                    if let Ok(Some(Ok(b))) = next {
-                        data = b;
-                    } else {
-                        // error
-                        if let Ok(Ok(Ok(response))) = timeout(
-                            stall_timeout,
-                            client
-                                .get(url.clone())
-                                .header(
-                                    RANGE,
-                                    format!(
-                                        "bytes={}-{}",
-                                        sfile.offset + v,
-                                        sfile.offset + page_length - 1
-                                    ),
-                                )
-                                .send(),
-                        )
-                        .await
-                        .map(|o| o.map(|o| o.error_for_status()))
-                        {
-                            if response.status() == 206 {
-                                stream = Some(response.bytes_stream());
-                                continue;
-                            }
-                        }
                         continue;
                     }
-
-                    v += data.len() as u64;
-                    progress(min(v, sfile.length), sfile.length);
-
-                    pending.extend_from_slice(&data);
-
-                    while pending.len() >= 4096 {
-                        if page_in_section >= page_start + page_count || remaining == 0 {
-                            break;
-                        }
-                        let chunk = pending.split_to(4096);
-                        page.copy_from_slice(&chunk);
-                        tweak.update_data_unit(match &s.data_units {
-                            Some(units) => {
-                                *units.get(page_in_section as usize).ok_or_else(|| {
-                                    io::Error::new(
-                                        io::ErrorKind::InvalidInput,
-                                        format!(
-                                            "{} units {} page_in_section {} ({}+{})",
-                                            "missing data unit",
-                                            (*units).len(),
-                                            page_in_section,
-                                            page_start,
-                                            page_count
-                                        ),
-                                    )
-                                })?
-                            }
-                            None => page_in_section as u32,
-                        });
-                        page = decrypt_page_xts(page, tweak, &tweak_cipher, &data_cipher);
-                        let to_write = remaining.min(PAGE_SIZE as u64) as usize;
-                        while let Err(err) = out.write_all(&page[..to_write]).await {
-                            eprintln!("Error write file {} waiting 30s", err);
-                            println!("Error write file {} waiting 30s", err);
-                            sleep(tokio::time::Duration::from_secs(30)).await;
-                        }
-                        remaining -= to_write as u64;
-
-                        page_in_section += 1;
-                    }
                 }
-                if remaining > 0 {
-                    return Err(Box::new(std::io::Error::new(
-                        ErrorKind::Other,
-                        format!("{} of {} missing have {}", remaining, sfile.length, v),
-                    )));
+                continue;
+            }
+
+            v += data.len() as u64;
+            progress(min(v, sfile.length), sfile.length);
+
+            pending.extend_from_slice(&data);
+
+            while pending.len() >= 4096 {
+                if page_in_section >= page_start + page_count || remaining == 0 {
+                    break;
                 }
-                return Ok(());
+                let chunk = pending.split_to(4096);
+                page.copy_from_slice(&chunk);
+                if let Some(tweak) = tweak.as_mut() {
+                    tweak.update_data_unit(match &s.unwrap().data_units {
+                        Some(units) => {
+                            *units.get(page_in_section as usize).ok_or_else(|| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    format!(
+                                        "{} units {} page_in_section {} ({}+{})",
+                                        "missing data unit",
+                                        (*units).len(),
+                                        page_in_section,
+                                        page_start,
+                                        page_count
+                                    ),
+                                )
+                            })?
+                        }
+                        None => page_in_section as u32,
+                    });
+                    page = decrypt_page_xts(page, *tweak, &tweak_cipher.as_ref().unwrap(), &data_cipher.as_ref().unwrap());
+                }
+                let to_write = remaining.min(PAGE_SIZE as u64) as usize;
+                while let Err(err) = out.write_all(&page[..to_write]).await {
+                    eprintln!("Error write file {} waiting 30s", err);
+                    println!("Error write file {} waiting 30s", err);
+                    sleep(tokio::time::Duration::from_secs(30)).await;
+                }
+                remaining -= to_write as u64;
+
+                page_in_section += 1;
             }
         }
-        return Err(Box::new(std::io::Error::new(
-            ErrorKind::NotFound,
-            "File not found in encrypted section",
-        )));
+        if remaining > 0 {
+            return Err(Box::new(std::io::Error::new(
+                ErrorKind::Other,
+                format!("{} of {} missing have {}", remaining, sfile.length, v),
+            )));
+        }
+        return Ok(());
     }
 
     pub async fn download_file_sync<Reader, Writer>(
@@ -813,7 +1137,7 @@ pub fn unpack_file(
             todo!("unsupported block_size: {}", block_size)
         })
         .open_from_device(XvdStream {
-            file: sfile.try_clone().unwrap(),
+            inner: sfile.try_clone().unwrap(),
             offset: xvd.drive_data_offset,
             end_offset: xvd.drive_data_offset + xvd.header.drive_size,
             encryption_info: None,
@@ -838,7 +1162,7 @@ pub fn unpack_file(
     let partition_offset = xvd.drive_data_offset + part_start;
 
     let mut fs = XvdStream {
-        file: sfile.try_clone().unwrap(),
+        inner: sfile.try_clone().unwrap(),
         offset: partition_offset,
         end_offset: partition_offset + part_len,
         encryption_info: Some(XvdEncryptionInfo {

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path, vec};
 
 use fs2::available_space;
 use futures_util::{StreamExt, stream};
@@ -29,6 +29,7 @@ enum ProgressEvent {
     Advanced { id: usize, delta: u64 },
     Finished { id: usize },
     UpdateRemaining { name: String, total: u64 },
+    UpdateStatus { name: String },
 }
 
 pub async fn run(
@@ -132,6 +133,9 @@ pub async fn run(
                     total_progess.set_message(name);
                     total_progess.set_length(total_progess.position() + total);
                 }
+                ProgressEvent::UpdateStatus { name } => {
+                    total_progess.set_message(name);
+                }
             }
         }
 
@@ -153,10 +157,10 @@ pub async fn run(
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();
 
     let files = remote_xvd
-        .readUserPackageFiles(&mut remote_file)
+        .parse_user_package_files(&mut remote_file)
         .await
         .expect("ok");
-    for (k, v) in files {
+    for (k, v) in &files {
         if k == "SegmentMetadata.bin" {
             let sfiles = remote_xvd
                 .parse_segment_metadata(&mut remote_file, v)
@@ -168,8 +172,64 @@ pub async fn run(
                 }
             }
             rfiles = sfiles;
+            // add unencrypted files of parse_user_package_files
+            for (k, v) in &files {
+                rfiles.insert(k.clone(), SegmentFile { offset: v.offset, length: v.length, data_hashs: vec![] });
+            }
         }
     }
+
+    if rfiles.is_empty() {
+        tx.send(ProgressEvent::UpdateStatus {
+            name: "Old msixvc downloading ntfs...".to_owned(),
+        })
+        .await
+        .ok();
+        let sfiles = remote_xvd
+            .parse_ntfs_segment_metadata(&mut remote_file)
+            .await
+            .expect("ok");
+        for (n, sfile) in &sfiles {
+            if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+                println!("{}: {} {}", n, sfile.offset, sfile.length);
+            }
+        }
+        rfiles = sfiles;
+    }
+
+    // {
+    //     let orgrfiles = rfiles;
+    //     let sfiles = remote_xvd
+    //         .parse_ntfs_segment_metadata(&mut remote_file)
+    //         .await
+    //         .expect("ok");
+    //     for (name, old_file) in &orgrfiles {
+    //         let Some(new_file) = sfiles.get(name) else {
+    //             println!("segment anomaly missing in ntfs layout: {name}");
+    //             continue;
+    //         };
+    //         if old_file.offset != new_file.offset || old_file.length != new_file.length {
+    //             println!(
+    //                 "segment anomaly {name}: offset {} -> {}, length {} -> {}",
+    //                 old_file.offset,
+    //                 new_file.offset,
+    //                 old_file.length,
+    //                 new_file.length
+    //             );
+    //         }
+    //     }
+    //     for name in sfiles.keys() {
+    //         if !orgrfiles.contains_key(name) {
+    //             println!("segment anomaly only in ntfs layout: {name}");
+    //         }
+    //     }
+    //     for (n, sfile) in &sfiles {
+    //         if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+    //             println!("{}: {} {}", n, sfile.offset, sfile.length);
+    //         }
+    //     }
+    //     rfiles = sfiles;
+    // }
 
     let mut file = OpenOptions::new()
         .read(true)
@@ -180,8 +240,8 @@ pub async fn run(
     if let Some(file) = &mut file {
         let mut xvd = XvdFile::parse(file).await.expect("no err");
 
-        let files = xvd.readUserPackageFiles(file).await.expect("ok");
-        for (k, v) in files {
+        let files = xvd.parse_user_package_files(file).await.expect("ok");
+        for (k, v) in &files {
             if k == "SegmentMetadata.bin" {
                 let sfiles = xvd.parse_segment_metadata(file, v).await.expect("ok");
                 for (n, sfile) in &sfiles {
@@ -190,14 +250,24 @@ pub async fn run(
                     }
                 }
                 lfiles = sfiles;
+                // add unencrypted files of parse_user_package_files
+                for (k, v) in &files {
+                    lfiles.insert(k.clone(), SegmentFile { offset: v.offset, length: v.length, data_hashs: vec![] });
+                }
             }
+        }
+
+        if lfiles.is_empty() {
+            let sfiles = xvd.parse_ntfs_segment_metadata(file).await.expect("ok");
+            for (n, sfile) in &sfiles {
+                if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+                    println!("{}: {} {}", n, sfile.offset, sfile.length);
+                }
+            }
+            lfiles = sfiles;
         }
     }
 
-    // let mut kv = OpenOptions::new().read(true).open("/Users/christopher/Documents/minecraft/xodus/ciks/bdb9e791-c97c-3734-e1a8-bc602552df06.cik").await.expect("ok");
-    // kv.seek(std::io::SeekFrom::Start(16)).await.expect("ok");
-    // let mut full_key = [0u8; 32];
-    // kv.read_exact(&mut full_key).await.expect("ok");
     let license = get_license(
         client,
         remote_xvd.content_id().to_string(),
