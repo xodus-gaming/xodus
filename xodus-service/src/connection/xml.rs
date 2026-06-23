@@ -44,7 +44,9 @@ pub async fn parse_message(
     match message_type {
         XodusMessageType::Ping => Ok(buffer),
         XodusMessageType::MsaTokenRequest => {
+            log::debug!("Raw buffer: {buffer:?}");
             let string_buf = std::str::from_utf8(&buffer)?;
+            log::debug!("String buffer: {string_buf:?}");
             let req = quick_xml::de::from_str::<MSATokenRequest>(string_buf)?;
             let Token::Legacy(token) = context.tokens().get_user_sts_token()? else {
                 return Ok(vec![]);
