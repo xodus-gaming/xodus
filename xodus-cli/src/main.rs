@@ -34,6 +34,8 @@ enum SubCommand {
     Streaming {
         source: String,
         destination: String,
+        #[arg(long, default_value_t = false, help = "Attempt to skip downloading NTFS metadata to be faste while missing some files")]
+        try_skip_ntfs: bool,
         #[arg(short, long)]
         parallel: Option<usize>,
         #[arg(short, long)]
@@ -99,10 +101,11 @@ async fn main() {
         SubCommand::Streaming {
             source,
             destination,
+            try_skip_ntfs,
             market,
             parallel,
         } => {
-            commands::streaming::run(&client, source, destination, parallel, market).await;
+            commands::streaming::run(&client, source, destination, try_skip_ntfs, parallel, market).await;
         }
     }
 

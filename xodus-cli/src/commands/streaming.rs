@@ -35,6 +35,7 @@ pub async fn run(
     client: &reqwest::Client,
     source: String,
     destination: String,
+    try_skip_ntfs: bool,
     parallel: Option<usize>,
     market: Option<String>,
 ) {
@@ -155,39 +156,41 @@ pub async fn run(
     let mut rfiles: HashMap<String, SegmentFile> = HashMap::new();
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();
 
-    let files = remote_xvd
-        .parse_user_package_files(&mut remote_file)
-        .await
-        .expect("ok");
-    for (k, v) in &files {
-        if k == "SegmentMetadata.bin" {
-            let sfiles = remote_xvd
-                .parse_segment_metadata(&mut remote_file, v)
-                .await
-                .expect("ok");
-            for (n, sfile) in &sfiles {
-                if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-                    println!("{}: {} {}", n, sfile.offset, sfile.length);
+    if try_skip_ntfs {
+        let files = remote_xvd
+            .parse_user_package_files(&mut remote_file)
+            .await
+            .expect("ok");
+        for (k, v) in &files {
+            if k == "SegmentMetadata.bin" {
+                let sfiles = remote_xvd
+                    .parse_segment_metadata(&mut remote_file, v)
+                    .await
+                    .expect("ok");
+                for (n, sfile) in &sfiles {
+                    if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+                        println!("{}: {} {}", n, sfile.offset, sfile.length);
+                    }
                 }
-            }
-            rfiles = sfiles;
-            // add unencrypted files of parse_user_package_files
-            for (k, v) in &files {
-                rfiles.insert(
-                    k.clone(),
-                    SegmentFile {
-                        offset: v.offset,
-                        length: v.length,
-                        data_hashs: vec![],
-                    },
-                );
+                rfiles = sfiles;
+                // add unencrypted files of parse_user_package_files
+                for (k, v) in &files {
+                    rfiles.insert(
+                        k.clone(),
+                        SegmentFile {
+                            offset: v.offset,
+                            length: v.length,
+                            data_hashs: vec![],
+                        },
+                    );
+                }
             }
         }
     }
 
     if rfiles.is_empty() {
         tx.send(ProgressEvent::UpdateStatus {
-            name: "Old msixvc downloading ntfs...".to_owned(),
+            name: "Downloading ntfs...".to_owned(),
         })
         .await
         .ok();
@@ -203,40 +206,6 @@ pub async fn run(
         rfiles = sfiles;
     }
 
-    // {
-    //     let orgrfiles = rfiles;
-    //     let sfiles = remote_xvd
-    //         .parse_ntfs_segment_metadata(&mut remote_file)
-    //         .await
-    //         .expect("ok");
-    //     for (name, old_file) in &orgrfiles {
-    //         let Some(new_file) = sfiles.get(name) else {
-    //             println!("segment anomaly missing in ntfs layout: {name}");
-    //             continue;
-    //         };
-    //         if old_file.offset != new_file.offset || old_file.length != new_file.length {
-    //             println!(
-    //                 "segment anomaly {name}: offset {} -> {}, length {} -> {}",
-    //                 old_file.offset,
-    //                 new_file.offset,
-    //                 old_file.length,
-    //                 new_file.length
-    //             );
-    //         }
-    //     }
-    //     for name in sfiles.keys() {
-    //         if !orgrfiles.contains_key(name) {
-    //             println!("segment anomaly only in ntfs layout: {name}");
-    //         }
-    //     }
-    //     for (n, sfile) in &sfiles {
-    //         if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-    //             println!("{}: {} {}", n, sfile.offset, sfile.length);
-    //         }
-    //     }
-    //     rfiles = sfiles;
-    // }
-
     let mut file = OpenOptions::new()
         .read(true)
         .open(final_path.to_owned())
@@ -246,26 +215,28 @@ pub async fn run(
     if let Some(file) = &mut file {
         let mut xvd = XvdFile::parse(file).await.expect("no err");
 
-        let files = xvd.parse_user_package_files(file).await.expect("ok");
-        for (k, v) in &files {
-            if k == "SegmentMetadata.bin" {
-                let sfiles = xvd.parse_segment_metadata(file, v).await.expect("ok");
-                for (n, sfile) in &sfiles {
-                    if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-                        println!("{}: {} {}", n, sfile.offset, sfile.length);
+        if try_skip_ntfs {
+            let files = xvd.parse_user_package_files(file).await.expect("ok");
+            for (k, v) in &files {
+                if k == "SegmentMetadata.bin" {
+                    let sfiles = xvd.parse_segment_metadata(file, v).await.expect("ok");
+                    for (n, sfile) in &sfiles {
+                        if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+                            println!("{}: {} {}", n, sfile.offset, sfile.length);
+                        }
                     }
-                }
-                lfiles = sfiles;
-                // add unencrypted files of parse_user_package_files
-                for (k, v) in &files {
-                    lfiles.insert(
-                        k.clone(),
-                        SegmentFile {
-                            offset: v.offset,
-                            length: v.length,
-                            data_hashs: vec![],
-                        },
-                    );
+                    lfiles = sfiles;
+                    // add unencrypted files of parse_user_package_files
+                    for (k, v) in &files {
+                        lfiles.insert(
+                            k.clone(),
+                            SegmentFile {
+                                offset: v.offset,
+                                length: v.length,
+                                data_hashs: vec![],
+                            },
+                        );
+                    }
                 }
             }
         }
