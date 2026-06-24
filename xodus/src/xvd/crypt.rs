@@ -166,6 +166,7 @@ fn decrypt_page_xts(
 /// XTS-AES uses two keys: a tweak key to derive a per-page tweak, and a data key
 /// to encrypt the data. Each 16-byte block is encrypted as `C = AES_enc(P ⊕ T) ⊕ T`,
 /// where `T` is the AES-encrypted tweak, advanced by one GF(2¹²⁸) multiplication per block.
+#[expect(dead_code)]
 fn encrypt_page_xts(
     page: &mut [u8; PAGE_SIZE],
     tweak: Tweak,
