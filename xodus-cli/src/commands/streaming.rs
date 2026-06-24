@@ -221,7 +221,9 @@ pub async fn run(
                 if k == "SegmentMetadata.bin" {
                     let sfiles = xvd.parse_segment_metadata(file, v).await.expect("ok");
                     for (n, sfile) in &sfiles {
-                        if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+                        if sfile.length.div_ceil(PAGE_SIZE as u64) as usize
+                            != sfile.data_hashs.len()
+                        {
                             println!("{}: {} {}", n, sfile.offset, sfile.length);
                         }
                     }

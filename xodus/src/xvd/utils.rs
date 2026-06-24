@@ -32,10 +32,7 @@ use crate::xvd::math::{
     bytes_to_pages, calculate_hash_block_num_and_run_for_block_num, offset_to_page_number,
 };
 use crate::{
-    models::xvd::{
-        XvcInfo, XvcRegionHeader, XvcRegionId,
-        XvdHashEntry, XvdHeader, XvdStruct,
-    },
+    models::xvd::{XvcInfo, XvcRegionHeader, XvcRegionId, XvdHashEntry, XvdHeader, XvdStruct},
     xvd::math::page_number_to_offset,
 };
 

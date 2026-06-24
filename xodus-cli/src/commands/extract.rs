@@ -1,6 +1,4 @@
-use xodus::xvd::{
-    utils::{XvdFile, unpack_file},
-};
+use xodus::xvd::utils::{XvdFile, unpack_file};
 
 use crate::license::get_license;
 pub async fn run(client: &reqwest::Client, path: String, destination: String, market: String) {
