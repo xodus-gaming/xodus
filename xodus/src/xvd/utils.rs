@@ -1,17 +1,20 @@
+use std::cmp::min;
 use std::fmt::Debug;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
+use tokio::io::BufReader;
 use tokio::{
     fs::OpenOptions,
     io::{AsyncReadExt, AsyncSeekExt},
 };
 
 use crate::licensing::splicense::ContentKey;
+use crate::models::xvd::PAGES_PER_BLOCK;
 use crate::xvd::crypt::SectionReader;
 use crate::xvd::math::{
-    bytes_to_pages, calculate_hash_block_num_for_block_num, offset_to_page_number,
+    bytes_to_pages, calculate_hash_block_num_and_run_for_block_num, offset_to_page_number,
 };
 use crate::{
     models::xvd::{
@@ -328,6 +331,8 @@ impl XvdFile {
             page_number_to_offset(xvd_header.dynamic_header_page_count()) + dynamic_header_offset;
 
         let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
+        let mut reader =
+            BufReader::with_capacity(PAGES_PER_BLOCK * XvdHashEntry::RAW_SIZE as usize, file);
         for h in region_headers {
             let key_id = h.key_id;
             let offset = h.offset;
@@ -346,27 +351,35 @@ impl XvdFile {
                 Some(n) => todo!("KeyID other than 0 or unencrypted is not supported, found {n}"),
             }
 
-            let mut data_units: Vec<u32> = vec![];
             let start_page = offset_to_page_number(h.offset - user_data_offset);
             let num_pages = bytes_to_pages(length);
-            for page in 0..num_pages {
-                let (hash_block, entry_num) = calculate_hash_block_num_for_block_num(
-                    xvd_header.xvd_type as u32,
-                    _hash_tree_levels,
-                    xvd_header.number_of_hashed_pages(),
-                    start_page + page,
-                    0,
-                    false,
-                    false,
-                );
+            let mut data_units: Vec<u32> = Vec::with_capacity(num_pages as usize);
+
+            let mut page = 0;
+            loop {
+                if page >= num_pages {
+                    break;
+                }
+                let (hash_block, entry_start, run_length) =
+                    calculate_hash_block_num_and_run_for_block_num(
+                        xvd_header.xvd_type as u32,
+                        _hash_tree_levels,
+                        xvd_header.number_of_hashed_pages(),
+                        start_page + page,
+                        0,
+                        false,
+                        false,
+                    );
+                let run_length = min(run_length as u64, num_pages - page);
+                page += run_length;
                 let read_offset = hash_tree_offset
                     + page_number_to_offset(hash_block)
-                    + (entry_num * XvdHashEntry::RAW_SIZE as u64);
-
-                file.seek(SeekFrom::Start(read_offset)).await?;
-
-                let Ok(hash) = read_struct!(XvdHashEntry, file);
-                data_units.push(hash.unit);
+                    + (entry_start * XvdHashEntry::RAW_SIZE as u64);
+                reader.seek(SeekFrom::Start(read_offset)).await?;
+                for _ in 0..run_length {
+                    let Ok(hash) = read_struct!(XvdHashEntry, reader);
+                    data_units.push(hash.unit);
+                }
             }
 
             enc_sections.push(EncryptedSectionInfo {
