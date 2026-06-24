@@ -1,6 +1,7 @@
 use std::collections::HashMap;
-
+use xodus::xal::client_params::CLIENT_WINDOWS;
 use xodus::models::secrets::{Token, TokenStore, User};
+use crate::commands::login;
 
 pub fn save_user(user: User) {
     let entry = xodus::secrets::get_entry("user-DA").unwrap();
@@ -31,15 +32,38 @@ pub fn save_token(address: String, token: Token) {
     entry.set_password(&tokens_str).unwrap();
 }
 
-pub fn get_token(address: String) -> Option<Token> {
-    let entry = xodus::secrets::get_entry("user-tokens").unwrap();
+pub async fn get_token(address: String) -> Option<Token> {
+    let entry = xodus::secrets::get_entry("user-tokens").ok()?;
     let passwd = entry.get_password().unwrap_or_default();
 
-    let tokens = if !passwd.is_empty() {
-        let tokens = serde_json::from_str::<TokenStore>(&passwd).unwrap();
-        tokens.tokens
+    let tokens: Option<Token> = if !passwd.is_empty() {
+        let store: TokenStore = serde_json::from_str(&passwd).ok()?;
+        store.tokens.get(&address).cloned()
     } else {
-        HashMap::new()
+        None
     };
-    tokens.get(&address).cloned()
+
+    if tokens.is_some() {
+        return tokens;
+    }
+
+    println!("No token found. Opening login window...");
+
+    let client = reqwest::Client::builder()
+        .user_agent(CLIENT_WINDOWS().user_agent)
+        .connection_verbose(true)
+        .build()
+        .ok()?;
+
+    login::run(&client).await;
+
+    let entry = xodus::secrets::get_entry("user-tokens").ok()?;
+    let passwd = entry.get_password().unwrap_or_default();
+
+    if passwd.is_empty() {
+        return None;
+    }
+
+    let store: TokenStore = serde_json::from_str(&passwd).ok()?;
+    store.tokens.get(&address).cloned()
 }
