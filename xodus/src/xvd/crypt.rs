@@ -156,6 +156,43 @@ fn decrypt_page_xts(
     tweak_cipher: &Aes128,
     data_cipher: &Aes128,
 ) {
+    transform_page_xts(page, tweak, tweak_cipher, |block| {
+        data_cipher.decrypt_block(block);
+    });
+}
+
+/// Encrypts a page using XTS-AES (IEEE 1619-2007).
+///
+/// XTS-AES uses two keys: a tweak key to derive a per-page tweak, and a data key
+/// to encrypt the data. Each 16-byte block is encrypted as `C = AES_enc(P ⊕ T) ⊕ T`,
+/// where `T` is the AES-encrypted tweak, advanced by one GF(2¹²⁸) multiplication per block.
+fn encrypt_page_xts(
+    page: &mut [u8; PAGE_SIZE],
+    tweak: Tweak,
+    tweak_cipher: &Aes128,
+    data_cipher: &Aes128,
+) {
+    transform_page_xts(page, tweak, tweak_cipher, |block| {
+        data_cipher.encrypt_block(block);
+    });
+}
+
+/// Transforms a page using XTS-AES (IEEE 1619-2007).
+///
+/// Each 16-byte block is transformed as `out = transform(in ⊕ T) ⊕ T`, where `T` is the
+/// AES-encrypted tweak, advanced by one GF(2¹²⁸) multiplication per block.
+///
+/// The `transform` function is called with each block after the tweak is applied, and should
+/// perform either AES encryption or decryption.
+#[inline]
+fn transform_page_xts<F>(
+    page: &mut [u8; PAGE_SIZE],
+    tweak: Tweak,
+    tweak_cipher: &Aes128,
+    transform: F,
+) where
+    F: Fn(&mut aes::Block),
+{
     // XTS requires the data length to be a multiple of the block size (16 bytes).
     const { assert!(PAGE_SIZE.is_multiple_of(16)) };
 
@@ -166,16 +203,13 @@ fn decrypt_page_xts(
         let mut out = u128::from_le_bytes(*block);
 
         out ^= tweak;
-        out = aes_decrypt(data_cipher, out);
+        out = {
+            let mut buf = aes::Block::from(out.to_le_bytes());
+            transform(&mut buf);
+            u128::from_le_bytes(buf.0)
+        };
         out ^= tweak;
 
         *block = out.to_le_bytes();
     }
-}
-
-#[inline]
-fn aes_decrypt(cipher: &Aes128, block: u128) -> u128 {
-    let mut block = aes::Block::from(block.to_le_bytes());
-    cipher.decrypt_block(&mut block);
-    u128::from_le_bytes(block.0)
 }
