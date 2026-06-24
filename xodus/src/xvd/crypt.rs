@@ -3,6 +3,7 @@ use crate::models::xvd::{PAGE_SIZE, XvcRegionId};
 use crate::xvd::math::gf_mul_x;
 
 use std::io::{self, Read, Seek, SeekFrom};
+use std::iter;
 
 use aes::Aes128;
 use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
@@ -163,9 +164,10 @@ fn decrypt_page_xts(
     // XTS requires the data length to be a multiple of the block size (16 bytes).
     const { assert!(PAGE_SIZE.is_multiple_of(16)) };
 
-    let mut tweak = tweak.encrypt(tweak_cipher);
+    // Every tweak in the iterator is calculated by applying `gf_mul_x` to the previous one.
+    let tweaks = iter::successors(Some(tweak.encrypt(tweak_cipher)), |t| Some(gf_mul_x(*t)));
 
-    for block in page.as_chunks_mut::<16>().0 {
+    for (block, tweak) in page.as_chunks_mut::<16>().0.iter_mut().zip(tweaks) {
         let mut out = u128::from_le_bytes(*block);
 
         out ^= tweak;
@@ -173,7 +175,6 @@ fn decrypt_page_xts(
         out ^= tweak;
 
         *block = out.to_le_bytes();
-        tweak = gf_mul_x(tweak);
     }
 
     page
