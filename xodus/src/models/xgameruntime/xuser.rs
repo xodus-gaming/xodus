@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 pub struct MSATokenRequest {
     pub client_id: String,
     #[serde(default)]
-    pub allow_ui: bool
+    pub allow_ui: bool,
+    #[serde(default, alias = "MSAFullTrust")]
+    pub msa_full_trust: bool,
 }
 
 #[derive(Serialize)]
