@@ -8,8 +8,7 @@ use uuid::Uuid;
 use xodus::{
     models::xvd::PAGE_SIZE,
     xvd::{
-        // streaming3::HttpFileAsync,
-        streaming4,
+        streaming,
         utils::{SegmentFile, XvdFile},
     },
 };
@@ -83,7 +82,7 @@ pub async fn run(
     let url = &vurl;
     let (tx, mut rx) = tokio::sync::mpsc::channel::<ProgressEvent>(256);
     let mut pos = 0;
-    let http_file = streaming4::HttpRead::open(
+    let http_file = streaming::HttpRead::open(
         client.clone(),
         url,
         Some(|c, _| {
@@ -149,7 +148,7 @@ pub async fn run(
     let cache_path = out.join(".xodus-streaming-tmp.msixvc");
     let final_path = out.join(".xodus-streaming.msixvc");
 
-    let mut remote_file = streaming4::PrefixCacheFile::new(http_file, l, cache_path.clone())
+    let mut remote_file = streaming::PrefixCacheFile::new(http_file, l, cache_path.clone())
         .await
         .expect("no err");
     let mut remote_xvd = XvdFile::parse(&mut remote_file).await.expect("no err");

@@ -33,8 +33,8 @@ use crate::xvd::math::{
 };
 use crate::{
     models::xvd::{
-        XvcInfo, XvcRegionHeader, XvcRegionId, XvcRegionPresenceInfo, XvcRegionSpecifier,
-        XvdHashEntry, XvdHeader, XvdStruct, XvdUpdateSegment,
+        XvcInfo, XvcRegionHeader, XvcRegionId,
+        XvdHashEntry, XvdHeader, XvdStruct,
     },
     xvd::math::page_number_to_offset,
 };
@@ -403,16 +403,6 @@ pub struct XvdFile {
     drive_data_offset: u64,
     encrypted_section_infos: Vec<EncryptedSectionInfo>,
     user_data_offset: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct FileSegment {
-    file_name: String,
-    data_offset: u64,
-    data_length: u64,
-    page_offset: u64,
-    page_length: u64,
-    keep_encrypted: bool,
 }
 
 #[derive(Debug)]
