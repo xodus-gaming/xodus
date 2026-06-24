@@ -977,8 +977,8 @@ impl XvdFile {
                         })?,
                         None => page_in_section as u32,
                     });
-                    page = decrypt_page_xts(
-                        page,
+                    decrypt_page_xts(
+                        &mut page,
                         *tweak,
                         &tweak_cipher.as_ref().unwrap(),
                         &data_cipher.as_ref().unwrap(),
