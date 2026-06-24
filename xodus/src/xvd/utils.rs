@@ -477,9 +477,6 @@ impl XvdFile {
         let xvc_info_offset = xvd_header.xvc_info_offset(hash_tree_page_count);
 
         let mut region_headers: Vec<XvcRegionHeader> = Vec::new();
-        // let mut update_segments: Vec<XvdUpdateSegment> = Vec::new();
-        // let mut region_specifiers: Vec<XvcRegionSpecifier> = Vec::new();
-        // let mut region_presence_info: Vec<XvcRegionPresenceInfo> = Vec::new();
 
         // TODO: Check if we have proper content type
         if xvd_header.xvc_data_length > 0 {
@@ -842,64 +839,6 @@ impl XvdFile {
         })
     }
 
-    pub async fn download_file<Reader, Writer>(
-        &self,
-        file: &mut Reader,
-        out: &mut Writer,
-        sfile: &SegmentFile,
-        full_key: [u8; 32],
-    ) -> Result<(), Box<dyn std::error::Error>>
-    where
-        Reader: AsyncRead + AsyncSeek + Unpin,
-        Writer: AsyncWrite + Unpin,
-    {
-        file.seek(SeekFrom::Start(sfile.offset)).await?;
-        for s in &self.encrypted_section_infos {
-            if sfile.offset >= s.section_offset
-                && sfile.offset < s.section_offset + s.section_length
-            {
-                let mut tweak_key = [0u8; 16];
-                let mut data_key = [0u8; 16];
-                tweak_key.copy_from_slice(&full_key[..16]);
-                data_key.copy_from_slice(&full_key[16..]);
-
-                let mut tweak = Tweak::new(0, s.header_id, s.vduid);
-                let tweak_cipher = Aes128::new((&tweak_key).into());
-                let data_cipher = Aes128::new((&data_key).into());
-                let file_offset_in_section = sfile.offset - s.section_offset;
-                let page_start = file_offset_in_section / PAGE_SIZE as u64;
-                let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
-
-                let mut page = [0u8; PAGE_SIZE];
-                let mut remaining = sfile.length;
-                for page_in_section in page_start..page_start + page_count {
-                    tweak.update_data_unit(match &s.data_units {
-                        Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {
-                            io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                format!(
-                                    "{} units {} page_in_section {} ({}+{})",
-                                    "missing data unit",
-                                    (*units).len(),
-                                    page_in_section,
-                                    page_start,
-                                    page_count
-                                ),
-                            )
-                        })?,
-                        None => page_in_section as u32,
-                    });
-                    file.read_exact(&mut page).await?;
-                    page = decrypt_page_xts(page, tweak, &tweak_cipher, &data_cipher);
-                    let to_write = remaining.min(PAGE_SIZE as u64) as usize;
-                    out.write_all(&page[..to_write]).await?;
-                    remaining -= to_write as u64;
-                }
-            }
-        }
-        Ok(())
-    }
-
     pub async fn download_file_http<Writer, Progress>(
         &self,
         client: &reqwest::Client,
@@ -1067,55 +1006,8 @@ impl XvdFile {
         }
         return Ok(());
     }
-
-    pub async fn download_file_sync<Reader, Writer>(
-        &self,
-        file: &mut Reader,
-        out: &mut Writer,
-        sfile: &SegmentFile,
-        full_key: [u8; 32],
-    ) -> Result<(), Box<dyn std::error::Error>>
-    where
-        Reader: Read + Seek,
-        Writer: AsyncWrite + Unpin,
-    {
-        for s in &self.encrypted_section_infos {
-            if sfile.offset >= s.section_offset
-                && sfile.offset < s.section_offset + s.section_length
-            {
-                let mut freader = SectionReader::new(
-                    &mut *file,
-                    s.section_offset,
-                    s.section_length,
-                    s.header_id,
-                    s.vduid,
-                    full_key.into(),
-                    s.data_units.clone(),
-                );
-                let file_offset_in_section = sfile.offset - s.section_offset;
-                let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
-
-                let mut page = [0u8; PAGE_SIZE];
-                let mut remaining = sfile.length;
-                for page_index in 0..page_count {
-                    let page_offset = file_offset_in_section + page_index * PAGE_SIZE as u64;
-                    freader.read_at(page_offset, &mut page)?;
-
-                    let to_write = remaining.min(PAGE_SIZE as u64) as usize;
-                    out.write_all(&page[..to_write]).await?;
-                    remaining -= to_write as u64;
-                }
-                return Ok(());
-            }
-        }
-
-        Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "segment file not in encrypted section",
-        )
-        .into())
-    }
 }
+
 pub fn unpack_file(
     xvd: XvdFile,
     path: String,
