@@ -3,6 +3,7 @@ use crate::models::xvd::{PAGE_SIZE, XvcRegionId};
 use crate::xvd::math::gf_mul_x;
 
 use std::io::{self, Read, Seek, SeekFrom};
+use std::iter;
 
 use aes::Aes128;
 use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
@@ -132,18 +133,13 @@ impl<R: PageSource> SectionReader<R> {
             None => page_in_section as u32,
         });
 
-        let mut ciphertext = [0u8; PAGE_SIZE];
+        let mut page = [0u8; PAGE_SIZE];
         self.inner.seek(SeekFrom::Start(file_offset))?;
-        self.inner.read_exact(&mut ciphertext)?;
+        self.inner.read_exact(&mut page)?;
 
-        let plaintext = decrypt_page_xts(
-            ciphertext,
-            self.tweak,
-            &self.tweak_cipher,
-            &self.data_cipher,
-        );
+        decrypt_page_xts(&mut page, self.tweak, &self.tweak_cipher, &self.data_cipher);
 
-        self.cached_page_plaintext.copy_from_slice(&plaintext);
+        self.cached_page_plaintext = page;
         self.cached_page_index = Some(page_in_section);
         Ok(())
     }
@@ -155,33 +151,66 @@ impl<R: PageSource> SectionReader<R> {
 /// to decrypt the data. Each 16-byte block is decrypted as `P = AES_dec(C ⊕ T) ⊕ T`,
 /// where `T` is the AES-encrypted tweak, advanced by one GF(2¹²⁸) multiplication per block.
 pub fn decrypt_page_xts(
-    mut page: [u8; PAGE_SIZE],
+    page: &mut [u8; PAGE_SIZE],
     tweak: Tweak,
     tweak_cipher: &Aes128,
     data_cipher: &Aes128,
-) -> [u8; PAGE_SIZE] {
+) {
+    transform_page_xts(page, tweak, tweak_cipher, |block| {
+        data_cipher.decrypt_block(block);
+    });
+}
+
+/// Encrypts a page using XTS-AES (IEEE 1619-2007).
+///
+/// XTS-AES uses two keys: a tweak key to derive a per-page tweak, and a data key
+/// to encrypt the data. Each 16-byte block is encrypted as `C = AES_enc(P ⊕ T) ⊕ T`,
+/// where `T` is the AES-encrypted tweak, advanced by one GF(2¹²⁸) multiplication per block.
+#[expect(dead_code)]
+pub fn encrypt_page_xts(
+    page: &mut [u8; PAGE_SIZE],
+    tweak: Tweak,
+    tweak_cipher: &Aes128,
+    data_cipher: &Aes128,
+) {
+    transform_page_xts(page, tweak, tweak_cipher, |block| {
+        data_cipher.encrypt_block(block);
+    });
+}
+
+/// Transforms a page using XTS-AES (IEEE 1619-2007).
+///
+/// Each 16-byte block is transformed as `out = transform(in ⊕ T) ⊕ T`, where `T` is the
+/// AES-encrypted tweak, advanced by one GF(2¹²⁸) multiplication per block.
+///
+/// The `transform` function is called with each block after the tweak is applied, and should
+/// perform either AES encryption or decryption.
+#[inline]
+fn transform_page_xts<F>(
+    page: &mut [u8; PAGE_SIZE],
+    tweak: Tweak,
+    tweak_cipher: &Aes128,
+    transform: F,
+) where
+    F: Fn(&mut aes::Block),
+{
     // XTS requires the data length to be a multiple of the block size (16 bytes).
     const { assert!(PAGE_SIZE.is_multiple_of(16)) };
 
-    let mut tweak = tweak.encrypt(tweak_cipher);
+    // Every tweak in the iterator is calculated by applying `gf_mul_x` to the previous one.
+    let tweaks = iter::successors(Some(tweak.encrypt(tweak_cipher)), |t| Some(gf_mul_x(*t)));
 
-    for block in page.as_chunks_mut::<16>().0 {
+    for (block, tweak) in page.as_chunks_mut::<16>().0.iter_mut().zip(tweaks) {
         let mut out = u128::from_le_bytes(*block);
 
         out ^= tweak;
-        out = aes_decrypt(data_cipher, out);
+        out = {
+            let mut buf = aes::Block::from(out.to_le_bytes());
+            transform(&mut buf);
+            u128::from_le_bytes(buf.0)
+        };
         out ^= tweak;
 
         *block = out.to_le_bytes();
-        tweak = gf_mul_x(tweak);
     }
-
-    page
-}
-
-#[inline]
-fn aes_decrypt(cipher: &Aes128, block: u128) -> u128 {
-    let mut block = aes::Block::from(block.to_le_bytes());
-    cipher.decrypt_block(&mut block);
-    u128::from_le_bytes(block.0)
 }
