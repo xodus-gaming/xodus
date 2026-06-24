@@ -133,18 +133,13 @@ impl<R: PageSource> SectionReader<R> {
             None => page_in_section as u32,
         });
 
-        let mut ciphertext = [0u8; PAGE_SIZE];
+        let mut page = [0u8; PAGE_SIZE];
         self.inner.seek(SeekFrom::Start(file_offset))?;
-        self.inner.read_exact(&mut ciphertext)?;
+        self.inner.read_exact(&mut page)?;
 
-        let plaintext = decrypt_page_xts(
-            ciphertext,
-            self.tweak,
-            &self.tweak_cipher,
-            &self.data_cipher,
-        );
+        decrypt_page_xts(&mut page, self.tweak, &self.tweak_cipher, &self.data_cipher);
 
-        self.cached_page_plaintext.copy_from_slice(&plaintext);
+        self.cached_page_plaintext = page;
         self.cached_page_index = Some(page_in_section);
         Ok(())
     }
@@ -156,11 +151,11 @@ impl<R: PageSource> SectionReader<R> {
 /// to decrypt the data. Each 16-byte block is decrypted as `P = AES_dec(C ⊕ T) ⊕ T`,
 /// where `T` is the AES-encrypted tweak, advanced by one GF(2¹²⁸) multiplication per block.
 fn decrypt_page_xts(
-    mut page: [u8; PAGE_SIZE],
+    page: &mut [u8; PAGE_SIZE],
     tweak: Tweak,
     tweak_cipher: &Aes128,
     data_cipher: &Aes128,
-) -> [u8; PAGE_SIZE] {
+) {
     // XTS requires the data length to be a multiple of the block size (16 bytes).
     const { assert!(PAGE_SIZE.is_multiple_of(16)) };
 
@@ -176,8 +171,6 @@ fn decrypt_page_xts(
 
         *block = out.to_le_bytes();
     }
-
-    page
 }
 
 #[inline]
