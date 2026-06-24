@@ -144,10 +144,10 @@ pub struct PackageFeatures {
 pub struct HardwareProperties {
     pub minimum_hardware: Vec<String>,
     pub recommended_hardware: Vec<String>,
-    pub minimum_processor: String,
-    pub recommended_processor: String,
-    pub minimum_graphics: String,
-    pub recommended_graphics: String,
+    pub minimum_processor: Option<String>,
+    pub recommended_processor: Option<String>,
+    pub minimum_graphics: Option<String>,
+    pub recommended_graphics: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
