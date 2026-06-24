@@ -106,12 +106,6 @@ pub struct PackedContentKey([u8; 40]);
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ContentKey([u8; 32]);
 
-impl From<[u8; 32]> for ContentKey {
-    fn from(value: [u8; 32]) -> Self {
-        Self(value)
-    }
-}
-
 fn read_array<const N: usize, R: Read>(mut reader: R) -> io::Result<[u8; N]> {
     let mut buf = [0u8; N];
     reader.read_exact(&mut buf)?;
