@@ -1,14 +1,10 @@
 use std::collections::HashMap;
 
-use xodus::{
-    hardware,
-    licensing::utils::generate_string,
-    models::{
-        devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo},
-        secrets::{Token, TokenStore},
-        soap::BodyContent,
-    },
-};
+use crate::{api, hardware, licensing::utils::generate_string, models, models::{
+    devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo},
+    secrets::{Token, TokenStore},
+    soap::BodyContent,
+}, secrets};
 
 pub async fn ensure_device_credentials(client: &reqwest::Client) {
     let license = get_dev_license();
@@ -24,11 +20,11 @@ pub async fn ensure_device_credentials(client: &reqwest::Client) {
             }),
         };
 
-        let dev = xodus::api::live::login_device_credential(client, provision)
+        let dev = api::live::login_device_credential(client, provision)
             .await
             .expect("Failed to get device creds");
 
-        let device = xodus::models::secrets::Device {
+        let device = models::secrets::Device {
             username: username.clone(),
             password: password.clone(),
             puid: dev.puid,
@@ -37,11 +33,11 @@ pub async fn ensure_device_credentials(client: &reqwest::Client) {
             splicense: dev.license.splicense_block,
         };
 
-        let entry = xodus::secrets::get_entry("dev_license").unwrap();
+        let entry = secrets::get_entry("dev_license").unwrap();
         let json = serde_json::to_string(&device).unwrap();
         entry.set_secret(json.as_bytes()).unwrap();
 
-        let tokens = xodus::api::live::authenticate_device(client, username, password)
+        let tokens = api::live::authenticate_device(client, username, password)
             .await
             .expect("Failed to auth device");
 
@@ -56,13 +52,13 @@ pub async fn ensure_device_credentials(client: &reqwest::Client) {
                 .as_ref()
                 .unwrap();
             let key_name = key_name.clone();
-            let token: xodus::models::secrets::Token = resp.into();
+            let token: Token = resp.into();
             save_token(key_name, token);
         }
     } else if get_device_token().is_err() {
         let license = license.unwrap();
         let tokens =
-            xodus::api::live::authenticate_device(client, license.username, license.password)
+            api::live::authenticate_device(client, license.username, license.password)
                 .await
                 .expect("Failed to auth device");
 
@@ -77,25 +73,25 @@ pub async fn ensure_device_credentials(client: &reqwest::Client) {
                 .as_ref()
                 .unwrap();
             let key_name = key_name.clone();
-            let token: xodus::models::secrets::Token = resp.into();
+            let token: Token = resp.into();
             save_token(key_name, token);
         }
     }
 }
 
-pub fn get_dev_license() -> Result<xodus::models::secrets::Device, Box<dyn std::error::Error>> {
-    let device_entry = xodus::secrets::get_entry("dev_license")?;
+pub fn get_dev_license() -> Result<models::secrets::Device, Box<dyn std::error::Error>> {
+    let device_entry = secrets::get_entry("dev_license")?;
     let secret = device_entry.get_secret()?;
-    let dev = serde_json::from_slice::<xodus::models::secrets::Device>(secret.as_slice())?;
+    let dev = serde_json::from_slice::<models::secrets::Device>(secret.as_slice())?;
     Ok(dev)
 }
 
-pub fn get_device_token() -> Result<xodus::models::secrets::Token, Box<dyn std::error::Error>> {
+pub fn get_device_token() -> Result<Token, Box<dyn std::error::Error>> {
     get_token("http://Passport.NET/STS".to_string()).ok_or("Error".into())
 }
 
 pub fn save_token(address: String, token: Token) {
-    let entry = xodus::secrets::get_entry("device-tokens").unwrap();
+    let entry = secrets::get_entry("device-tokens").unwrap();
     let passwd = entry.get_password().unwrap_or_default();
 
     let mut tokens = if !passwd.is_empty() {
@@ -111,7 +107,7 @@ pub fn save_token(address: String, token: Token) {
 }
 
 pub fn get_token(address: String) -> Option<Token> {
-    let entry = xodus::secrets::get_entry("device-tokens").unwrap();
+    let entry = secrets::get_entry("device-tokens").unwrap();
     let passwd = entry.get_password().unwrap_or_default();
 
     let tokens = if !passwd.is_empty() {

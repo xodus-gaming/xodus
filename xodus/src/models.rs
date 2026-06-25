@@ -7,3 +7,4 @@ pub mod packagespc;
 pub mod secrets;
 pub mod soap;
 pub mod xvd;
+pub mod user;

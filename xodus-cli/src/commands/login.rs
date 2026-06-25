@@ -1,4 +1,5 @@
-use crate::{device, user, webview};
+use xodus::device;
+use crate::{user, webview};
 use xodus::models::live::{DAProperty, ExchangeUserTokenOutcome};
 use xodus::models::{secrets, soap};
 
@@ -42,13 +43,13 @@ pub async fn run(client: &reqwest::Client) {
 
 struct LoginHandler {
     client: reqwest::Client,
-    device: xodus::models::secrets::LegacyToken,
+    device: secrets::LegacyToken,
     client_id: String,
     finish: bool,
 }
 
 impl LoginHandler {
-    fn new(client: reqwest::Client, device: xodus::models::secrets::LegacyToken) -> Self {
+    fn new(client: reqwest::Client, device: secrets::LegacyToken) -> Self {
         Self {
             client,
             device,
@@ -130,7 +131,7 @@ impl webview::SessionHandler for LoginHandler {
             }
             ExchangeUserTokenOutcome::Issued(da) => {
                 runtime.close_session(session_id);
-                user::save_user(xodus::models::secrets::User {
+                user::save_user(secrets::User {
                     puid: data.puid,
                     username: data.username,
                 });
