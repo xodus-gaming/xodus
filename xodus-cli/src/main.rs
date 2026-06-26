@@ -3,8 +3,8 @@ use xodus::tokens::TokenManager;
 
 mod commands;
 mod license;
-mod webview;
 mod package;
+mod webview;
 
 #[derive(Subcommand)]
 enum SubCommand {
