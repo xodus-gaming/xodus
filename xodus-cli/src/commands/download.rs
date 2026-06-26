@@ -9,11 +9,16 @@ use xodus::{
         packagespc::{PackageFile, PackageResponse},
         secrets::Token,
     },
+    tokens::TokenManager,
 };
 
-use crate::{device, user};
-
-pub async fn run(client: &reqwest::Client, product: String, market: Option<String>, dry_run: bool) {
+pub async fn run(
+    client: &reqwest::Client,
+    tokens: &TokenManager,
+    product: String,
+    market: Option<String>,
+    dry_run: bool,
+) {
     let displaycatalog = find_products_by_id(
         client,
         product,
@@ -58,12 +63,12 @@ pub async fn run(client: &reqwest::Client, product: String, market: Option<Strin
         return;
     };
 
-    let dev_token = device::get_device_token().unwrap();
+    let dev_token = tokens.get_device_sts_token().unwrap();
     let Token::Legacy(dev_token) = dev_token else {
         eprintln!("Invalid STS token");
         return;
     };
-    let user_token = user::get_token("http://Passport.NET/STS".to_string()).unwrap();
+    let user_token = tokens.get_user_sts_token().unwrap();
     let Token::Legacy(legacy) = user_token else {
         eprintln!("Unspported user token");
         return;

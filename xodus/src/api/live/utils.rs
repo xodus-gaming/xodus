@@ -195,6 +195,7 @@ pub fn decrypt_response(
             .decrypt_padded_b2b::<Pkcs7>(encrypted, &mut block)
             .expect("Failed");
         let result = std::str::from_utf8(&block).unwrap();
+        // println!("{result}"); // Useful debugging technique
         let security_token_res: soap::BodyContent = quick_xml::de::from_str(result).unwrap();
 
         return Ok((security_token_res, pp));

@@ -1,10 +1,9 @@
 use clap::{Parser, Subcommand};
+use xodus::tokens::TokenManager;
+
 mod commands;
-mod device;
 mod license;
-mod user;
 mod webview;
-use xodus::xal::client_params::CLIENT_WINDOWS;
 
 #[derive(Subcommand)]
 enum SubCommand {
@@ -43,21 +42,22 @@ struct CliArgs {
 async fn main() {
     env_logger::init_from_env("XODUS_LOG");
     let client = reqwest::ClientBuilder::new()
-        .user_agent(CLIENT_WINDOWS().user_agent)
+        .user_agent(format!("xodus-cli/{}", env!("CARGO_PKG_VERSION")))
         .connection_verbose(true)
         .build()
         .unwrap();
     let args = CliArgs::parse();
 
     xodus::secrets::init_secrets().expect("Unable to initialize credentials");
-    device::ensure_device_credentials(&client).await;
+    let tokens = TokenManager::with_keychain_and_memory();
+    xodus::tokens::device::ensure_device_credentials(&client, &tokens).await;
 
     match args.command {
         SubCommand::Download {
             product,
             market,
             dry_run,
-        } => commands::download::run(&client, product, market, dry_run).await,
+        } => commands::download::run(&client, &tokens, product, market, dry_run).await,
         SubCommand::License {
             content_id,
             market,
@@ -65,6 +65,7 @@ async fn main() {
         } => {
             commands::license::run(
                 &client,
+                &tokens,
                 content_id,
                 market.unwrap_or("neutral".to_string()),
                 ciks,
@@ -72,7 +73,7 @@ async fn main() {
             .await;
         }
         SubCommand::Login => {
-            commands::login::run(&client).await;
+            commands::login::run(&client, &tokens).await;
         }
         SubCommand::Extract {
             path,
@@ -81,6 +82,7 @@ async fn main() {
         } => {
             commands::extract::run(
                 &client,
+                &tokens,
                 path,
                 destination,
                 market.unwrap_or("neutral".to_string()),

@@ -1,22 +1,23 @@
-use crate::{device, user, webview};
+use crate::webview;
 use xodus::models::live::{DAProperty, ExchangeUserTokenOutcome};
 use xodus::models::{secrets, soap};
+use xodus::tokens::TokenManager;
 
 const CLIENT_ID: &str = "000000004424da1f";
 const LOGIN_MARKET: &str = "en-US";
 const USER_AUTH_SCOPE: &str = "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0";
 
-pub async fn run(client: &reqwest::Client) {
-    let token = device::get_device_token().unwrap();
+pub async fn run(client: &reqwest::Client, tokens: &TokenManager) {
+    let token = tokens.get_device_sts_token().unwrap();
     let secrets::Token::Legacy(token) = token else {
         eprintln!("Invalid STS token");
         return;
     };
-    let handler = LoginHandler::new(client.clone(), token);
+    let handler = LoginHandler::new(client.clone(), token, tokens.clone());
     let output = webview::run_sessions(handler)
         .expect("failed to login")
         .flatten();
-    let tokens = match output {
+    let issued_tokens = match output {
         Some(soap::BodyContent::RequestSecurityTokenResponseCollection(collection)) => {
             collection.security_tokens
         }
@@ -28,7 +29,7 @@ pub async fn run(client: &reqwest::Client) {
         _ => unreachable!(),
     };
 
-    for token in tokens {
+    for token in issued_tokens {
         let address = token.applies_to.endpoint_reference.address.clone();
         let token = token.into();
         let address = if let secrets::Token::Legacy(legacy) = &token {
@@ -36,7 +37,7 @@ pub async fn run(client: &reqwest::Client) {
         } else {
             address
         };
-        user::save_token(address, token);
+        tokens.save_user_token(address, token).unwrap();
     }
 }
 
@@ -45,15 +46,21 @@ struct LoginHandler {
     device: xodus::models::secrets::LegacyToken,
     client_id: String,
     finish: bool,
+    tokens: TokenManager,
 }
 
 impl LoginHandler {
-    fn new(client: reqwest::Client, device: xodus::models::secrets::LegacyToken) -> Self {
+    fn new(
+        client: reqwest::Client,
+        device: xodus::models::secrets::LegacyToken,
+        tokens: TokenManager,
+    ) -> Self {
         Self {
             client,
             device,
             client_id: CLIENT_ID.to_string(),
             finish: false,
+            tokens,
         }
     }
 
@@ -130,10 +137,12 @@ impl webview::SessionHandler for LoginHandler {
             }
             ExchangeUserTokenOutcome::Issued(da) => {
                 runtime.close_session(session_id);
-                user::save_user(xodus::models::secrets::User {
-                    puid: data.puid,
-                    username: data.username,
-                });
+                self.tokens
+                    .save_user(&xodus::models::secrets::User {
+                        puid: data.puid,
+                        username: data.username,
+                    })
+                    .unwrap();
                 Ok(webview::HandlerControl::Complete(Some(da)))
             }
         }
