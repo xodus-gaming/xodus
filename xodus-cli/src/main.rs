@@ -4,6 +4,7 @@ use xodus::tokens::TokenManager;
 mod commands;
 mod license;
 mod webview;
+mod package;
 
 #[derive(Subcommand)]
 enum SubCommand {
@@ -112,6 +113,7 @@ async fn main() {
         } => {
             commands::streaming::run(
                 &client,
+                &tokens,
                 source,
                 destination,
                 try_skip_ntfs,

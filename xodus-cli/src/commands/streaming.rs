@@ -11,6 +11,7 @@ use xodus::{
         streaming,
         utils::{SegmentFile, XvdFile},
     },
+    tokens::TokenManager,
 };
 
 use crate::{
@@ -33,6 +34,7 @@ enum ProgressEvent {
 
 pub async fn run(
     client: &reqwest::Client,
+    tokens: &TokenManager,
     source: String,
     destination: String,
     try_skip_ntfs: bool,
@@ -56,7 +58,7 @@ pub async fn run(
         } else {
             source
         };
-        let package_result = get_packages(client, content_id.clone()).await;
+        let package_result = get_packages(client, tokens, content_id.clone()).await;
         let Ok(package) = package_result else {
             let Err(err) = package_result else {
                 eprintln!("Unknown Error");
@@ -256,6 +258,7 @@ pub async fn run(
 
     let license = get_license(
         client,
+        tokens,
         remote_xvd.content_id().to_string(),
         market.unwrap_or("neutral".to_string()),
     )

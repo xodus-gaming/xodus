@@ -6,9 +6,8 @@ use xodus::{
         packagespc::{PackageDetails, PackageResponse},
         secrets::Token,
     },
+    tokens::TokenManager,
 };
-
-use crate::{device, user};
 
 pub async fn get_content_id(
     client: &reqwest::Client,
@@ -86,19 +85,18 @@ pub async fn get_content_id(
 
 pub async fn get_packages(
     client: &reqwest::Client,
+    tokens: &TokenManager,
     content_id: String,
 ) -> Result<PackageDetails, Box<dyn std::error::Error>> {
-    let dev_token = device::get_device_token().unwrap();
+    let dev_token = tokens.get_device_sts_token().unwrap();
     let Token::Legacy(dev_token) = dev_token else {
-        eprintln!("Invalid STS token");
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::Other,
             "Invalid STS token",
         )));
     };
-    let user_token = user::get_token("http://Passport.NET/STS".to_string()).unwrap();
+    let user_token = tokens.get_user_sts_token().unwrap();
     let Token::Legacy(legacy) = user_token else {
-        eprintln!("Unspported user token");
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::Other,
             "Unsupported user token",
