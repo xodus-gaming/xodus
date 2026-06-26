@@ -2,22 +2,40 @@ use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use inquire::{MultiSelect, validator::Validation};
 use tokio::io::AsyncWriteExt;
-use xodus::models::packagespc::PackageFile;
+use xodus::{
+    XBOX_LIVE_PACKAGES_PC,
+    api::displaycatalog::find_products_by_id,
+    models::{
+        packagespc::{PackageFile, PackageResponse},
+        secrets::Token,
+    },
+    tokens::TokenManager,
+};
 
-use crate::package::{get_content_id, get_packages};
+pub async fn run(
+    client: &reqwest::Client,
+    tokens: &TokenManager,
+    product: String,
+    market: Option<String>,
+    dry_run: bool,
+) {
+    let displaycatalog = find_products_by_id(
+        client,
+        product,
+        market.unwrap_or("neutral".to_owned()),
+        vec!["en".to_string(), "neutral".to_string()],
+    )
+    .await;
 
-pub async fn run(client: &reqwest::Client, product: String, market: Option<String>, dry_run: bool) {
-    let content_id_task = get_content_id(client, product, market).await;
-    let Ok(content_id) = content_id_task else {
-        let Err(err) = content_id_task else {
-            eprintln!("Unknown Error");
+    let displaycatalog = match displaycatalog {
+        Ok(dc) => dc,
+        Err(err) => {
+            log::error!("Failed to load displaycatalog {err:?}");
             return;
-        };
-        eprintln!("{}", err.to_string());
-        return;
+        }
     };
 
-    let package_result = get_packages(client, content_id.clone()).await;
+    let package_result = get_packages(client, tokens, content_id.clone()).await;
     let Ok(package) = package_result else {
         let Err(err) = package_result else {
             eprintln!("Unknown Error");

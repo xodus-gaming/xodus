@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package xodus;
+
+enum XodusMessageType {
+    UNKNOWN = 0;
+    PING = 1;
+    PONG = 2;
+    MSA_TOKEN_REQUEST=3;
+    MSA_TOKEN_RESPONSE=4;
+}
