@@ -1,5 +1,5 @@
 use crate::math::gf_mul_x;
-use crate::models::{PAGE_SIZE, XvcRegionId};
+use crate::models::xvd::{PAGE_SIZE, XvcRegionId};
 
 use std::io::{self, Read, Seek, SeekFrom};
 use std::iter;

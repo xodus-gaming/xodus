@@ -3,3 +3,4 @@ pub mod extract;
 pub mod license;
 pub mod login;
 pub mod streaming;
+pub mod xsp;

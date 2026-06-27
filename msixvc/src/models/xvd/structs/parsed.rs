@@ -1,8 +1,10 @@
 use super::raw;
 use crate::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
-use crate::models::constants::{LEGACY_SECTOR_SIZE, SECTOR_SIZE, XVD_HEADER_INCL_SIGNATURE_SIZE};
-use crate::models::enums::{XvcRegionId, XvdContentType, XvdType};
-use crate::models::flags::{
+use crate::models::xvd::constants::{
+    LEGACY_SECTOR_SIZE, SECTOR_SIZE, XVD_HEADER_INCL_SIGNATURE_SIZE,
+};
+use crate::models::xvd::enums::{XvcRegionId, XvdContentType, XvdType};
+use crate::models::xvd::flags::{
     WriteablePolicyFlags, XvcInfoFlags, XvcRegionFlags, XvcRegionPresenceInfoFlags,
     XvdSegmentMetadataSegmentFlags, XvdVolumeFlags,
 };

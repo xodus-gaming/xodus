@@ -4,7 +4,7 @@ use fs2::available_space;
 use futures_util::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use msixvc::{
-    models::PAGE_SIZE,
+    models::xvd::PAGE_SIZE,
     streaming,
     utils::{SegmentFile, XvdFile},
 };
