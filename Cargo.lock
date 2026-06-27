@@ -154,9 +154,9 @@ dependencies = [
 
 [[package]]
 name = "arrayvec"
-version = "0.7.6"
+version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
+checksum = "f02882884d3e1bc524fb12c79f107f6ad0e1cfd498c536ffb494301740995dfe"
 
 [[package]]
 name = "async-trait"
@@ -2810,6 +2810,27 @@ dependencies = [
  "ctutils",
  "hybrid-array",
  "num-traits",
+]
+
+[[package]]
+name = "msxivc"
+version = "0.1.0"
+dependencies = [
+ "aes 0.9.0",
+ "async-trait",
+ "bitflags 2.13.0",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "gpt",
+ "ntfs",
+ "num_enum",
+ "reqwest",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "uuid",
+ "zerocopy",
 ]
 
 [[package]]
@@ -6077,23 +6098,17 @@ dependencies = [
  "aes 0.9.0",
  "aes-keywrap",
  "apple-native-keyring-store",
- "async-trait",
  "base64 0.22.1",
  "bergshamra",
  "bergshamra-c14n",
- "bitflags 2.13.0",
- "bytes",
  "cbc 0.2.1",
  "chrono",
  "dbus-secret-service-keyring-store",
  "ed25519-dalek",
- "futures-util",
  "globset",
- "gpt",
  "hmac 0.12.1",
  "keyring-core",
  "log",
- "ntfs",
  "num_enum",
  "prost",
  "prost-build",
@@ -6106,7 +6121,6 @@ dependencies = [
  "smbios-lib",
  "thiserror 2.0.18",
  "tokio",
- "tokio-util",
  "url",
  "uuid",
  "xal",
@@ -6126,6 +6140,7 @@ dependencies = [
  "indicatif",
  "inquire",
  "log",
+ "msxivc",
  "reqwest",
  "serde_json",
  "tao",

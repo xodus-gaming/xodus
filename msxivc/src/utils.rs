@@ -19,21 +19,20 @@ use tokio::{
 use tokio_util::io::SyncIoBridge;
 use zerocopy::IntoBytes;
 
-use crate::licensing::splicense::ContentKey;
-use crate::models::xvd::{
+use crate::models::{
     PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment,
     XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,
 };
-use crate::xvd::streaming_ntfs::collect_ntfs_stream_layouts;
+use crate::streaming_ntfs::collect_ntfs_stream_layouts;
 use async_trait::async_trait;
 
-use crate::xvd::crypt::{SectionReader, Tweak, decrypt_page_xts};
-use crate::xvd::math::{
+use crate::crypt::{SectionReader, Tweak, decrypt_page_xts};
+use crate::math::{
     bytes_to_pages, calculate_hash_block_num_and_run_for_block_num, offset_to_page_number,
 };
 use crate::{
-    models::xvd::{XvcInfo, XvcRegionHeader, XvcRegionId, XvdHashEntry, XvdHeader, XvdStruct},
-    xvd::math::page_number_to_offset,
+    math::page_number_to_offset,
+    models::{XvcInfo, XvcRegionHeader, XvcRegionId, XvdHashEntry, XvdHeader, XvdStruct},
 };
 
 pub struct SyncSubstream<R> {
@@ -189,7 +188,7 @@ macro_rules! read_struct {
 }
 
 struct XvdEncryptionInfo {
-    full_key: ContentKey,
+    full_key: [u8; 32],
     encrypted_sections: Vec<EncryptedSectionInfo>,
 }
 
@@ -1009,7 +1008,7 @@ pub fn unpack_file(
     xvd: XvdFile,
     path: String,
     destination: String,
-    full_key: ContentKey,
+    full_key: [u8; 32],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let sfile = std::fs::File::open(path)?;
     let block_size = 4096; //xvd.header.block_size;

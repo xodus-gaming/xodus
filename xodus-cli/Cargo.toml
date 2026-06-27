@@ -6,6 +6,7 @@ default-run = "xodus-cli"
 
 [dependencies]
 xodus = { path = "../xodus" }
+msxivc = { path = "../msxivc" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 tao = "0.35.2"

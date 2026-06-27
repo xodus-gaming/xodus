@@ -3,16 +3,14 @@ use std::{collections::HashMap, path::Path, vec};
 use fs2::available_space;
 use futures_util::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use msxivc::{
+    models::PAGE_SIZE,
+    streaming,
+    utils::{SegmentFile, XvdFile},
+};
 use tokio::fs::OpenOptions;
 use uuid::Uuid;
-use xodus::{
-    models::xvd::PAGE_SIZE,
-    tokens::TokenManager,
-    xvd::{
-        streaming,
-        utils::{SegmentFile, XvdFile},
-    },
-};
+use xodus::tokens::TokenManager;
 
 use crate::{
     license::get_license,
