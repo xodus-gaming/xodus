@@ -1,4 +1,4 @@
-use msxivc::utils::{XvdFile, unpack_file};
+use msixvc::utils::{XvdFile, unpack_file};
 use xodus::tokens::TokenManager;
 
 use crate::license::get_license;

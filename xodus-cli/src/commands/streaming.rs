@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::Path, vec};
 use fs2::available_space;
 use futures_util::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use msxivc::{
+use msixvc::{
     models::PAGE_SIZE,
     streaming,
     utils::{SegmentFile, XvdFile},

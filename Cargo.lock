@@ -2813,7 +2813,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "msxivc"
+name = "msixvc"
 version = "0.1.0"
 dependencies = [
  "aes 0.9.0",
@@ -6140,7 +6140,7 @@ dependencies = [
  "indicatif",
  "inquire",
  "log",
- "msxivc",
+ "msixvc",
  "reqwest",
  "serde_json",
  "tao",
