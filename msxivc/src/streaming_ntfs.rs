@@ -125,7 +125,7 @@ where
             NtfsAttributeValue::Resident(value) => NtfsStreamLayoutReport {
                 file_record_number: file.file_record_number(),
                 path: full_path,
-                resident_data: value.len() > 0,
+                resident_data: !value.is_empty(),
                 resident_data_length: value.len(),
                 value_length,
                 data_runs: Vec::new(),

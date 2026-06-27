@@ -4,13 +4,11 @@ pub fn init_secrets() -> Result<(), keyring_core::Error> {
     #[cfg(target_os = "linux")]
     {
         keyring_core::set_default_store(dbus_secret_service_keyring_store::Store::new()?);
-        return Ok(());
     }
 
     #[cfg(target_os = "macos")]
     {
         keyring_core::set_default_store(apple_native_keyring_store::keychain::Store::new()?);
-        return Ok(());
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -19,8 +17,9 @@ pub fn init_secrets() -> Result<(), keyring_core::Error> {
             &std::collections::HashMap::from([("persist", "true")]),
         )?;
         keyring_core::set_default_store(store);
-        return Ok(());
     }
+
+    Ok(())
 }
 
 pub fn get_entry(user: &str) -> Result<keyring_core::Entry, keyring_core::Error> {

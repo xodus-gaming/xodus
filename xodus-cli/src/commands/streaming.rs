@@ -49,7 +49,7 @@ pub async fn run(
                     eprintln!("Unknown Error");
                     return;
                 };
-                eprintln!("{}", err.to_string());
+                eprintln!("{}", err);
                 return;
             };
             content_id
@@ -62,14 +62,13 @@ pub async fn run(
                 eprintln!("Unknown Error");
                 return;
             };
-            eprintln!("{}", err.to_string());
+            eprintln!("{}", err);
             return;
         };
         let Some(file) = package
             .package_files
             .iter()
-            .filter(|p| p.file_name.ends_with(".msixvc"))
-            .next()
+            .find(|p| p.file_name.ends_with(".msixvc"))
         else {
             eprintln!("No .msixvc file found");
             return;
@@ -87,10 +86,13 @@ pub async fn run(
         client.clone(),
         url,
         Some(|c, _| {
-            if let Ok(_) = tx.try_send(ProgressEvent::Advanced {
-                id: usize::MAX,
-                delta: c - pos,
-            }) {
+            if tx
+                .try_send(ProgressEvent::Advanced {
+                    id: usize::MAX,
+                    delta: c - pos,
+                })
+                .is_ok()
+            {
                 pos = c;
             }
         }),
@@ -111,7 +113,7 @@ pub async fn run(
         while let Some(event) = rx.recv().await {
             match event {
                 ProgressEvent::Started { id, name, total } => {
-                    let cur_progess = multi_progress.add(ProgressBar::new(total as u64).with_style(
+                    let cur_progess = multi_progress.add(ProgressBar::new(total).with_style(
                         ProgressStyle::with_template("{msg:30!} {bytes:>12}/{total_bytes:>12} {bytes_per_sec:>12} [{bar:40.cyan/blue}] {percent:>3}%").unwrap()
                         .progress_chars("#>-")
                     ));
@@ -283,7 +285,7 @@ pub async fn run(
         .iter()
         .filter(|(k, v1)| {
             if let Some(v2) = lfiles.get(*k) {
-                v1.data_hashs != v2.data_hashs || v1.data_hashs.len() == 0
+                v1.data_hashs != v2.data_hashs || v1.data_hashs.is_empty()
             } else {
                 true
             }
@@ -331,7 +333,7 @@ pub async fn run(
             .iter()
             .filter(|(k, v1)| {
                 if let Some(v2) = lfiles.get(*k) {
-                    v1.data_hashs != v2.data_hashs || v1.data_hashs.len() == 0
+                    v1.data_hashs != v2.data_hashs || v1.data_hashs.is_empty()
                 } else {
                     true
                 }
@@ -364,10 +366,13 @@ pub async fn run(
             let mut lp = 0;
 
             let progress = |pos, _| {
-                if let Ok(_) = tx.try_send(ProgressEvent::Advanced {
-                    id: id,
-                    delta: pos - lp,
-                }) {
+                if tx
+                    .try_send(ProgressEvent::Advanced {
+                        id,
+                        delta: pos - lp,
+                    })
+                    .is_ok()
+                {
                     lp = pos;
                 }
             };

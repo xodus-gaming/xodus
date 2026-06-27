@@ -23,12 +23,10 @@ pub fn get_endpoint<'a>(url: &str, response: &'a TitleMgtResponse) -> Option<&'a
     let matched = set.matches(parsed_url.host_str().unwrap());
     let matched: Vec<&TitleMgtEndPoint> = matched.into_iter().map(|m| filtered[m]).collect();
 
-    let index = matched
+    matched
         .iter()
         .max_by_key(|&&pat| pat.host.chars().filter(|&c| c != '*').count())
-        .copied();
-
-    index
+        .copied()
 }
 
 #[cfg(test)]

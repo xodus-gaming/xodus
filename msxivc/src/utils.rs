@@ -505,8 +505,7 @@ impl XvdFile {
             page_number_to_offset(xvd_header.dynamic_header_page_count()) + dynamic_header_offset;
 
         let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
-        let mut reader =
-            BufReader::with_capacity(PAGES_PER_BLOCK * XvdHashEntry::RAW_SIZE as usize, file);
+        let mut reader = BufReader::with_capacity(PAGES_PER_BLOCK * XvdHashEntry::RAW_SIZE, file);
         for h in region_headers {
             let key_id = h.key_id;
             let length = h.length;
@@ -536,7 +535,7 @@ impl XvdFile {
                         false,
                         false,
                     );
-                let run_length = min(run_length as u64, num_pages - page);
+                let run_length = min(run_length, num_pages - page);
                 page += run_length;
                 let read_offset = hash_tree_offset
                     + page_number_to_offset(hash_block)
@@ -554,16 +553,16 @@ impl XvdFile {
                 section_length: h.length,
                 header_id: h.region_id,
                 vduid: xvd_header.vduid.to_bytes_le()[..8].try_into().unwrap(),
-                data_units: Some(data_units.clone()),
+                data_units: Some(data_units),
                 first_segment_index: h.first_segment_index,
-                data_hashs: data_hashs,
+                data_hashs,
             });
         }
         Ok(XvdFile {
             header: xvd_header,
             drive_data_offset,
             encrypted_section_infos: enc_sections,
-            user_data_offset: user_data_offset,
+            user_data_offset,
         })
     }
 
@@ -642,7 +641,7 @@ impl XvdFile {
                 let mut buf = vec![0u16, 0];
                 buf.resize(s as usize, 0);
                 file.seek(SeekFrom::Start(
-                    segment_metadata.offset as u64 + paths_offset + segment.path_offset as u64,
+                    segment_metadata.offset + paths_offset + segment.path_offset as u64,
                 ))
                 .await?;
                 file.read_exact(buf.as_mut_bytes()).await?;
@@ -652,8 +651,8 @@ impl XvdFile {
                 } else {
                     segment.filesize.div_ceil(PAGE_SIZE as u64)
                 };
-                if !(page_offset * (PAGE_SIZE as u64)
-                    < section.section_offset + section.section_length)
+                if page_offset * (PAGE_SIZE as u64)
+                    >= section.section_offset + section.section_length
                 {
                     break;
                 }
@@ -667,7 +666,7 @@ impl XvdFile {
                     SegmentFile {
                         offset: page_offset * PAGE_SIZE as u64,
                         length: segment.filesize,
-                        data_hashs: data_hashs,
+                        data_hashs,
                     },
                 );
                 page_offset += page_length;
@@ -904,10 +903,9 @@ impl XvdFile {
         )
         .await
         .map(|o| o.map(|o| o.error_for_status()))
+            && response.status() == 206
         {
-            if response.status() == 206 {
-                stream = Some(response.bytes_stream());
-            }
+            stream = Some(response.bytes_stream());
         }
         loop {
             if page_in_section >= page_start + page_count || remaining == 0 {
@@ -939,11 +937,10 @@ impl XvdFile {
                 )
                 .await
                 .map(|o| o.map(|o| o.error_for_status()))
+                    && response.status() == 206
                 {
-                    if response.status() == 206 {
-                        stream = Some(response.bytes_stream());
-                        continue;
-                    }
+                    stream = Some(response.bytes_stream());
+                    continue;
                 }
                 continue;
             }
@@ -979,8 +976,8 @@ impl XvdFile {
                     decrypt_page_xts(
                         &mut page,
                         *tweak,
-                        &tweak_cipher.as_ref().unwrap(),
-                        &data_cipher.as_ref().unwrap(),
+                        tweak_cipher.as_ref().unwrap(),
+                        data_cipher.as_ref().unwrap(),
                     );
                 }
                 let to_write = remaining.min(PAGE_SIZE as u64) as usize;
@@ -995,12 +992,12 @@ impl XvdFile {
             }
         }
         if remaining > 0 {
-            return Err(Box::new(std::io::Error::new(
-                ErrorKind::Other,
-                format!("{} of {} missing have {}", remaining, sfile.length, v),
-            )));
+            return Err(Box::new(std::io::Error::other(format!(
+                "{} of {} missing have {}",
+                remaining, sfile.length, v
+            ))));
         }
-        return Ok(());
+        Ok(())
     }
 }
 
