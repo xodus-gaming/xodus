@@ -19,7 +19,7 @@ pub async fn run(
             eprintln!("Unknown Error");
             return;
         };
-        eprintln!("{}", err.to_string());
+        eprintln!("{}", err);
         return;
     };
 
@@ -29,7 +29,7 @@ pub async fn run(
             eprintln!("Unknown Error");
             return;
         };
-        eprintln!("{}", err.to_string());
+        eprintln!("{}", err);
         return;
     };
 

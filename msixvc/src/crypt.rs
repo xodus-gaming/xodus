@@ -1,6 +1,5 @@
-use crate::licensing::splicense::ContentKey;
-use crate::models::xvd::{PAGE_SIZE, XvcRegionId};
-use crate::xvd::math::gf_mul_x;
+use crate::math::gf_mul_x;
+use crate::models::{PAGE_SIZE, XvcRegionId};
 
 use std::io::{self, Read, Seek, SeekFrom};
 use std::iter;
@@ -62,7 +61,7 @@ impl<R: PageSource> SectionReader<R> {
         section_length: u64,
         header_id: XvcRegionId,
         vduid: [u8; 8],
-        full_key: ContentKey,
+        full_key: [u8; 32],
         data_units: Option<Vec<u32>>,
     ) -> Self {
         let mut tweak_key = [0u8; 16];

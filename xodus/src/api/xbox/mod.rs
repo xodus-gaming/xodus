@@ -58,8 +58,7 @@ pub async fn run(
         .await
         .expect("Failed to authenticate Xbox user");
 
-    let resp = request_xsts_token(client, resp.token, relying_party)
+    request_xsts_token(client, resp.token, relying_party)
         .await
-        .expect("Failed to authenticate Xbox user");
-    resp
+        .expect("Failed to authenticate Xbox user")
 }

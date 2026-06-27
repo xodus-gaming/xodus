@@ -54,29 +54,24 @@ pub async fn get_content_id(
     subprods.dedup();
 
     let Some(package) = found_package else {
-        if subprods.len() > 0 {
+        if !subprods.is_empty() {
             let Ok(item) = Select::new("Select files to download", subprods)
                 .with_page_size(30)
                 .prompt()
             else {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Selection failed",
-                )));
+                return Err(Box::new(std::io::Error::other("Selection failed")));
             };
             return Box::pin(get_content_id(client, item, market)).await;
         }
 
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(Box::new(std::io::Error::other(
             "Windows.Desktop package not found, if you believe this is an error, please report it",
         )));
     };
 
     let Some(content_id) = &package.content_id else {
         log::error!("ContentId not found, if you believe this is an error, please report it");
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(Box::new(std::io::Error::other(
             "ContentId not found, if you believe this is an error, please report it",
         )));
     };
@@ -90,17 +85,11 @@ pub async fn get_packages(
 ) -> Result<PackageDetails, Box<dyn std::error::Error>> {
     let dev_token = tokens.get_device_sts_token().unwrap();
     let Token::Legacy(dev_token) = dev_token else {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Invalid STS token",
-        )));
+        return Err(Box::new(std::io::Error::other("Invalid STS token")));
     };
     let user_token = tokens.get_user_sts_token().unwrap();
     let Token::Legacy(legacy) = user_token else {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Unsupported user token",
-        )));
+        return Err(Box::new(std::io::Error::other("Unsupported user token")));
     };
 
     let xsts_token =
@@ -122,8 +111,7 @@ pub async fn get_packages(
     let res: PackageResponse = response.json().await.expect("Failed to get data");
 
     let PackageResponse::Found(package) = res else {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(Box::new(std::io::Error::other(
             "Package was not found, is it owned by the user?",
         )));
     };
