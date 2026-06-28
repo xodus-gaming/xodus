@@ -6,10 +6,10 @@ pub struct XspHeader {
     pub signature: [u8; 0x200],
     pub magic: [u8; 8],
     pub block_size_or_payload: U32, // Or payload offset
-    pub _unknown_val: [u8; 4], 
-    pub vduid: [u8; 0x10], 
+    pub _unknown_val: [u8; 4],
+    pub vduid: [u8; 0x10],
     pub uduid: [u8; 0x10],
-    pub plan_id: [u8; 0x10],
+    pub build_id: [u8; 0x10],
     pub _reserved: [u8; 0x30],
     pub _unknown1: U32,
     pub _unknown2: U32,
@@ -46,5 +46,5 @@ pub struct XspPatchRecord {
     pub source_offset: U32,
     pub flag: U32,
     pub target_offset: U32,
-    pub length: U32
+    pub length: U32,
 }

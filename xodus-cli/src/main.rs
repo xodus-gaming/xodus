@@ -15,7 +15,11 @@ enum SubCommand {
         product: String,
         #[arg(short, long)]
         market: Option<String>,
-        #[arg(long, default_value_t = false, help = "Display download URLs instead of downloading")]
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Display download URLs instead of downloading"
+        )]
         dry_run: bool,
     },
     #[command(about = "Dump CIKs for use with XvdTool")]
@@ -53,7 +57,7 @@ enum SubCommand {
     #[command(about = "Debug info on XSP file")]
     Xsp {
         file: String,
-    }
+    },
 }
 
 #[derive(Parser)]
@@ -131,7 +135,7 @@ async fn main() {
                 market,
             )
             .await;
-        },
+        }
         Xsp { file } => {
             commands::xsp::run(file).await;
         }

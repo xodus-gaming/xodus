@@ -18,11 +18,11 @@ impl TryFrom<raw::XspHeader> for XspHeader {
 
     fn try_from(value: raw::XspHeader) -> Result<Self, Self::Error> {
         if value.magic != Self::MAGIC {
-            return Err(XspHeaderParseError::InvalidMagic(value.magic))
+            return Err(XspHeaderParseError::InvalidMagic(value.magic));
         }
 
         println!("{value:#?}");
 
-        Ok(Self { })
+        Ok(Self {})
     }
 }

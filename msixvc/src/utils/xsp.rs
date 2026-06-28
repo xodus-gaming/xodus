@@ -1,9 +1,9 @@
-use tokio::{fs::OpenOptions, io::BufReader};
 use crate::common::*;
 use crate::models::xsp::XspHeader;
+use tokio::{fs::OpenOptions, io::BufReader};
 
 pub struct XspFile {
-    header: XspHeader
+    header: XspHeader,
 }
 impl XspFile {
     pub async fn parse_file(path: String) -> Result<Self, Box<dyn std::error::Error>> {
@@ -13,12 +13,10 @@ impl XspFile {
             .await
             .expect("Unable to open file");
 
-        let mut file = BufReader::new(file); 
+        let mut file = BufReader::new(file);
 
         let header = read_struct!(XspHeader, file)?;
 
-        Ok(Self {
-            header
-        })
+        Ok(Self { header })
     }
 }
