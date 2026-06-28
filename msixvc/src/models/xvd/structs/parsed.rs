@@ -1,4 +1,5 @@
 use super::raw;
+use crate::common::microsoft_filetime;
 use crate::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
 use crate::models::xvd::constants::{
     LEGACY_SECTOR_SIZE, SECTOR_SIZE, XVD_HEADER_INCL_SIGNATURE_SIZE,
@@ -15,19 +16,6 @@ use std::fmt::{Debug, Display};
 use chrono::DateTime;
 use num_enum::TryFromPrimitiveError;
 use uuid::Uuid;
-
-/// Converts a Microsoft FILETIME (number of 100ns intervals since 1601-01-01 UTC)
-/// into a [`chrono::DateTime`]
-const fn microsoft_filetime(filetime: i64) -> DateTime<chrono::Utc> {
-    // FILETIME counts 100ns intervals since 1601-01-01 UTC.
-    // Unix time counts nanoseconds since 1970-01-01 UTC.
-
-    /// Number of 100 nanoseconds between FILETIME epoch and Unix time
-    const FILETIME_TO_UNIX: i64 = 116_444_736_000_000_000;
-
-    let unix_nanos = (filetime - FILETIME_TO_UNIX) * 100;
-    DateTime::from_timestamp_nanos(unix_nanos)
-}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Version {

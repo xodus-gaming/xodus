@@ -5,3 +5,4 @@ use crate::common::*;
 pub use parsed::*;
 
 impl_struct!(XspHeader);
+impl_struct!(XspPatchRecord);
