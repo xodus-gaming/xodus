@@ -34,11 +34,11 @@ pub struct XspHeader {
     pub _unknown6: U64,
     pub always_64: U64, // Potential alignment / cluster size
     pub _reserved6: [u8; 0x10],
-    pub plan_id3: [u8; 0x10],
+    pub plan_id: [u8; 0x10],
     pub _value3_0: [u8; 0x14],
-    pub unknown_id: [u8; 0x10],
-    pub previous_build_version: [u16; 4],
-    pub current_build_version: [u16; 4],
+    pub xsp_id: [u8; 0x10],
+    pub previous_build_version: [U16; 4],
+    pub current_build_version: [U16; 4],
 }
 
 #[derive(FromBytes, Debug)]

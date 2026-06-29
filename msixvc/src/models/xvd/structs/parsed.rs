@@ -9,38 +9,14 @@ use crate::models::xvd::flags::{
     WriteablePolicyFlags, XvcInfoFlags, XvcRegionFlags, XvcRegionPresenceInfoFlags,
     XvdSegmentMetadataSegmentFlags, XvdVolumeFlags,
 };
+use crate::utils::common::Version;
 
 use std::collections::HashMap;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
 use chrono::DateTime;
 use num_enum::TryFromPrimitiveError;
 use uuid::Uuid;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Version {
-    pub major: u16,
-    pub minor: u16,
-    pub patch: u16,
-    pub build: u16,
-}
-
-impl Display for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}.{}.{}.{}",
-            self.major, self.minor, self.patch, self.build
-        )
-    }
-}
-
-impl Debug for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Use the Display implementation as the Debug one
-        write!(f, "{}", self)
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XvdHeader {

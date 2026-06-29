@@ -6,8 +6,8 @@ use tokio::{
 };
 
 pub struct XspFile {
-    header: XspHeader,
-    entries: Vec<XspPatchRecord>,
+    pub header: XspHeader,
+    pub entries: Vec<XspPatchRecord>,
 }
 impl XspFile {
     pub async fn parse_file(path: String) -> Result<Self, Box<dyn std::error::Error>> {
@@ -28,8 +28,7 @@ impl XspFile {
             entries.push(record);
         }
 
-        println!("{header:?}");
-        println!("{entries:#?}");
+        println!("{header:#?}");
 
         Ok(Self { header, entries })
     }

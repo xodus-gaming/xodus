@@ -1,10 +1,17 @@
 use crate::models::xsp::raw;
+use crate::utils::common::Version;
 
 #[derive(Debug, Clone)]
 pub struct XspHeader {
     pub content_id: uuid::Uuid,
+    pub plan_id: uuid::Uuid,
+    pub xsp_id: uuid::Uuid,
     pub page_size: u32,
     pub record_count: u32,
+    pub total_download: u64,
+    pub disk_space_required: u64,
+    pub upgrade_from_version: Version,
+    pub upgrade_to_version: Version,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -27,8 +34,24 @@ impl TryFrom<raw::XspHeader> for XspHeader {
 
         Ok(Self {
             content_id: uuid::Uuid::from_bytes_le(value.vduid),
+            plan_id: uuid::Uuid::from_bytes_le(value.plan_id),
+            xsp_id: uuid::Uuid::from_bytes_le(value.xsp_id),
             page_size: value.block_size_or_payload.get(),
             record_count: value.record_count.get(),
+            total_download: value.total_bytes.get(),
+            disk_space_required: value.disk_space_required.get(),
+            upgrade_from_version: Version {
+                major: value.previous_build_version[3].get(),
+                minor: value.previous_build_version[2].get(),
+                patch: value.previous_build_version[1].get(),
+                build: value.previous_build_version[0].get(),
+            },
+            upgrade_to_version: Version {
+                major: value.current_build_version[3].get(),
+                minor: value.current_build_version[2].get(),
+                patch: value.current_build_version[1].get(),
+                build: value.current_build_version[0].get(),
+            },
         })
     }
 }
