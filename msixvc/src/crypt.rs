@@ -35,7 +35,7 @@ impl Tweak {
     }
 }
 
-pub struct SectionReader<R,'t> {
+pub struct SectionReader<'t, R> {
     inner: R,
     section_offset: u64,
     section_length: u64,
@@ -54,7 +54,7 @@ pub struct SectionReader<R,'t> {
     cached_page_plaintext: [u8; PAGE_SIZE],
 }
 
-impl<R: PageSource, 't> SectionReader<R> {
+impl<'t, R: PageSource> SectionReader<R> {
     pub fn new(
         inner: R,
         section_offset: u64,
