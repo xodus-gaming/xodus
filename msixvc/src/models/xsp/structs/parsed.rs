@@ -40,18 +40,10 @@ impl TryFrom<raw::XspHeader> for XspHeader {
             record_count: value.record_count.get(),
             total_download: value.total_bytes.get(),
             disk_space_required: value.disk_space_required.get(),
-            upgrade_from_version: Version {
-                major: value.previous_build_version[3].get(),
-                minor: value.previous_build_version[2].get(),
-                patch: value.previous_build_version[1].get(),
-                build: value.previous_build_version[0].get(),
-            },
-            upgrade_to_version: Version {
-                major: value.current_build_version[3].get(),
-                minor: value.current_build_version[2].get(),
-                patch: value.current_build_version[1].get(),
-                build: value.current_build_version[0].get(),
-            },
+            upgrade_from_version: Version::from_fields(
+                value.previous_build_version.map(|n| n.get()),
+            ),
+            upgrade_to_version: Version::from_fields(value.current_build_version.map(|n| n.get())),
         })
     }
 }
