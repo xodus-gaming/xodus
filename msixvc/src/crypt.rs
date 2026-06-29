@@ -3,7 +3,6 @@ use crate::models::xvd::{PAGE_SIZE, XvcRegionId};
 
 use std::io::{self, Read, Seek, SeekFrom};
 use std::iter;
-use std::rc::Rc;
 
 use aes::Aes128;
 use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
@@ -36,7 +35,7 @@ impl Tweak {
     }
 }
 
-pub struct SectionReader<R> {
+pub struct SectionReader<R,'t> {
     inner: R,
     section_offset: u64,
     section_length: u64,
@@ -48,14 +47,14 @@ pub struct SectionReader<R> {
 
     // If integrity is enabled, this must contain one entry per page in the section.
     // If integrity is disabled, use page_in_section as the data unit instead.
-    data_units: Option<Rc<[u32]>>,
+    data_units: Option<&'t Vec<u32>>,
 
     // simplest useful cache
     cached_page_index: Option<u64>,
     cached_page_plaintext: [u8; PAGE_SIZE],
 }
 
-impl<R: PageSource> SectionReader<R> {
+impl<R: PageSource, 't> SectionReader<R> {
     pub fn new(
         inner: R,
         section_offset: u64,
@@ -63,7 +62,7 @@ impl<R: PageSource> SectionReader<R> {
         header_id: XvcRegionId,
         vduid: [u8; 8],
         full_key: [u8; 32],
-        data_units: Option<Rc<[u32]>>,
+        data_units: Option<&'t Vec<u32>>,
     ) -> Self {
         let mut tweak_key = [0u8; 16];
         let mut data_key = [0u8; 16];
