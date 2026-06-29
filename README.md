@@ -26,8 +26,8 @@ These parts are still quite scattered arround.
 - [x] Xbox auth and MSIXVC downloads
 - [x] MSIXVC parsing support
 - [x] Decryption
-- [ ] On-demand .exe decryption
-- [ ] MSIXVC2 support
+- [ ] On-demand .exe decryption [#50](https://github.com/xodus-gaming/xodus/issues/50)
+- [ ] MSIXVC2 support [#53](https://github.com/xodus-gaming/xodus/issues/53)
 
 ## FAQ
 
@@ -44,6 +44,63 @@ Start by joining our Discord or review any open GitHub issues .
 **Q: What games will be supported?**  
 We hope to manage to support most of the catalog, the limitation is the game has to be GDK and in MSIXVC format.  
 So far `Gears of War 4` is a prominent unsupported title for the time being.
+
+## Building
+
+The project structure is as follows.
+
+```
+.
+├── msixvc - [rlib] common rlib crate for utilities for parsing MSIXVC and XSP files
+├── xodus - [rlib] common rlib crate that contains core xodus functionality, API calls abstractions and utilities
+├── xodus-cli - [bin] CLI currently used for iterating over new xodus features 
+└── xodus-service - [bin] service process exposing a xodus.sock for IPC communication, it takes care of and xgameruntime.dll integration.
+```
+
+> [!NOTE]
+> xodus-service aims to become a main point of integration. All xodus clients will connect to it to interact with games and Xbox services.
+
+### Prerequisites
+
+- Rust version supporting `edition = "2024"`
+- Right now CLI relies on wry and tao to show a login page. Consult https://docs.rs/wry/latest/wry/#platform-considerations
+- xodus-service relies on `protoc` to compile `proto/` definitions make sure to install it for your platform
+
+### Running
+
+Building all crates in release mode
+```bash
+cargo build --release --workspace
+```
+
+Running cli in debug
+```
+cargo run -- --help
+```
+
+Running xodus-service in debug
+```
+cargo run --bin xodus-service
+```
+
+### CLI Usage
+
+```
+Usage: xodus-cli <COMMAND>
+
+Commands:
+  download   Download msixvc or xsp files fo given game
+  license    Dump CIKs for use with XvdTool
+  extract    Extract locally stored msixvc file
+  login      
+  streaming  Download and extract the game through streaming algorithm
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+```
+
 
 ## Special Thanks
 
