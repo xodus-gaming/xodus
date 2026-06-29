@@ -1,8 +1,6 @@
 use clap::{Parser, Subcommand};
 use xodus::tokens::TokenManager;
 
-use crate::SubCommand::Xsp;
-
 mod commands;
 mod license;
 mod package;
@@ -53,10 +51,6 @@ enum SubCommand {
         parallel: Option<usize>,
         #[arg(short, long)]
         market: Option<String>,
-    },
-    #[command(about = "Debug info on XSP file")]
-    Xsp {
-        file: String,
     },
 }
 
@@ -135,9 +129,6 @@ async fn main() {
                 market,
             )
             .await;
-        }
-        Xsp { file } => {
-            commands::xsp::run(file).await;
         }
     }
 

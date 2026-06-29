@@ -28,8 +28,6 @@ impl XspFile {
             entries.push(record);
         }
 
-        println!("{header:#?}");
-
         Ok(Self { header, entries })
     }
 }
