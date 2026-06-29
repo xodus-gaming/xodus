@@ -54,7 +54,7 @@ pub struct SectionReader<'t, R> {
     cached_page_plaintext: [u8; PAGE_SIZE],
 }
 
-impl<'t, R: PageSource> SectionReader<R> {
+impl<'t, R: PageSource> SectionReader<'t, R> {
     pub fn new(
         inner: R,
         section_offset: u64,
