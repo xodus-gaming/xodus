@@ -1,4 +1,4 @@
-use crate::common::*;
+use crate::models::common::*;
 use crate::models::xsp::{XspHeader, XspPatchRecord};
 use tokio::{
     fs::OpenOptions,

@@ -1,6 +1,7 @@
 use super::raw;
 use crate::common::microsoft_filetime;
 use crate::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
+use crate::models::common::Version;
 use crate::models::xvd::constants::{
     LEGACY_SECTOR_SIZE, SECTOR_SIZE, XVD_HEADER_INCL_SIGNATURE_SIZE,
 };
@@ -9,7 +10,6 @@ use crate::models::xvd::flags::{
     WriteablePolicyFlags, XvcInfoFlags, XvcRegionFlags, XvcRegionPresenceInfoFlags,
     XvdSegmentMetadataSegmentFlags, XvdVolumeFlags,
 };
-use crate::utils::common::Version;
 
 use std::collections::HashMap;
 use std::fmt::Debug;

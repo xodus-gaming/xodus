@@ -3,7 +3,7 @@ mod raw;
 
 pub use parsed::*;
 
-use crate::common::*;
+use crate::models::common::*;
 
 impl_struct!(XvdHeader);
 impl_struct!(XvdExtEntry);

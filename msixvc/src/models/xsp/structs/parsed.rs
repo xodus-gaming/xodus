@@ -1,5 +1,5 @@
+use crate::models::common::Version;
 use crate::models::xsp::raw;
-use crate::utils::common::Version;
 
 #[derive(Debug, Clone)]
 pub struct XspHeader {
@@ -16,7 +16,7 @@ pub struct XspHeader {
 
 #[derive(thiserror::Error, Debug)]
 pub enum XspHeaderParseError {
-    #[error(r#"invalid magic: expected "MS-XPFM": {0:?}"#)]
+    #[error(r#"invalid magic: expected "MS-XPFM ": {0:?}"#)]
     InvalidMagic([u8; 8]),
 }
 

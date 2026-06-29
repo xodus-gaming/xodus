@@ -6,7 +6,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use msixvc::{
     models::xvd::PAGE_SIZE,
     streaming,
-    utils::{SegmentFile, XvdFile},
+    xvd::{SegmentFile, XvdFile},
 };
 use tokio::fs::OpenOptions;
 use uuid::Uuid;

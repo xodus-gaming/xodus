@@ -19,7 +19,7 @@ use tokio::{
 use tokio_util::io::SyncIoBridge;
 use zerocopy::IntoBytes;
 
-use crate::common::*;
+use crate::models::common::*;
 use crate::models::xvd::{
     PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment,
     XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,

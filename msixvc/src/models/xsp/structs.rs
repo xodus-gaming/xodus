@@ -1,7 +1,7 @@
 pub mod parsed;
 pub mod raw;
 
-use crate::common::*;
+use crate::models::common::*;
 pub use parsed::*;
 
 impl_struct!(XspHeader);
