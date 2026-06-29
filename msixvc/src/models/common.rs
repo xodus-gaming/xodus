@@ -6,6 +6,21 @@ pub struct Version {
     pub build: u16,
 }
 
+impl Version {
+    /// Creates a [`Version`] from a field array.
+    ///
+    /// The input is expected as it appears in the XVD header, where the least significant
+    /// version component comes first: `[build, patch, minor, major]`.
+    pub fn from_fields(value: [u16; 4]) -> Self {
+        Self {
+            major: value[3],
+            minor: value[2],
+            patch: value[1],
+            build: value[0],
+        }
+    }
+}
+
 impl std::cmp::Ord for Version {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.major
