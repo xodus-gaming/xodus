@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::task::block_in_place;
 use tokio::time::{sleep, timeout};
@@ -403,7 +404,7 @@ pub struct EncryptedSectionInfo {
 
     // If integrity is enabled, this must contain one entry per page in the section.
     // If integrity is disabled, use page_in_section as the data unit instead.
-    data_units: Option<Vec<u32>>,
+    data_units: Option<Rc<[u32]>>,
     first_segment_index: u32,
     data_hashs: Vec<[u8; 20]>,
 }
@@ -545,7 +546,7 @@ impl XvdFile {
                 section_length: h.length,
                 header_id: h.region_id,
                 vduid: xvd_header.vduid.to_bytes_le()[..8].try_into().unwrap(),
-                data_units: Some(data_units),
+                data_units: Some(data_units.into()),
                 first_segment_index: h.first_segment_index,
                 data_hashs,
             });

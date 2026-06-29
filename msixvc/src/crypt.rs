@@ -3,6 +3,7 @@ use crate::models::xvd::{PAGE_SIZE, XvcRegionId};
 
 use std::io::{self, Read, Seek, SeekFrom};
 use std::iter;
+use std::rc::Rc;
 
 use aes::Aes128;
 use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
@@ -47,7 +48,7 @@ pub struct SectionReader<R> {
 
     // If integrity is enabled, this must contain one entry per page in the section.
     // If integrity is disabled, use page_in_section as the data unit instead.
-    data_units: Option<Vec<u32>>,
+    data_units: Option<Rc<[u32]>>,
 
     // simplest useful cache
     cached_page_index: Option<u64>,
@@ -62,7 +63,7 @@ impl<R: PageSource> SectionReader<R> {
         header_id: XvcRegionId,
         vduid: [u8; 8],
         full_key: [u8; 32],
-        data_units: Option<Vec<u32>>,
+        data_units: Option<Rc<[u32]>>,
     ) -> Self {
         let mut tweak_key = [0u8; 16];
         let mut data_key = [0u8; 16];
