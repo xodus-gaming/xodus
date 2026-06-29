@@ -258,7 +258,7 @@ impl<R: Read + Seek> Read for XvdStream<R> {
                         s.header_id,
                         s.vduid,
                         encryption_info.full_key,
-                        s.data_units.as_ref(),
+                        s.data_units.as_deref(),
                     );
                     return reader
                         .read_at(

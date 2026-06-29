@@ -47,7 +47,7 @@ pub struct SectionReader<'t, R> {
 
     // If integrity is enabled, this must contain one entry per page in the section.
     // If integrity is disabled, use page_in_section as the data unit instead.
-    data_units: Option<&'t Vec<u32>>,
+    data_units: Option<&'t [u32]>,
 
     // simplest useful cache
     cached_page_index: Option<u64>,
@@ -62,7 +62,7 @@ impl<'t, R: PageSource> SectionReader<'t, R> {
         header_id: XvcRegionId,
         vduid: [u8; 8],
         full_key: [u8; 32],
-        data_units: Option<&'t Vec<u32>>,
+        data_units: Option<&'t [u32]>,
     ) -> Self {
         let mut tweak_key = [0u8; 16];
         let mut data_key = [0u8; 16];
