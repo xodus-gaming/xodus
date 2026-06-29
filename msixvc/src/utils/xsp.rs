@@ -24,7 +24,7 @@ impl XspFile {
         file.seek(std::io::SeekFrom::Start(header.page_size as u64))
             .await?;
         for _ in 0..header.record_count {
-            let record = read_struct!(XspPatchRecord, file).unwrap();
+            let record = read_struct!(XspPatchRecord, file)?;
             entries.push(record);
         }
 

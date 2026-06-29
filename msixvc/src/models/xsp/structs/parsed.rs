@@ -25,8 +25,6 @@ impl TryFrom<raw::XspHeader> for XspHeader {
             return Err(XspHeaderParseError::InvalidMagic(value.magic));
         }
 
-        println!("{value:#?}");
-
         Ok(Self {
             content_id: uuid::Uuid::from_bytes_le(value.vduid),
             page_size: value.block_size_or_payload.get(),
@@ -35,21 +33,42 @@ impl TryFrom<raw::XspHeader> for XspHeader {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct XspPatchRecord {
-    pub source: u32,
-    pub flag: u32,
-    pub target: u32,
-    pub size: u32,
+#[derive(Debug, Clone, Copy)]
+pub enum XspPatchRecord {
+    NewData {
+        block_number: u32,
+        block_count: u32,
+    },
+    CopyData {
+        old_block_number: u32,
+        new_block_number: u32,
+        block_count: u32,
+    },
 }
 
-impl From<raw::XspPatchRecord> for XspPatchRecord {
-    fn from(value: raw::XspPatchRecord) -> Self {
-        Self {
-            source: value.source_offset.get(),
-            flag: value.flag.get(),
-            target: value.target_offset.get(),
-            size: value.length.get(),
+#[derive(thiserror::Error, Debug)]
+pub enum XspPatchRecordParseError {
+    #[error("Unknown patch record flag {0:X}")]
+    UnknownFlag(u32),
+}
+
+impl TryFrom<raw::XspPatchRecord> for XspPatchRecord {
+    type Error = XspPatchRecordParseError;
+
+    fn try_from(value: raw::XspPatchRecord) -> Result<Self, Self::Error> {
+        let flag = value.flag.get();
+
+        match flag {
+            0 => Ok(Self::NewData {
+                block_number: value.target_offset.get(),
+                block_count: value.length.get(),
+            }),
+            0x88000000 => Ok(Self::CopyData {
+                old_block_number: value.source_offset.get(),
+                new_block_number: value.target_offset.get(),
+                block_count: value.length.get(),
+            }),
+            _ => Err(XspPatchRecordParseError::UnknownFlag(flag)),
         }
     }
 }
