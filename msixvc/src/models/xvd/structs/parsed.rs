@@ -65,7 +65,7 @@ impl XvdHeader {
 
 #[derive(thiserror::Error, Debug)]
 pub enum XvdHeaderParseError {
-    #[error(r#"invalid magic: expected "msft-xvd", got {0:?}"#)]
+    #[error(r#"invalid magic: expected {magic:?}, got {0:?}"#, magic = XvdHeader::MAGIC)]
     InvalidMagic([u8; 8]),
 
     #[error("invalid xvd type: {0}")]
@@ -402,7 +402,7 @@ impl XvdSegmentMetadataHeader {
 
 #[derive(thiserror::Error, Debug)]
 pub enum XvdSegmentMetadataHeaderParseError {
-    #[error(r#"invalid magic: expected "XFP ", got {0:?}"#)]
+    #[error(r#"invalid magic: expected {magic:?}, got {0:?}"#, magic = XvdSegmentMetadataHeader::MAGIC)]
     InvalidMagic([u8; 4]),
 }
 

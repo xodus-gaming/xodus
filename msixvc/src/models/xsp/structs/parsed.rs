@@ -14,14 +14,14 @@ pub struct XspHeader {
     pub upgrade_to_version: Version,
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum XspHeaderParseError {
-    #[error(r#"invalid magic: expected "MS-XPFM ": {0:?}"#)]
-    InvalidMagic([u8; 8]),
-}
-
 impl XspHeader {
     const MAGIC: [u8; 8] = *b"MS-XPFM ";
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum XspHeaderParseError {
+    #[error(r#"invalid magic: expected {magic:?}, got {0:?}"#, magic = XspHeader::MAGIC)]
+    InvalidMagic([u8; 8]),
 }
 
 impl TryFrom<raw::XspHeader> for XspHeader {
