@@ -477,7 +477,7 @@ impl XvdFile {
 
             if xvc_info.version >= 1 {
                 for _ in 0..region_count {
-                    let Ok(region_header) = read_struct!(XvcRegionHeader, file);
+                    let region_header = read_struct!(XvcRegionHeader, file)?;
                     region_headers.push(region_header);
                 }
             }

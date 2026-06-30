@@ -3,7 +3,7 @@ use crate::common::microsoft_filetime;
 use crate::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
 use crate::models::common::Version;
 use crate::models::xvd::constants::{
-    LEGACY_SECTOR_SIZE, SECTOR_SIZE, XVD_HEADER_INCL_SIGNATURE_SIZE,
+    LEGACY_SECTOR_SIZE, PAGE_SIZE, SECTOR_SIZE, XVD_HEADER_INCL_SIGNATURE_SIZE,
 };
 use crate::models::xvd::enums::{XvcRegionId, XvdContentType, XvdType};
 use crate::models::xvd::flags::{
@@ -276,23 +276,47 @@ pub struct XvcRegionHeader {
     pub flags: XvcRegionFlags,
     pub first_segment_index: u32,
     pub description: [u16; 0x20], // UTF-16
+    // Multiple of PAGE_SIZE
     pub offset: u64,
+    // Multiple of PAGE_SIZE
     pub length: u64,
     pub hash: u64,
 }
 
-impl From<raw::XvcRegionHeader> for XvcRegionHeader {
-    fn from(value: raw::XvcRegionHeader) -> Self {
-        Self {
+#[derive(thiserror::Error, Debug)]
+pub enum XvcRegionHeaderParseError {
+    #[error("invalid offset {0}: must be a multiple of page size ({PAGE_SIZE})")]
+    InvalidOffset(u64),
+
+    #[error("invalid length {0}: must be a multiple of page size ({PAGE_SIZE})")]
+    InvalidLength(u64),
+}
+
+impl TryFrom<raw::XvcRegionHeader> for XvcRegionHeader {
+    type Error = XvcRegionHeaderParseError;
+
+    fn try_from(value: raw::XvcRegionHeader) -> Result<Self, Self::Error> {
+        let offset = value.offset.get();
+        let length = value.length.get();
+
+        if !offset.is_multiple_of(PAGE_SIZE as u64) {
+            return Err(XvcRegionHeaderParseError::InvalidOffset(offset));
+        }
+
+        if !length.is_multiple_of(PAGE_SIZE as u64) {
+            return Err(XvcRegionHeaderParseError::InvalidLength(length));
+        }
+
+        Ok(Self {
             region_id: value.region_id.get().into(),
             key_id: XvcKeyId::new(value.key_id.get()),
             flags: XvcRegionFlags::from_bits_retain(value.flags.get()),
             first_segment_index: value.first_segment_index.get(),
             description: value.description.map(|n| n.get()),
-            offset: value.offset.get(),
-            length: value.length.get(),
+            offset,
+            length,
             hash: value.hash.get(),
-        }
+        })
     }
 }
 
