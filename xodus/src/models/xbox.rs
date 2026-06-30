@@ -1,3 +1,5 @@
+pub mod subscriptions;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
