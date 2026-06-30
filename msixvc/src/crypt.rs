@@ -7,9 +7,6 @@ use std::iter;
 use aes::Aes128;
 use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
 
-pub trait PageSource: Read + Seek {}
-impl<T: Read + Seek> PageSource for T {}
-
 #[derive(Clone, Copy)]
 pub struct Tweak([u8; 16]);
 
@@ -54,7 +51,7 @@ pub struct SectionReader<'t, R> {
     cached_page_plaintext: [u8; PAGE_SIZE],
 }
 
-impl<'t, R: PageSource> SectionReader<'t, R> {
+impl<'t, R: Read + Seek> SectionReader<'t, R> {
     pub fn new(
         inner: R,
         section_offset: u64,
@@ -82,7 +79,7 @@ impl<'t, R: PageSource> SectionReader<'t, R> {
         }
     }
 
-    pub fn read_at(&mut self, offset_in_section: u64, out: &mut [u8]) -> io::Result<()> {
+    pub fn read_at(&mut self, offset_in_section: u64, mut out: &mut [u8]) -> io::Result<()> {
         let end = offset_in_section
             .checked_add(out.len() as u64)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "range overflow"))?;
@@ -94,22 +91,19 @@ impl<'t, R: PageSource> SectionReader<'t, R> {
             ));
         }
 
-        let mut remaining = out.len();
-        let mut dst_off = 0usize;
         let mut cur_off = offset_in_section;
 
-        while remaining > 0 {
+        while !out.is_empty() {
             let page_in_section = cur_off / PAGE_SIZE as u64;
             let in_page = (cur_off % PAGE_SIZE as u64) as usize;
-            let copy_len = remaining.min(PAGE_SIZE - in_page);
+            let copy_len = std::cmp::min(out.len(), PAGE_SIZE - in_page);
 
             self.ensure_page_decrypted(page_in_section)?;
-            out[dst_off..dst_off + copy_len]
+            out[..copy_len]
                 .copy_from_slice(&self.cached_page_plaintext[in_page..in_page + copy_len]);
 
             cur_off += copy_len as u64;
-            dst_off += copy_len;
-            remaining -= copy_len;
+            out = &mut out[copy_len..];
         }
 
         Ok(())
