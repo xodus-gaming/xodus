@@ -91,7 +91,7 @@ cargo run --bin xodus-service
 > and the `aes` feature is enabled on `aarch64`. This means that the program will crash with an illegal instruction
 > error when running on a CPU which doesn't support those instructions.
 >
-> See https://en.wikipedia.org/wiki/AES_instruction_set for a list of compatible CPUs (every modern processor from
+> See https://en.wikipedia.org/wiki/AES_instruction_set for a list of compatible CPUs (every processor from
 > 2011 onwards should be supported).
 
 ### CLI Usage
