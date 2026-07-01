@@ -154,7 +154,7 @@ pub async fn run(
     let mut remote_file = streaming::PrefixCacheFile::new(http_file, l, cache_path.clone())
         .await
         .expect("no err");
-    let mut remote_xvd = XvdFile::parse(&mut remote_file).await.expect("no err");
+    let remote_xvd = XvdFile::parse(&mut remote_file).await.expect("no err");
     let mut rfiles: HashMap<String, SegmentFile> = HashMap::new();
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();
 
@@ -215,7 +215,7 @@ pub async fn run(
         .ok();
 
     if let Some(mut file) = file {
-        let mut xvd = XvdFile::parse(&mut file).await.expect("no err");
+        let xvd = XvdFile::parse(&mut file).await.expect("no err");
 
         if try_skip_ntfs {
             let files = xvd.parse_user_package_files(&mut file).await.expect("ok");

@@ -601,7 +601,7 @@ impl XvdFile {
     }
 
     pub async fn parse_segment_metadata<Reader>(
-        &mut self,
+        &self,
         file: Reader,
         segment_metadata: &UserPackageFile,
     ) -> Result<HashMap<String, SegmentFile>, Box<dyn std::error::Error>>
