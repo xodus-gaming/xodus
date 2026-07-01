@@ -546,7 +546,7 @@ where
         if next > self.len {
             return Poll::Ready(Err(Error::new(
                 ErrorKind::InvalidInput,
-                "seek past remote end",
+                format!("seek past remote end next={} self.len={}", next, self.len),
             )));
         }
 

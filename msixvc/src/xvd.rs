@@ -4,6 +4,7 @@ use bytes::Bytes;
 use futures_util::StreamExt;
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
 use reqwest::header::RANGE;
+use sha2::Digest;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -181,7 +182,7 @@ where
 
 struct XvdEncryptionInfo {
     full_key: [u8; 32],
-    encrypted_sections: Vec<EncryptedSectionInfo>,
+    encrypted_sections: Vec<SectionInfo>,
 }
 
 // The gpt crate requires the device to implement Debug,
@@ -244,7 +245,8 @@ impl<R: Read + Seek> Read for XvdStream<R> {
 
         if let Some(encryption_info) = &self.encryption_info {
             for s in &encryption_info.encrypted_sections {
-                if self.offset + current >= s.section_offset
+                if s.encrypted
+                    && self.offset + current >= s.section_offset
                     && self.offset + current < s.section_offset + s.section_length
                 {
                     if s.section_offset + s.section_length < self.offset + current + to_read as u64
@@ -389,14 +391,16 @@ fn extract_ntfs_directory<T: Read + Seek>(
 pub struct XvdFile {
     header: XvdHeader,
     drive_data_offset: u64,
-    encrypted_section_infos: Vec<EncryptedSectionInfo>,
+    encrypted_section_infos: Vec<SectionInfo>,
     user_data_offset: u64,
 }
 
 #[derive(Debug)]
-pub struct EncryptedSectionInfo {
+struct SectionInfo {
     section_offset: u64,
     section_length: u64,
+
+    encrypted: bool,
 
     header_id: XvcRegionId,
     vduid: [u8; 8],
@@ -429,6 +433,9 @@ impl XvdFile {
         let mut prefix_len = len;
 
         for section in &self.encrypted_section_infos {
+            if !section.encrypted {
+                continue;
+            }
             let section_start = section.section_offset;
             let section_end = section
                 .section_offset
@@ -496,16 +503,19 @@ impl XvdFile {
         let drive_data_offset =
             page_number_to_offset(xvd_header.dynamic_header_page_count()) + dynamic_header_offset;
 
-        let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
+        let mut sections = Vec::with_capacity(region_headers.len());
         let mut reader = BufReader::with_capacity(PAGES_PER_BLOCK * XvdHashEntry::RAW_SIZE, file);
         for h in region_headers {
+            if h.offset < user_data_offset {
+                continue;
+            }
             let key_id = h.key_id;
             let length = h.length;
-            match key_id.get() {
-                None => continue,
-                Some(0) => (),
+            let encrypted = match key_id.get() {
+                None => false,
+                Some(0) => true,
                 Some(n) => todo!("KeyID other than 0 or unencrypted is not supported, found {n}"),
-            }
+            };
 
             let start_page = offset_to_page_number(h.offset - user_data_offset);
             let num_pages = bytes_to_pages(length);
@@ -540,7 +550,7 @@ impl XvdFile {
                 }
             }
 
-            enc_sections.push(EncryptedSectionInfo {
+            sections.push(SectionInfo {
                 section_offset: h.offset,
                 section_length: h.length,
                 header_id: h.region_id,
@@ -548,12 +558,13 @@ impl XvdFile {
                 data_units: Some(data_units),
                 first_segment_index: h.first_segment_index,
                 data_hashs,
+                encrypted: encrypted,
             });
         }
         Ok(XvdFile {
             header: xvd_header,
             drive_data_offset,
-            encrypted_section_infos: enc_sections,
+            encrypted_section_infos: sections,
             user_data_offset,
         })
     }
@@ -587,11 +598,13 @@ impl XvdFile {
                     .position(|&c| c == 0)
                     .unwrap_or(fullname.len());
                 let pfull_name: String = String::from_utf16(&fullname[..end]).unwrap();
+                let resolved_offset =
+                    user_data_offset + XvdUserDataHeader::RAW_SIZE as u64 + o as u64;
 
                 files.insert(
                     pfull_name,
                     UserPackageFile {
-                        offset: user_data_offset + XvdUserDataHeader::RAW_SIZE as u64 + o as u64,
+                        offset: resolved_offset,
                         length: s as u64,
                     },
                 );
@@ -853,14 +866,16 @@ impl XvdFile {
         let file_offset_in_section;
 
         if let Some(s) = s {
-            let mut tweak_key = [0u8; 16];
-            let mut data_key = [0u8; 16];
-            tweak_key.copy_from_slice(&full_key[..16]);
-            data_key.copy_from_slice(&full_key[16..]);
+            if s.encrypted {
+                let mut tweak_key = [0u8; 16];
+                let mut data_key = [0u8; 16];
+                tweak_key.copy_from_slice(&full_key[..16]);
+                data_key.copy_from_slice(&full_key[16..]);
 
-            tweak = Some(Tweak::new(0, s.header_id, s.vduid));
-            tweak_cipher = Some(Aes128::new((&tweak_key).into()));
-            data_cipher = Some(Aes128::new((&data_key).into()));
+                tweak = Some(Tweak::new(0, s.header_id, s.vduid));
+                tweak_cipher = Some(Aes128::new((&tweak_key).into()));
+                data_cipher = Some(Aes128::new((&data_key).into()));
+            }
             file_offset_in_section = sfile.offset - s.section_offset;
         } else {
             // TODO for data integrity we need a section for unencrypted sections...
@@ -947,6 +962,17 @@ impl XvdFile {
                 }
                 let chunk = pending.split_to(4096);
                 page.copy_from_slice(&chunk);
+                if let Some(s) = s {
+                    let mut sha = sha2::Sha256::new();
+                    sha.update(page);
+                    if sha.finalize()[..0x14] != s.data_hashs[page_in_section as usize] {
+                        // corruption reset stream
+                        v -= (pending.len() + 4096) as u64;
+                        pending.clear();
+                        stream = None;
+                        break;
+                    }
+                }
                 if let Some(tweak) = tweak.as_mut() {
                     tweak.update_data_unit(match &s.unwrap().data_units {
                         Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {

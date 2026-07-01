@@ -19,3 +19,4 @@ thiserror = "2.0.18"
 tokio-util = { version = "0.7.18", features = ["io-util"] }
 uuid = "1.23.1"
 zerocopy = { version = "0.8.48", features = ["derive"] }
+sha2 = "0.11.0"
