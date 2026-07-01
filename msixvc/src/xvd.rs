@@ -391,7 +391,7 @@ fn extract_ntfs_directory<T: Read + Seek>(
 pub struct XvdFile {
     header: XvdHeader,
     drive_data_offset: u64,
-    encrypted_section_infos: Vec<SectionInfo>,
+    section_infos: Vec<SectionInfo>,
     user_data_offset: u64,
 }
 
@@ -432,7 +432,7 @@ impl XvdFile {
         let end = start.saturating_add(len);
         let mut prefix_len = len;
 
-        for section in &self.encrypted_section_infos {
+        for section in &self.section_infos {
             if !section.encrypted {
                 continue;
             }
@@ -564,7 +564,7 @@ impl XvdFile {
         Ok(XvdFile {
             header: xvd_header,
             drive_data_offset,
-            encrypted_section_infos: sections,
+            section_infos: sections,
             user_data_offset,
         })
     }
@@ -636,7 +636,10 @@ impl XvdFile {
 
         let mut files = HashMap::new();
 
-        for section in &self.encrypted_section_infos {
+        for section in &self.section_infos {
+            if !section.encrypted {
+                continue;
+            }
             let segment_page_start = section.section_offset.div_ceil(PAGE_SIZE as u64);
             let mut page_offset = segment_page_start;
             for segment_no in section.first_segment_index..segment_header.segment_count {
@@ -688,7 +691,7 @@ impl XvdFile {
                 continue;
             }
 
-            let Some(section) = self.encrypted_section_infos.iter().find(|section| {
+            let Some(section) = self.section_infos.iter().find(|section| {
                 file.offset >= section.section_offset
                     && file.offset < section.section_offset + section.section_length
             }) else {
@@ -855,7 +858,7 @@ impl XvdFile {
             return Ok(());
         }
 
-        let s = &self.encrypted_section_infos.iter().find(|s| {
+        let s = &self.section_infos.iter().find(|s| {
             sfile.offset >= s.section_offset && sfile.offset < s.section_offset + s.section_length
         });
 
@@ -1066,7 +1069,7 @@ pub fn unpack_file(
         end_offset: partition_offset + part_len,
         encryption_info: Some(XvdEncryptionInfo {
             full_key,
-            encrypted_sections: xvd.encrypted_section_infos,
+            encrypted_sections: xvd.section_infos,
         }),
     };
     fs.seek(SeekFrom::Start(0)).unwrap();
