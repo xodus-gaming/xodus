@@ -208,20 +208,20 @@ pub async fn run(
         rfiles = sfiles;
     }
 
-    let mut file = OpenOptions::new()
+    let file = OpenOptions::new()
         .read(true)
         .open(final_path.to_owned())
         .await
         .ok();
 
-    if let Some(file) = &mut file {
-        let mut xvd = XvdFile::parse(file).await.expect("no err");
+    if let Some(mut file) = file {
+        let mut xvd = XvdFile::parse(&mut file).await.expect("no err");
 
         if try_skip_ntfs {
-            let files = xvd.parse_user_package_files(file).await.expect("ok");
+            let files = xvd.parse_user_package_files(&mut file).await.expect("ok");
             for (k, v) in &files {
                 if k == "SegmentMetadata.bin" {
-                    let sfiles = xvd.parse_segment_metadata(file, v).await.expect("ok");
+                    let sfiles = xvd.parse_segment_metadata(&mut file, v).await.expect("ok");
                     for (n, sfile) in &sfiles {
                         if sfile.length.div_ceil(PAGE_SIZE as u64) as usize
                             != sfile.data_hashs.len()
@@ -246,7 +246,10 @@ pub async fn run(
         }
 
         if lfiles.is_empty() {
-            let sfiles = xvd.parse_ntfs_segment_metadata(file).await.expect("ok");
+            let sfiles = xvd
+                .parse_ntfs_segment_metadata(&mut file)
+                .await
+                .expect("ok");
             for (n, sfile) in &sfiles {
                 if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
                     println!("{}: {} {}", n, sfile.offset, sfile.length);

@@ -7,8 +7,9 @@ pub struct XspFile {
     pub header: XspHeader,
     pub entries: Vec<XspPatchRecord>,
 }
+
 impl XspFile {
-    pub async fn parse_file<Reader>(file: &mut Reader) -> Result<Self, Box<dyn std::error::Error>>
+    pub async fn parse_file<Reader>(file: Reader) -> Result<Self, Box<dyn std::error::Error>>
     where
         Reader: AsyncRead + AsyncSeek + Unpin,
     {

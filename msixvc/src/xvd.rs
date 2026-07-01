@@ -454,7 +454,7 @@ impl XvdFile {
         Self::parse(&mut file).await
     }
 
-    pub async fn parse<Reader>(file: &mut Reader) -> Result<Self, Box<dyn std::error::Error>>
+    pub async fn parse<Reader>(mut file: Reader) -> Result<Self, Box<dyn std::error::Error>>
     where
         Reader: AsyncRead + AsyncSeek + Unpin,
     {
@@ -560,7 +560,7 @@ impl XvdFile {
 
     pub async fn parse_user_package_files<Reader>(
         &self,
-        file: &mut Reader,
+        mut file: Reader,
     ) -> Result<HashMap<String, UserPackageFile>, Box<dyn std::error::Error>>
     where
         Reader: AsyncRead + AsyncSeek + Unpin,
@@ -602,14 +602,13 @@ impl XvdFile {
 
     pub async fn parse_segment_metadata<Reader>(
         &mut self,
-        file: &mut Reader,
+        file: Reader,
         segment_metadata: &UserPackageFile,
     ) -> Result<HashMap<String, SegmentFile>, Box<dyn std::error::Error>>
     where
         Reader: AsyncRead + AsyncSeek + Unpin,
     {
-        let mut file: BufReader<&mut Reader> =
-            BufReader::with_capacity(segment_metadata.length as usize, file);
+        let mut file = BufReader::with_capacity(segment_metadata.length as usize, file);
         file.seek(SeekFrom::Start(segment_metadata.offset)).await?;
         let segment_header: XvdSegmentMetadataHeader =
             read_struct!(XvdSegmentMetadataHeader, file)?;
@@ -734,7 +733,7 @@ impl XvdFile {
 
     pub async fn parse_ntfs_segment_metadata<Reader>(
         &self,
-        file: &mut Reader,
+        file: Reader,
     ) -> Result<HashMap<String, SegmentFile>, Box<dyn std::error::Error>>
     where
         Reader: AsyncRead + AsyncSeek + Unpin,
