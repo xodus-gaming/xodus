@@ -353,8 +353,8 @@ pub async fn run(
     )
     .for_each_concurrent(parallel.unwrap_or(4), |(id, job)| {
         let tx = tx.clone();
+        let client = client.clone();
         async move {
-            let client = reqwest::Client::new();
             let target_file = out.join(job.name.replace("\\", "/"));
             if let Some(folder) = target_file.parent() {
                 std::fs::create_dir_all(folder).expect("ok");
