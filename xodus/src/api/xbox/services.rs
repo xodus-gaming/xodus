@@ -1,6 +1,6 @@
 use rsa::pkcs1::der::Sequence;
-use xal::cvlib::CorrelationVector;
 use serde::Deserialize;
+use xal::cvlib::CorrelationVector;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -95,16 +95,16 @@ pub async fn get_library(
     token: String,
     xsts_header: String,
     market: Option<String>,
-)  -> reqwest::Result<MyGames> {
-
+) -> reqwest::Result<MyGames> {
     let cv = CorrelationVector::new();
 
     let resp = client
         .get("https://beige.xboxservices.com/pcgafd/mygames")
         .query(&[
-            ("market", market.unwrap_or("neutral".to_string())), 
-            ("language", "en-US".to_string()), 
-            ("appVersion", "2606.1001.27.0".to_string())]) // TODO
+            ("market", market.unwrap_or("neutral".to_string())),
+            ("language", "en-US".to_string()),
+            ("appVersion", "2606.1001.27.0".to_string()),
+        ]) // TODO
         .header("x-ms-api-version", "1.2")
         .header("x-ms-authorization-social", xsts_header)
         .header("Authorization", token)

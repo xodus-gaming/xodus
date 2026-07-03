@@ -1,12 +1,10 @@
-use xodus::models::secrets::Token;
 use xodus::api;
 use xodus::models::live::ExchangeUserTokenOutcome;
+use xodus::models::secrets::Token;
 use xodus::models::soap;
 use xodus::tokens::TokenManager;
 
-
 pub async fn run(client: &reqwest::Client, tokens: &TokenManager) {
-
     let dev_token = tokens.get_device_sts_token().unwrap();
     let Token::Legacy(dev_token) = dev_token else {
         eprintln!("Invalid STS token");
@@ -35,8 +33,8 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) {
             Some(soap::PolicyReference::mbi_ssl()),
         )],
     )
-        .await
-        .expect("Failed to get ms user token");
+    .await
+    .expect("Failed to get ms user token");
 
     let user_token: Token = match user_token {
         ExchangeUserTokenOutcome::Fault(_) => {
@@ -50,8 +48,8 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) {
             token.into()
         }
         ExchangeUserTokenOutcome::Issued(soap::BodyContent::RequestSecurityTokenResponse(
-                                             token,
-                                         )) => token.into(),
+            token,
+        )) => token.into(),
         _ => unreachable!("Only responses are handled"),
     };
     let Token::Compact(user_token) = user_token else {
@@ -59,19 +57,26 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) {
         return;
     };
 
-    let token = tokens.get_user_token_for("scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0").unwrap();
+    let token = tokens
+        .get_user_token_for("scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0")
+        .unwrap();
     let Some(Token::Compact(token)) = token else {
         eprintln!("Unspported user token");
         return;
     };
 
-    let xbltoken = api::xbox::authenticate_xbox_user(client, token).await.unwrap();
+    let xbltoken = api::xbox::authenticate_xbox_user(client, token)
+        .await
+        .unwrap();
 
     let xsts = {
         if let Some(xsts) = tokens.get_cached_xsts("http://mp.microsoft.com/") {
             Some(xsts)
         } else {
-            let xsts = api::xbox::request_xsts_token(client, xbltoken.token, "http://mp.microsoft.com/").await.ok();
+            let xsts =
+                api::xbox::request_xsts_token(client, xbltoken.token, "http://mp.microsoft.com/")
+                    .await
+                    .ok();
             if let Some(ref xsts) = xsts {
                 tokens.cache_xsts("http://mp.microsoft.com/", xsts);
             } else {
