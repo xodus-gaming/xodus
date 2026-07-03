@@ -5,7 +5,7 @@ use futures_util::StreamExt;
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
 use reqwest::header::RANGE;
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -180,7 +180,7 @@ where
 }
 
 struct XvdEncryptionInfo {
-    full_key: [u8; 32],
+    content_keys: HashMap<uuid::Uuid, [u8; 32]>,
     encrypted_sections: Vec<EncryptedSectionInfo>,
 }
 
@@ -251,13 +251,19 @@ impl<R: Read + Seek> Read for XvdStream<R> {
                     {
                         todo!("Reading outside of the encrypted section in one go is Unsupported");
                     }
+
+                    let key = *encryption_info
+                        .content_keys
+                        .get(&s.key_id)
+                        .expect("missing content key, it was checked that it existed");
+
                     let mut reader = SectionReader::new(
                         &mut self.inner,
                         s.section_offset,
                         s.section_length,
                         s.header_id,
                         s.vduid,
-                        encryption_info.full_key,
+                        key,
                         s.data_units.as_deref(),
                     );
                     return reader
@@ -401,6 +407,8 @@ pub struct EncryptedSectionInfo {
     header_id: XvcRegionId,
     vduid: [u8; 8],
 
+    key_id: uuid::Uuid,
+
     // If integrity is enabled, this must contain one entry per page in the section.
     // If integrity is disabled, use page_in_section as the data unit instead.
     data_units: Option<Vec<u32>>,
@@ -422,6 +430,14 @@ pub struct SegmentFile {
 impl XvdFile {
     pub fn content_id(&self) -> uuid::Uuid {
         self.header.vduid
+    }
+
+    /// Returns a list of the CIKs (Content Integrity Keys) required to decrypt this XVD file.
+    pub fn required_ciks(&self) -> HashSet<uuid::Uuid> {
+        self.encrypted_section_infos
+            .iter()
+            .map(|section| section.key_id)
+            .collect()
     }
 
     fn non_encrypted_prefix_len(&self, start: u64, len: u64) -> u64 {
@@ -467,19 +483,21 @@ impl XvdFile {
         let mut region_headers: Vec<XvcRegionHeader> = Vec::new();
 
         // TODO: Check if we have proper content type
-        if xvd_header.xvc_data_length > 0 {
-            file.seek(std::io::SeekFrom::Start(xvc_info_offset))
-                .await
-                .expect("Unable to seek");
-            let Ok(xvc_info) = read_struct!(XvcInfo, file);
+        if xvd_header.xvc_data_length == 0 {
+            return Err(Box::new(std::io::Error::other("missing XVC data region")));
+        }
 
-            let region_count = xvc_info.region_count;
+        file.seek(std::io::SeekFrom::Start(xvc_info_offset))
+            .await
+            .expect("Unable to seek");
+        let Ok(xvc_info) = read_struct!(XvcInfo, file);
 
-            if xvc_info.version >= 1 {
-                for _ in 0..region_count {
-                    let region_header = read_struct!(XvcRegionHeader, file)?;
-                    region_headers.push(region_header);
-                }
+        let region_count = xvc_info.region_count;
+
+        if xvc_info.version >= 1 {
+            for _ in 0..region_count {
+                let region_header = read_struct!(XvcRegionHeader, file)?;
+                region_headers.push(region_header);
             }
         }
 
@@ -499,16 +517,23 @@ impl XvdFile {
         let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
         let mut reader = BufReader::with_capacity(PAGES_PER_BLOCK * XvdHashEntry::RAW_SIZE, file);
         for h in region_headers {
-            let key_id = h.key_id;
-            let length = h.length;
-            match key_id.get() {
-                None => continue,
-                Some(0) => (),
-                Some(n) => todo!("KeyID other than 0 or unencrypted is not supported, found {n}"),
-            }
+            let key_id = {
+                let Some(id) = h.key_id.get() else {
+                    continue;
+                };
+
+                match xvc_info.xvc_encryption_key_id.get(&id) {
+                    Some(uuid) => *uuid,
+                    None => {
+                        return Err(Box::new(std::io::Error::other(format!(
+                            "missing key_id in XVC encryption info: {id}"
+                        ))));
+                    }
+                }
+            };
 
             let start_page = offset_to_page_number(h.offset - user_data_offset);
-            let num_pages = bytes_to_pages(length);
+            let num_pages = bytes_to_pages(h.length);
             let mut data_units: Vec<u32> = Vec::with_capacity(num_pages as usize);
             let mut data_hashs: Vec<[u8; 20]> = Vec::with_capacity(num_pages as usize);
 
@@ -545,6 +570,7 @@ impl XvdFile {
                 section_length: h.length,
                 header_id: h.region_id,
                 vduid: xvd_header.vduid.to_bytes_le()[..8].try_into().unwrap(),
+                key_id,
                 data_units: Some(data_units),
                 first_segment_index: h.first_segment_index,
                 data_hashs,
@@ -831,7 +857,7 @@ impl XvdFile {
         url: String,
         out: &mut Writer,
         sfile: &SegmentFile,
-        full_key: [u8; 32],
+        content_keys: &HashMap<uuid::Uuid, [u8; 32]>,
         mut progress: Progress,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
@@ -853,6 +879,10 @@ impl XvdFile {
         let file_offset_in_section;
 
         if let Some(s) = s {
+            let full_key = *content_keys
+                .get(&s.key_id)
+                .expect("missing content key, it was checked that it existed");
+
             let mut tweak_key = [0u8; 16];
             let mut data_key = [0u8; 16];
             tweak_key.copy_from_slice(&full_key[..16]);
@@ -996,8 +1026,17 @@ pub fn unpack_file(
     xvd: XvdFile,
     path: String,
     destination: String,
-    full_key: [u8; 32],
+    content_keys: HashMap<uuid::Uuid, [u8; 32]>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Check that every content key has been provided
+    for key_id in xvd.required_ciks() {
+        if !content_keys.contains_key(&key_id) {
+            return Err(Box::new(std::io::Error::other(format!(
+                "missing content integrity key: {key_id}"
+            ))));
+        }
+    }
+
     let sfile = std::fs::File::open(path)?;
     let block_size = 4096; //xvd.header.block_size;
     let gp = gpt::GptConfig::new()
@@ -1039,7 +1078,7 @@ pub fn unpack_file(
         offset: partition_offset,
         end_offset: partition_offset + part_len,
         encryption_info: Some(XvdEncryptionInfo {
-            full_key,
+            content_keys,
             encrypted_sections: xvd.encrypted_section_infos,
         }),
     };

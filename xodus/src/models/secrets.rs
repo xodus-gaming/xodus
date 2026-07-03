@@ -62,12 +62,6 @@ impl From<soap::RequestSecurityTokenResponse> for Token {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TokenStore {
-    #[serde(flatten)]
-    pub tokens: std::collections::HashMap<String, Token>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct User {
     pub puid: String,
     pub username: String,

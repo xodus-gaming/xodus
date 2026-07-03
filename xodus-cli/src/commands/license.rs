@@ -19,6 +19,7 @@ pub async fn run(
     tokio::fs::create_dir_all(&ciks).await.unwrap();
     for (uuid, content_key) in game_splicense.content_keys {
         let unpacked = content_key.unpack(&key).expect("failed to unpack");
+        tokens.save_cik(uuid, unpacked).unwrap();
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)

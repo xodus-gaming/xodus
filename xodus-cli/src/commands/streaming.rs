@@ -1,4 +1,8 @@
-use std::{collections::HashMap, path::Path, vec};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+    vec,
+};
 
 use fs2::available_space;
 use futures_util::{StreamExt, stream};
@@ -259,30 +263,50 @@ pub async fn run(
         }
     }
 
-    let license = get_license(
-        client,
-        tokens,
-        remote_xvd.content_id().to_string(),
-        market.unwrap_or("neutral".to_string()),
-    )
-    .await;
-    if let Err(err) = license {
-        eprintln!("{}", err);
-        return;
-    }
-    let (key, game_splicense) = license.unwrap();
-    if game_splicense.content_keys.len() != 1 {
-        eprintln!(
-            "unexpected number of content keys {}",
-            game_splicense.content_keys.len()
-        );
-        return;
-    }
-    let Some((_, content_key)) = game_splicense.content_keys.into_iter().next() else {
-        return;
-    };
+    let required_ciks = remote_xvd.required_ciks();
 
-    let full_key = content_key.unpack(&key).expect("failed to unpack");
+    let mut content_keys: HashMap<uuid::Uuid, [u8; 32]> = HashMap::new();
+    let mut missing_ciks: HashSet<uuid::Uuid> = HashSet::new();
+
+    for cik_uuid in required_ciks {
+        match tokens.get_cik(cik_uuid).unwrap() {
+            Some(cik) => {
+                content_keys.insert(cik_uuid, *cik);
+            }
+            None => {
+                missing_ciks.insert(cik_uuid);
+            }
+        }
+    }
+
+    if !missing_ciks.is_empty() {
+        let license = get_license(
+            client,
+            tokens,
+            remote_xvd.content_id().to_string(),
+            market.unwrap_or("neutral".to_string()),
+        )
+        .await;
+
+        if let Err(err) = license {
+            eprintln!("{}", err);
+            return;
+        }
+
+        let (key, game_splicense) = license.unwrap();
+        for (uuid, content_key) in game_splicense.content_keys {
+            let unpacked = content_key.unpack(&key).expect("failed to unpack");
+            tokens.save_cik(uuid, unpacked).unwrap();
+
+            if missing_ciks.remove(&uuid) {
+                content_keys.insert(uuid, *unpacked);
+            }
+        }
+
+        if !missing_ciks.is_empty() {
+            panic!("missing CIK in game splicense: {:?}", missing_ciks)
+        }
+    }
 
     let total_size = rfiles
         .iter()
@@ -354,6 +378,8 @@ pub async fn run(
     .for_each_concurrent(parallel.unwrap_or(4), |(id, job)| {
         let tx = tx.clone();
         let client = client.clone();
+        let content_keys = &content_keys;
+
         async move {
             let target_file = out.join(job.name.replace("\\", "/"));
             if let Some(folder) = target_file.parent() {
@@ -399,7 +425,7 @@ pub async fn run(
                     url.to_owned(),
                     &mut fout,
                     &job.content,
-                    *full_key,
+                    content_keys,
                     progress,
                 )
                 .await

@@ -26,6 +26,7 @@ use std::{collections::HashMap, io, io::Read, ops::Deref};
 use aes::cipher::{BlockCipherDecrypt, KeyInit};
 use base64::prelude::*;
 use num_enum::TryFromPrimitive;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zerocopy::{FromBytes, IntoBytes, transmute};
 
@@ -103,7 +104,7 @@ pub struct DeviceKey([u8; 16]);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct PackedContentKey([u8; 40]);
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContentKey([u8; 32]);
 
 fn read_array<const N: usize, R: Read>(mut reader: R) -> io::Result<[u8; N]> {

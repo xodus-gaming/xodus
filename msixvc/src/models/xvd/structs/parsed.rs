@@ -168,7 +168,7 @@ impl From<raw::XvdHashEntry> for XvdHashEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XvcInfo {
     pub content_id: Uuid,
-    pub xvc_encryption_key_id: HashMap<u16, Uuid>,
+    pub xvc_encryption_key_id: HashMap<u8, Uuid>,
     pub description: [u8; 0x100],
     pub version: u32,
     pub region_count: u32,
@@ -191,7 +191,7 @@ impl From<raw::XvcInfo> for XvcInfo {
                 .xvc_encryption_key_id
                 .into_iter()
                 .enumerate()
-                .map(|(i, uuid)| (i as u16, Uuid::from_bytes_le(uuid)))
+                .map(|(i, uuid)| (i as u8, Uuid::from_bytes_le(uuid)))
                 .filter(|(_i, id)| !id.is_nil())
                 .collect(),
             description: value.description,
@@ -242,7 +242,7 @@ impl From<raw::XvcRegionSpecifier> for XvcRegionSpecifier {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct XvcKeyId(Option<u8>);
 
 impl XvcKeyId {
