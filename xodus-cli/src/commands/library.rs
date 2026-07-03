@@ -1,18 +1,19 @@
-use crate::{device, user};
 use xodus::models::secrets::Token;
 use xodus::api;
 use xodus::models::live::ExchangeUserTokenOutcome;
 use xodus::models::soap;
+use xodus::tokens::TokenManager;
 
-pub async fn run(client: &reqwest::Client) {
 
-    let dev_token = device::get_device_token().unwrap();
+pub async fn run(client: &reqwest::Client, tokens: &TokenManager) {
+
+    let dev_token = tokens.get_device_sts_token().unwrap();
     let Token::Legacy(dev_token) = dev_token else {
         eprintln!("Invalid STS token");
         return;
     };
-    let user = user::get_user().unwrap();
-    let user_token = user::get_token("http://Passport.NET/STS".to_string()).unwrap();
+    let user = tokens.get_user().unwrap();
+    let user_token = tokens.get_user_sts_token().unwrap();
     let Token::Legacy(legacy) = user_token else {
         eprintln!("Unspported user token");
         return;
@@ -58,16 +59,29 @@ pub async fn run(client: &reqwest::Client) {
         return;
     };
 
-    let token = user::get_token("scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0".to_string()).unwrap();
-    let Token::Compact(token) = token else {
+    let token = tokens.get_user_token_for("scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0").unwrap();
+    let Some(Token::Compact(token)) = token else {
         eprintln!("Unspported user token");
         return;
     };
 
     let xbltoken = api::xbox::authenticate_xbox_user(client, token).await.unwrap();
 
-    let xsts = api::xbox::request_xsts_token(client, xbltoken.token, "http://mp.microsoft.com/").await;
-    if xsts.is_err() {
+    let xsts = {
+        if let Some(xsts) = tokens.get_cached_xsts("http://mp.microsoft.com/") {
+            Some(xsts)
+        } else {
+            let xsts = api::xbox::request_xsts_token(client, xbltoken.token, "http://mp.microsoft.com/").await.ok();
+            if let Some(ref xsts) = xsts {
+                tokens.cache_xsts("http://mp.microsoft.com/", xsts);
+            } else {
+                eprintln!("Failed to get XSTS token");
+                return;
+            }
+            xsts
+        }
+    };
+    if xsts.is_none() {
         eprintln!("Failed to authenticate Xbox user");
         return;
     }

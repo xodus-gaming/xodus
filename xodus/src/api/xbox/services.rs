@@ -51,7 +51,8 @@ pub struct ProductSummaryItem {
     //poster_image
     product_kind: String,
     publisher_name: String,
-    rating_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rating_count: Option<u32>,
     release_date: String,
     short_description: String,
     short_title: String,
@@ -116,5 +117,5 @@ pub async fn get_library(
 
     let parsed = serde_json::from_str::<MyGames>(&text).unwrap();
 
-    return Ok(parsed);
+    Ok(parsed)
 }

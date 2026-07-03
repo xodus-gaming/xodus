@@ -6,6 +6,7 @@ use crate::models::{
 };
 
 pub mod auth;
+pub mod services;
 pub mod title;
 pub use auth::{authenticate_xbox_user, get_xsts_auth_header, request_xsts_token};
 

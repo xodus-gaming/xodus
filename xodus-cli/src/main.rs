@@ -132,7 +132,7 @@ async fn main() {
             .await;
         }
         SubCommand::Library => {
-            commands::library::run(&client).await;
+            commands::library::run(&client, &tokens).await;
         }
     }
 
