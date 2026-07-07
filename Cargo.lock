@@ -2817,7 +2817,6 @@ name = "msixvc"
 version = "0.1.0"
 dependencies = [
  "aes 0.9.0",
- "async-trait",
  "bitflags 2.13.0",
  "bytes",
  "chrono",

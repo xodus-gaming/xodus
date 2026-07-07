@@ -25,7 +25,6 @@ use crate::models::xvd::{
     XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,
 };
 use crate::streaming_ntfs::collect_ntfs_stream_layouts;
-use async_trait::async_trait;
 
 use crate::crypt::{SectionReader, Tweak, decrypt_page_xts};
 use crate::math::{
@@ -155,27 +154,6 @@ impl<R: Write + Seek> Write for SyncSubstream<R> {
 
     fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
-    }
-}
-
-#[async_trait]
-pub trait AsyncReadSeek {
-    async fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()>;
-    async fn seek(&mut self, pos: SeekFrom) -> io::Result<u64>;
-}
-
-#[async_trait]
-impl<T> AsyncReadSeek for T
-where
-    T: AsyncRead + AsyncSeek + Unpin + Send,
-{
-    async fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        AsyncReadExt::read_exact(self, buf).await?;
-        Ok(())
-    }
-
-    async fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        AsyncSeekExt::seek(self, pos).await
     }
 }
 
