@@ -75,6 +75,14 @@ macro_rules! impl_struct {
                 Self::try_from(raw)
             }
 
+            /// Panics if the slice length is less than [`Self::RAW_SIZE`].
+            pub fn from_slice(
+                slice: &[u8],
+            ) -> Result<Self, <Self as TryFrom<raw::$parsed>>::Error> {
+                assert!(slice.len() >= Self::RAW_SIZE);
+                Self::from_array(slice.try_into().unwrap())
+            }
+
             pub async fn read<R: tokio::io::AsyncRead + Unpin>(
                 mut reader: R,
             ) -> Result<
