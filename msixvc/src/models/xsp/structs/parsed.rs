@@ -1,5 +1,5 @@
+use super::raw;
 use crate::models::common::Version;
-use crate::models::xsp::raw;
 
 #[derive(Debug, Clone)]
 pub struct XspHeader {

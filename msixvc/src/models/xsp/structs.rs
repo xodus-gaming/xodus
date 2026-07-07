@@ -1,8 +1,9 @@
-pub mod parsed;
-pub mod raw;
+mod parsed;
+mod raw;
 
-use crate::models::common::*;
 pub use parsed::*;
+
+use crate::models::common::impl_struct;
 
 impl_struct!(XspHeader);
 impl_struct!(XspPatchRecord);
