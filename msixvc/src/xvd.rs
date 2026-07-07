@@ -19,7 +19,6 @@ use tokio::{
 use tokio_util::io::SyncIoBridge;
 use zerocopy::IntoBytes;
 
-use crate::models::common::*;
 use crate::models::xvd::{
     PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment,
     XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,
@@ -436,7 +435,7 @@ impl XvdFile {
     where
         Reader: AsyncRead + AsyncSeek + Unpin,
     {
-        let xvd_header = read_struct!(XvdHeader, file)?;
+        let xvd_header = XvdHeader::read(&mut file).await?;
 
         let mdu_offset = xvd_header.mdu_offset();
         let (_hash_tree_levels, hash_tree_page_count) = xvd_header.hash_tree_info();
@@ -449,13 +448,13 @@ impl XvdFile {
             file.seek(std::io::SeekFrom::Start(xvc_info_offset))
                 .await
                 .expect("Unable to seek");
-            let Ok(xvc_info) = read_struct!(XvcInfo, file);
+            let xvc_info = XvcInfo::read(&mut file).await?;
 
             let region_count = xvc_info.region_count;
 
             if xvc_info.version >= 1 {
                 for _ in 0..region_count {
-                    let region_header = read_struct!(XvcRegionHeader, file)?;
+                    let region_header = XvcRegionHeader::read(&mut file).await?;
                     region_headers.push(region_header);
                 }
             }
@@ -512,7 +511,7 @@ impl XvdFile {
                     + (entry_start * XvdHashEntry::RAW_SIZE as u64);
                 reader.seek(SeekFrom::Start(read_offset)).await?;
                 for _ in 0..run_length {
-                    let Ok(hash) = read_struct!(XvdHashEntry, reader);
+                    let hash = XvdHashEntry::read(&mut reader).await?;
                     data_units.push(hash.unit);
                     data_hashs.push(hash.block_hash);
                 }
@@ -547,15 +546,17 @@ impl XvdFile {
 
         let user_data_offset = self.user_data_offset;
         file.seek(SeekFrom::Start(user_data_offset)).await?;
-        let user_data_header = read_struct!(XvdUserDataHeader, file)?;
+        let user_data_header = XvdUserDataHeader::read(&mut file).await?;
         if user_data_header.t == 0 {
             let mut off = user_data_offset + user_data_header.length as u64;
             file.seek(SeekFrom::Start(off)).await?;
-            let user_data_package_files_header = read_struct!(XvdUserDataPackageFilesHeader, file)?;
+            let user_data_package_files_header =
+                XvdUserDataPackageFilesHeader::read(&mut file).await?;
             off += XvdUserDataPackageFilesHeader::RAW_SIZE as u64;
             for _ in 0..user_data_package_files_header.file_count {
                 file.seek(SeekFrom::Start(off)).await?;
-                let user_data_package_file_entry = read_struct!(XvdUserDataPackageFileEntry, file)?;
+                let user_data_package_file_entry =
+                    XvdUserDataPackageFileEntry::read(&mut file).await?;
                 off += XvdUserDataPackageFileEntry::RAW_SIZE as u64;
                 let o = user_data_package_file_entry.offset;
                 let s: u32 = user_data_package_file_entry.size;
@@ -588,14 +589,13 @@ impl XvdFile {
     {
         let mut file = BufReader::with_capacity(segment_metadata.length as usize, file);
         file.seek(SeekFrom::Start(segment_metadata.offset)).await?;
-        let segment_header: XvdSegmentMetadataHeader =
-            read_struct!(XvdSegmentMetadataHeader, file)?;
+        let segment_header = XvdSegmentMetadataHeader::read(&mut file).await?;
         let paths_offset =
             segment_header.header_length as u64 + segment_header.segment_count as u64 * 0x10;
 
         let mut segments = vec![];
         for _ in 0..segment_header.segment_count {
-            let segment = read_struct!(XvdSegmentMetadataSegment, file)?;
+            let segment = XvdSegmentMetadataSegment::read(&mut file).await?;
             segments.push(segment);
         }
 

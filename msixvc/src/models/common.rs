@@ -54,49 +54,42 @@ impl std::fmt::Debug for Version {
     }
 }
 
-/// An XVD binary structure that can be decoded from bytes.
-///
-/// The conversion from bytes isn't implemented as a trait method because the compiler
-/// hates generic constants: "generic parameters may not be used in const operations".
-///
-/// Implementing this trait means that `impl TryFrom<[u8; XvdStruct::RAW_SIZE]>
-/// for Self` exists.
-pub trait XvcStruct: Sized {
-    const RAW_SIZE: usize;
-}
+#[derive(thiserror::Error, Debug)]
+pub enum ReadError<E> {
+    #[error(transparent)]
+    Io(#[from] tokio::io::Error),
 
-// This is a macro because the compiler can't handle const generics
-macro_rules! read_struct {
-    ($t:ty, $reader:expr) => {{
-        use tokio::io::AsyncReadExt;
-        let mut buf = [0u8; <$t as XvcStruct>::RAW_SIZE];
-        $reader.read_exact(&mut buf).await?;
-        TryInto::<$t>::try_into(buf)
-    }};
+    #[error(transparent)]
+    Parse(E),
 }
 
 macro_rules! impl_struct {
     ($parsed:ident) => {
-        impl XvcStruct for $parsed {
-            const RAW_SIZE: usize = core::mem::size_of::<raw::$parsed>();
-        }
+        impl $parsed {
+            pub const RAW_SIZE: usize = core::mem::size_of::<raw::$parsed>();
 
-        #[allow(clippy::infallible_try_from)]
-        impl TryFrom<[u8; <$parsed as XvcStruct>::RAW_SIZE]> for $parsed {
-            type Error = <Self as TryFrom<raw::$parsed>>::Error;
-
-            fn try_from(
-                value: [u8; <$parsed as XvcStruct>::RAW_SIZE],
-            ) -> Result<Self, Self::Error> {
-                let raw: raw::$parsed = zerocopy::transmute!(value);
+            pub fn from_array(
+                array: [u8; Self::RAW_SIZE],
+            ) -> Result<Self, <Self as TryFrom<raw::$parsed>>::Error> {
+                let raw: raw::$parsed = zerocopy::transmute!(array);
                 Self::try_from(raw)
+            }
+
+            pub async fn read<R: tokio::io::AsyncRead + Unpin>(
+                mut reader: R,
+            ) -> Result<
+                Self,
+                crate::models::common::ReadError<<Self as TryFrom<raw::$parsed>>::Error>,
+            > {
+                let mut array = [0u8; Self::RAW_SIZE];
+                tokio::io::AsyncReadExt::read_exact(&mut reader, &mut array).await?;
+                Self::from_array(array).map_err(|e| crate::models::common::ReadError::Parse(e))
             }
         }
     };
 }
 
 pub(crate) use impl_struct;
-pub(crate) use read_struct;
 
 #[cfg(test)]
 mod tests {

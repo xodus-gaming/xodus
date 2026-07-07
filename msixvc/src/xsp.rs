@@ -1,4 +1,3 @@
-use crate::models::common::*;
 use crate::models::xsp::{XspHeader, XspPatchRecord};
 use tokio::io::{AsyncRead, AsyncSeek};
 use tokio::io::{AsyncSeekExt, BufReader};
@@ -15,13 +14,13 @@ impl XspFile {
     {
         let mut file = BufReader::new(file);
 
-        let header = read_struct!(XspHeader, file)?;
+        let header = XspHeader::read(&mut file).await?;
         let mut entries = Vec::with_capacity(header.record_count as usize);
         file.seek(std::io::SeekFrom::Start(header.page_size as u64))
             .await?;
 
         for _ in 0..header.record_count {
-            let record = read_struct!(XspPatchRecord, file)?;
+            let record = XspPatchRecord::read(&mut file).await?;
             entries.push(record);
         }
 
