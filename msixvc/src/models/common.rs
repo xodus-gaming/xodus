@@ -80,7 +80,7 @@ macro_rules! impl_struct {
                 slice: &[u8],
             ) -> Result<Self, <Self as TryFrom<raw::$parsed>>::Error> {
                 assert!(slice.len() >= Self::RAW_SIZE);
-                Self::from_array(slice.try_into().unwrap())
+                Self::from_array(slice[..Self::RAW_SIZE].try_into().unwrap())
             }
 
             pub async fn read<R: tokio::io::AsyncRead + Unpin>(
