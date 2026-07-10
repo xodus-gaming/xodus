@@ -30,6 +30,7 @@ async fn provision_device(client: &reqwest::Client, tokens: &TokenManager) {
         device_info: Some(DeviceInfo {
             id: "DeviceInfo".to_string(),
             components: hardware::probe_provision_components(),
+            tpm_info: None,
         }),
     };
 
