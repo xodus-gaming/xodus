@@ -937,29 +937,33 @@ impl XvdFile {
                 }
                 let chunk = pending.split_to(4096);
                 page.copy_from_slice(&chunk);
-                if let Some(tweak) = tweak.as_mut() {
-                    tweak.update_data_unit(match &s.unwrap().data_units {
-                        Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {
-                            io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                format!(
-                                    "{} units {} page_in_section {} ({}+{})",
-                                    "missing data unit",
-                                    (*units).len(),
-                                    page_in_section,
-                                    page_start,
-                                    page_count
-                                ),
-                            )
-                        })?,
-                        None => page_in_section as u32,
-                    });
-                    decrypt_page_xts(
-                        &mut page,
-                        *tweak,
-                        tweak_cipher.as_ref().unwrap(),
-                        data_cipher.as_ref().unwrap(),
-                    );
+                if !sfile.keep_encrypted {
+                    if let Some(tweak) = tweak.as_mut() {
+                        tweak.update_data_unit(match &s.unwrap().data_units {
+                            Some(units) => {
+                                *units.get(page_in_section as usize).ok_or_else(|| {
+                                    io::Error::new(
+                                        io::ErrorKind::InvalidInput,
+                                        format!(
+                                            "{} units {} page_in_section {} ({}+{})",
+                                            "missing data unit",
+                                            (*units).len(),
+                                            page_in_section,
+                                            page_start,
+                                            page_count
+                                        ),
+                                    )
+                                })?
+                            }
+                            None => page_in_section as u32,
+                        });
+                        decrypt_page_xts(
+                            &mut page,
+                            *tweak,
+                            tweak_cipher.as_ref().unwrap(),
+                            data_cipher.as_ref().unwrap(),
+                        );
+                    }
                 }
                 let to_write = remaining.min(PAGE_SIZE as u64) as usize;
                 while let Err(err) = out.write_all(&page[..to_write]).await {
