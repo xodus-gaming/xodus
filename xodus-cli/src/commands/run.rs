@@ -1,9 +1,11 @@
+use std::os::fd::{IntoRawFd, OwnedFd};
 use std::{collections::HashMap, path::Path};
 
 use msixvc::{
     models::xvd::PAGE_SIZE,
     xvd::{SegmentFile, XvdFile},
 };
+use rustix::path::Arg;
 use tokio::fs::{File, OpenOptions};
 use xodus::tokens::TokenManager;
 
@@ -100,13 +102,17 @@ pub async fn run(
 
         let source_path = out.join(file.0.replace("\\", "/"));
 
-        let mut i = File::open(source_path).await.unwrap();
+        let mut i = File::open(&source_path).await.unwrap();
 
         xvd.mount_mem_fd(&mut i, &mut game_exe, &file.1, *full_key, |_, _| {})
             .await
             .unwrap();
 
-        fds.push(game_exe);
+        fds.push((source_path, game_exe.into_std().await.into_raw_fd()));
+    }
+
+    for fd in fds {
+        println!("{}|{}", fd.1, fd.0.as_str().unwrap())
     }
 
     todo!("Implement this")
