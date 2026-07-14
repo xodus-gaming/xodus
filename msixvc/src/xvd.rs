@@ -842,7 +842,9 @@ impl XvdFile {
 
         let file_offset_in_section;
 
-        if let Some(s) = s {
+        if let Some(s) = s
+            && !sfile.keep_encrypted
+        {
             let mut tweak_key = [0u8; 16];
             let mut data_key = [0u8; 16];
             tweak_key.copy_from_slice(&full_key[..16]);
@@ -937,33 +939,29 @@ impl XvdFile {
                 }
                 let chunk = pending.split_to(4096);
                 page.copy_from_slice(&chunk);
-                if !sfile.keep_encrypted {
-                    if let Some(tweak) = tweak.as_mut() {
-                        tweak.update_data_unit(match &s.unwrap().data_units {
-                            Some(units) => {
-                                *units.get(page_in_section as usize).ok_or_else(|| {
-                                    io::Error::new(
-                                        io::ErrorKind::InvalidInput,
-                                        format!(
-                                            "{} units {} page_in_section {} ({}+{})",
-                                            "missing data unit",
-                                            (*units).len(),
-                                            page_in_section,
-                                            page_start,
-                                            page_count
-                                        ),
-                                    )
-                                })?
-                            }
-                            None => page_in_section as u32,
-                        });
-                        decrypt_page_xts(
-                            &mut page,
-                            *tweak,
-                            tweak_cipher.as_ref().unwrap(),
-                            data_cipher.as_ref().unwrap(),
-                        );
-                    }
+                if let Some(tweak) = tweak.as_mut() {
+                    tweak.update_data_unit(match &s.unwrap().data_units {
+                        Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                format!(
+                                    "{} units {} page_in_section {} ({}+{})",
+                                    "missing data unit",
+                                    (*units).len(),
+                                    page_in_section,
+                                    page_start,
+                                    page_count
+                                ),
+                            )
+                        })?,
+                        None => page_in_section as u32,
+                    });
+                    decrypt_page_xts(
+                        &mut page,
+                        *tweak,
+                        tweak_cipher.as_ref().unwrap(),
+                        data_cipher.as_ref().unwrap(),
+                    );
                 }
                 let to_write = remaining.min(PAGE_SIZE as u64) as usize;
                 while let Err(err) = out.write_all(&page[..to_write]).await {
@@ -981,6 +979,101 @@ impl XvdFile {
                 "{} of {} missing have {}",
                 remaining, sfile.length, v
             ))));
+        }
+        Ok(())
+    }
+
+    pub async fn mount_mem_fd<Writer, Reader, Progress>(
+        &self,
+        i: &mut Reader,
+        out: &mut Writer,
+        sfile: &SegmentFile,
+        full_key: [u8; 32],
+        mut progress: Progress,
+    ) -> Result<(), Box<dyn std::error::Error>>
+    where
+        Reader: AsyncRead + Unpin,
+        Writer: AsyncWrite + Unpin,
+        Progress: FnMut(u64, u64),
+    {
+        if sfile.length == 0 {
+            return Ok(());
+        }
+
+        let s = &self.encrypted_section_infos.iter().find(|s| {
+            sfile.offset >= s.section_offset && sfile.offset < s.section_offset + s.section_length
+        });
+
+        let mut tweak = None;
+        let mut tweak_cipher = None;
+        let mut data_cipher = None;
+
+        let file_offset_in_section;
+
+        if let Some(s) = s {
+            let mut tweak_key = [0u8; 16];
+            let mut data_key = [0u8; 16];
+            tweak_key.copy_from_slice(&full_key[..16]);
+            data_key.copy_from_slice(&full_key[16..]);
+
+            tweak = Some(Tweak::new(0, s.header_id, s.vduid));
+            tweak_cipher = Some(Aes128::new((&tweak_key).into()));
+            data_cipher = Some(Aes128::new((&data_key).into()));
+            file_offset_in_section = sfile.offset - s.section_offset;
+        } else {
+            // TODO for data integrity we need a section for unencrypted sections...
+            file_offset_in_section = sfile.offset;
+        }
+        let page_start = file_offset_in_section / PAGE_SIZE as u64;
+        let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
+
+        let mut page = [0u8; PAGE_SIZE];
+        let mut remaining = sfile.length;
+
+        for page_in_section in page_start..page_start + page_count {
+            progress(
+                min((page_in_section - page_start) * 4096, sfile.length),
+                sfile.length,
+            );
+            i.read_exact(
+                &mut page[..sfile.length as usize
+                    - min(
+                        (page_in_section - page_start) as usize * 4096,
+                        sfile.length as usize,
+                    )],
+            )
+            .await
+            .unwrap();
+            if let Some(tweak) = tweak.as_mut() {
+                tweak.update_data_unit(match &s.unwrap().data_units {
+                    Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!(
+                                "{} units {} page_in_section {} ({}+{})",
+                                "missing data unit",
+                                (*units).len(),
+                                page_in_section,
+                                page_start,
+                                page_count
+                            ),
+                        )
+                    })?,
+                    None => page_in_section as u32,
+                });
+                decrypt_page_xts(
+                    &mut page,
+                    *tweak,
+                    tweak_cipher.as_ref().unwrap(),
+                    data_cipher.as_ref().unwrap(),
+                );
+            }
+            let to_write = remaining.min(PAGE_SIZE as u64) as usize;
+            while let Err(err) = out.write_all(&page[..to_write]).await {
+                eprintln!("Error write file {} waiting 30s", err);
+                println!("Error write file {} waiting 30s", err);
+                sleep(tokio::time::Duration::from_secs(30)).await;
+            }
         }
         Ok(())
     }
