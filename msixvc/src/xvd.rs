@@ -20,7 +20,9 @@ use tokio_util::io::SyncIoBridge;
 use zerocopy::IntoBytes;
 
 use crate::models::xvd::{
-    PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment, XvdSegmentMetadataSegmentFlags, XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,
+    PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment,
+    XvdSegmentMetadataSegmentFlags, XvdUserDataHeader, XvdUserDataPackageFileEntry,
+    XvdUserDataPackageFilesHeader,
 };
 use crate::streaming_ntfs::collect_ntfs_stream_layouts;
 
@@ -393,7 +395,7 @@ pub struct SegmentFile {
     pub offset: u64,
     pub length: u64,
     pub data_hashs: Vec<[u8; 20]>,
-    pub keep_encrypted: bool
+    pub keep_encrypted: bool,
 }
 
 impl XvdFile {
@@ -636,7 +638,9 @@ impl XvdFile {
                         offset: page_offset * PAGE_SIZE as u64,
                         length: segment.filesize,
                         data_hashs,
-                        keep_encrypted: segment.flags.contains(XvdSegmentMetadataSegmentFlags::KEEP_ENCRYPTED_ON_DISK),
+                        keep_encrypted: segment
+                            .flags
+                            .contains(XvdSegmentMetadataSegmentFlags::KEEP_ENCRYPTED_ON_DISK),
                     },
                 );
                 page_offset += page_length;
@@ -799,7 +803,8 @@ impl XvdFile {
                         offset: partition_offset + start,
                         length: report.value_length,
                         data_hashs: vec![],
-                        keep_encrypted: !only_plain && report.path.to_ascii_lowercase().ends_with(".exe")
+                        keep_encrypted: !only_plain
+                            && report.path.to_ascii_lowercase().ends_with(".exe"),
                     },
                 );
             }
