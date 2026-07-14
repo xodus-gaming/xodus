@@ -1,34 +1,15 @@
-use std::{collections::HashMap, path::Path, vec};
+use std::{collections::HashMap, path::Path};
 
-use fs2::available_space;
-use futures_util::{StreamExt, stream};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use msixvc::{
     models::xvd::PAGE_SIZE,
-    streaming,
     xvd::{SegmentFile, XvdFile},
 };
 use tokio::fs::OpenOptions;
-use uuid::Uuid;
 use xodus::tokens::TokenManager;
 
 use crate::{
     license::get_license,
-    package::{get_content_id, get_packages},
 };
-
-struct Job {
-    name: String,
-    content: SegmentFile,
-}
-
-enum ProgressEvent {
-    Started { id: usize, name: String, total: u64 },
-    Advanced { id: usize, delta: u64 },
-    Finished { id: usize },
-    UpdateRemaining { name: String, total: u64 },
-    UpdateStatus { name: String },
-}
 
 pub async fn run(
     client: &reqwest::Client,
