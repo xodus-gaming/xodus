@@ -1,4 +1,4 @@
-use std::os::fd::{IntoRawFd, OwnedFd};
+use std::os::fd::IntoRawFd;
 use std::{collections::HashMap, path::Path};
 
 use msixvc::{
@@ -31,6 +31,7 @@ pub async fn run(
     client: &reqwest::Client,
     tokens: &TokenManager,
     source: String,
+    wine: String,
     market: Option<String>,
 ) {
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();

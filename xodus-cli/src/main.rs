@@ -56,6 +56,7 @@ enum SubCommand {
     #[command(about = "Run a Game with xodus wine")]
     Run {
         source: String,
+        wine: String,
         #[arg(short, long)]
         market: Option<String>,
     },
@@ -138,8 +139,12 @@ async fn main() {
             .await;
         }
         #[cfg(unix)]
-        SubCommand::Run { source, market } => {
-            commands::run::run(&client, &tokens, source, market).await;
+        SubCommand::Run {
+            source,
+            wine,
+            market,
+        } => {
+            commands::run::run(&client, &tokens, source, wine, market).await;
         }
     }
 
