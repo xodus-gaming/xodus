@@ -1,12 +1,13 @@
-use std::os::fd::IntoRawFd;
+use std::os::fd::{AsFd, AsRawFd, IntoRawFd};
 use std::{collections::HashMap, path::Path};
 
 use msixvc::{
     models::xvd::PAGE_SIZE,
     xvd::{SegmentFile, XvdFile},
 };
-use rustix::path::Arg;
+use rustix::io::{FdFlags, fcntl_getfd, fcntl_setfd};
 use tokio::fs::{File, OpenOptions};
+use tokio::process::Command;
 use xodus::tokens::TokenManager;
 
 use crate::license::get_license;
@@ -32,6 +33,7 @@ pub async fn run(
     tokens: &TokenManager,
     source: String,
     wine: String,
+    exe: Option<String>,
     market: Option<String>,
 ) {
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();
@@ -99,6 +101,9 @@ pub async fn run(
     let mut fds = vec![];
 
     for file in lfiles {
+        if !file.1.keep_encrypted {
+            continue;
+        }
         let mut game_exe = File::from_std(make_temp_file().unwrap());
 
         let source_path = out.join(file.0.replace("\\", "/"));
@@ -109,12 +114,46 @@ pub async fn run(
             .await
             .unwrap();
 
-        fds.push((source_path, game_exe.into_std().await.into_raw_fd()));
+        let stdf = game_exe.into_std().await;
+
+        let mut flags = fcntl_getfd(stdf.as_fd()).unwrap();
+        flags.remove(FdFlags::CLOEXEC);
+        fcntl_setfd(stdf.as_fd(), flags).unwrap();
+
+        fds.push((file.0, stdf.as_raw_fd()));
     }
+
+    let mut env_value = String::new();
+    let nt_prefix = source.replace("/", "\\");
+
+    let mut nt_entry = None;
 
     for fd in fds {
-        println!("{}|{}", fd.1, fd.0.as_str().unwrap())
+        if !env_value.is_empty() {
+            env_value.push('|');
+        }
+
+        let nt_path = format!("\\??\\Z:{}{}", nt_prefix, fd.0);
+        if let Some(exe) = &exe {
+            if *exe == fd.0 {
+                nt_entry = Some(nt_path)
+            }
+        } else if nt_entry.is_none() {
+            nt_entry = Some(nt_path)
+        }
+
+        env_value.push_str(&format!("{}:\\??\\Z:{}{}", fd.1, nt_prefix, fd.0))
     }
 
-    todo!("Implement this")
+    let Some(nt_entry) = nt_entry else {
+        eprintln!("Could not find .exe");
+        return;
+    };
+
+    Command::new(wine)
+        .arg(nt_entry)
+        .env("WINE_DLL_FILE_MAP", env_value)
+        .status()
+        .await
+        .unwrap();
 }

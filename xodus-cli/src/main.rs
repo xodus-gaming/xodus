@@ -58,6 +58,8 @@ enum SubCommand {
         source: String,
         wine: String,
         #[arg(short, long)]
+        exe: Option<String>,
+        #[arg(short, long)]
         market: Option<String>,
     },
 }
@@ -142,9 +144,10 @@ async fn main() {
         SubCommand::Run {
             source,
             wine,
+            exe,
             market,
         } => {
-            commands::run::run(&client, &tokens, source, wine, market).await;
+            commands::run::run(&client, &tokens, source, wine, exe, market).await;
         }
     }
 
