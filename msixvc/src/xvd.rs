@@ -1035,15 +1035,11 @@ impl XvdFile {
                 sfile.length,
             );
             let to_write = sfile.length as usize
-                    - min(
-                        (page_in_section - page_start) as usize * 4096,
-                        sfile.length as usize,
-                    );
-            i.read_exact(
-                &mut page[..to_write],
-            )
-            .await
-            .unwrap();
+                - min(
+                    (page_in_section - page_start) as usize * 4096,
+                    sfile.length as usize,
+                );
+            i.read_exact(&mut page[..to_write]).await.unwrap();
             if let Some(tweak) = tweak.as_mut() {
                 tweak.update_data_unit(match &s.unwrap().data_units {
                     Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {
