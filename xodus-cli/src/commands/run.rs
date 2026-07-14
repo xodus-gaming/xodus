@@ -4,12 +4,11 @@ use msixvc::{
     models::xvd::PAGE_SIZE,
     xvd::{SegmentFile, XvdFile},
 };
-use tokio::fs::OpenOptions;
+use tempfile::tempfile;
+use tokio::fs::{File, OpenOptions};
 use xodus::tokens::TokenManager;
 
-use crate::{
-    license::get_license,
-};
+use crate::license::get_license;
 
 pub async fn run(
     client: &reqwest::Client,
@@ -78,6 +77,22 @@ pub async fn run(
     };
 
     let full_key = content_key.unpack(&key).expect("failed to unpack");
+
+    let mut fds = vec![];
+
+    for file in lfiles {
+        let mut game_exe = File::from_std(tempfile().unwrap());
+
+        let source_path = out.join(file.0.replace("\\", "/"));
+
+        let mut i = File::open(source_path).await.unwrap();
+
+        xvd.mount_mem_fd(&mut i, &mut game_exe, &file.1, *full_key, |_, _| {})
+            .await
+            .unwrap();
+
+        fds.push(game_exe);
+    }
 
     todo!("Implement this")
 }
