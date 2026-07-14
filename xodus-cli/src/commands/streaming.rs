@@ -175,38 +175,25 @@ pub async fn run(
                     }
                 }
                 rfiles = sfiles;
-                // add unencrypted files of parse_user_package_files
-                for (k, v) in &files {
-                    rfiles.insert(
-                        k.clone(),
-                        SegmentFile {
-                            offset: v.offset,
-                            length: v.length,
-                            data_hashs: vec![],
-                        },
-                    );
-                }
             }
         }
     }
 
-    if rfiles.is_empty() {
-        tx.send(ProgressEvent::UpdateStatus {
-            name: "Downloading ntfs...".to_owned(),
-        })
+    tx.send(ProgressEvent::UpdateStatus {
+        name: "Downloading ntfs...".to_owned(),
+    })
+    .await
+    .ok();
+    let sfiles = remote_xvd
+        .parse_ntfs_segment_metadata(&mut remote_file, !rfiles.is_empty())
         .await
-        .ok();
-        let sfiles = remote_xvd
-            .parse_ntfs_segment_metadata(&mut remote_file)
-            .await
-            .expect("ok");
-        for (n, sfile) in &sfiles {
-            if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-                println!("{}: {} {}", n, sfile.offset, sfile.length);
-            }
+        .expect("ok");
+    for (n, sfile) in &sfiles {
+        if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+            println!("{}: {} {}", n, sfile.offset, sfile.length);
         }
-        rfiles = sfiles;
     }
+    rfiles.extend(sfiles);
 
     let file = OpenOptions::new()
         .read(true)
@@ -217,46 +204,29 @@ pub async fn run(
     if let Some(mut file) = file {
         let xvd = XvdFile::parse(&mut file).await.expect("no err");
 
-        if try_skip_ntfs {
-            let files = xvd.parse_user_package_files(&mut file).await.expect("ok");
-            for (k, v) in &files {
-                if k == "SegmentMetadata.bin" {
-                    let sfiles = xvd.parse_segment_metadata(&mut file, v).await.expect("ok");
-                    for (n, sfile) in &sfiles {
-                        if sfile.length.div_ceil(PAGE_SIZE as u64) as usize
-                            != sfile.data_hashs.len()
-                        {
-                            println!("{}: {} {}", n, sfile.offset, sfile.length);
-                        }
-                    }
-                    lfiles = sfiles;
-                    // add unencrypted files of parse_user_package_files
-                    for (k, v) in &files {
-                        lfiles.insert(
-                            k.clone(),
-                            SegmentFile {
-                                offset: v.offset,
-                                length: v.length,
-                                data_hashs: vec![],
-                            },
-                        );
+        let files = xvd.parse_user_package_files(&mut file).await.expect("ok");
+        for (k, v) in &files {
+            if k == "SegmentMetadata.bin" {
+                let sfiles = xvd.parse_segment_metadata(&mut file, v).await.expect("ok");
+                for (n, sfile) in &sfiles {
+                    if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+                        println!("{}: {} {}", n, sfile.offset, sfile.length);
                     }
                 }
+                lfiles = sfiles;
             }
         }
 
-        if lfiles.is_empty() {
-            let sfiles = xvd
-                .parse_ntfs_segment_metadata(&mut file)
-                .await
-                .expect("ok");
-            for (n, sfile) in &sfiles {
-                if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-                    println!("{}: {} {}", n, sfile.offset, sfile.length);
-                }
+        let sfiles = xvd
+            .parse_ntfs_segment_metadata(&mut file, !lfiles.is_empty())
+            .await
+            .expect("ok");
+        for (n, sfile) in &sfiles {
+            if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+                println!("{}: {} {}", n, sfile.offset, sfile.length);
             }
-            lfiles = sfiles;
         }
+        lfiles.extend(sfiles);
     }
 
     let license = get_license(
@@ -347,6 +317,7 @@ pub async fn run(
                     offset: v.offset,
                     length: v.length,
                     data_hashs: vec![],
+                    keep_encrypted: v.keep_encrypted,
                 },
             })
             .enumerate(),

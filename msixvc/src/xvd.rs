@@ -20,8 +20,7 @@ use tokio_util::io::SyncIoBridge;
 use zerocopy::IntoBytes;
 
 use crate::models::xvd::{
-    PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment,
-    XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,
+    PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment, XvdSegmentMetadataSegmentFlags, XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,
 };
 use crate::streaming_ntfs::collect_ntfs_stream_layouts;
 
@@ -394,6 +393,7 @@ pub struct SegmentFile {
     pub offset: u64,
     pub length: u64,
     pub data_hashs: Vec<[u8; 20]>,
+    pub keep_encrypted: bool
 }
 
 impl XvdFile {
@@ -636,6 +636,7 @@ impl XvdFile {
                         offset: page_offset * PAGE_SIZE as u64,
                         length: segment.filesize,
                         data_hashs,
+                        keep_encrypted: segment.flags.contains(XvdSegmentMetadataSegmentFlags::KEEP_ENCRYPTED_ON_DISK),
                     },
                 );
                 page_offset += page_length;
@@ -712,6 +713,7 @@ impl XvdFile {
     pub async fn parse_ntfs_segment_metadata<Reader>(
         &self,
         file: Reader,
+        only_plain: bool,
     ) -> Result<HashMap<String, SegmentFile>, Box<dyn std::error::Error>>
     where
         Reader: AsyncRead + AsyncSeek + Unpin,
@@ -787,12 +789,17 @@ impl XvdFile {
                     continue;
                 };
 
+                if only_plain && partition_offset + start > drive_data_offset + drive_plain_len {
+                    continue;
+                }
+
                 files.insert(
                     report.path.replace("/", "\\"),
                     SegmentFile {
                         offset: partition_offset + start,
                         length: report.value_length,
                         data_hashs: vec![],
+                        keep_encrypted: !only_plain && report.path.to_ascii_lowercase().ends_with(".exe")
                     },
                 );
             }
