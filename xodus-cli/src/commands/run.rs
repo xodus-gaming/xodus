@@ -4,11 +4,26 @@ use msixvc::{
     models::xvd::PAGE_SIZE,
     xvd::{SegmentFile, XvdFile},
 };
-use tempfile::tempfile;
 use tokio::fs::{File, OpenOptions};
 use xodus::tokens::TokenManager;
 
 use crate::license::get_license;
+
+#[cfg(target_os = "linux")]
+use rustix::fs::{MemfdFlags, memfd_create};
+#[cfg(not(target_os = "linux"))]
+use tempfile::tempfile;
+
+#[cfg(target_os = "linux")]
+fn make_temp_file() -> std::io::Result<std::fs::File> {
+    let fd = memfd_create("xodus", MemfdFlags::CLOEXEC).map_err(std::io::Error::from)?;
+    Ok(std::fs::File::from(fd))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn make_temp_file() -> std::io::Result<std::fs::File> {
+    tempfile()
+}
 
 pub async fn run(
     client: &reqwest::Client,
@@ -81,7 +96,7 @@ pub async fn run(
     let mut fds = vec![];
 
     for file in lfiles {
-        let mut game_exe = File::from_std(tempfile().unwrap());
+        let mut game_exe = File::from_std(make_temp_file().unwrap());
 
         let source_path = out.join(file.0.replace("\\", "/"));
 

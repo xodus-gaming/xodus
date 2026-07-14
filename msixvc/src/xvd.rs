@@ -1028,19 +1028,19 @@ impl XvdFile {
         let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
 
         let mut page = [0u8; PAGE_SIZE];
-        let mut remaining = sfile.length;
 
         for page_in_section in page_start..page_start + page_count {
             progress(
                 min((page_in_section - page_start) * 4096, sfile.length),
                 sfile.length,
             );
-            i.read_exact(
-                &mut page[..sfile.length as usize
+            let to_write = sfile.length as usize
                     - min(
                         (page_in_section - page_start) as usize * 4096,
                         sfile.length as usize,
-                    )],
+                    );
+            i.read_exact(
+                &mut page[..to_write],
             )
             .await
             .unwrap();
@@ -1068,7 +1068,6 @@ impl XvdFile {
                     data_cipher.as_ref().unwrap(),
                 );
             }
-            let to_write = remaining.min(PAGE_SIZE as u64) as usize;
             while let Err(err) = out.write_all(&page[..to_write]).await {
                 eprintln!("Error write file {} waiting 30s", err);
                 println!("Error write file {} waiting 30s", err);

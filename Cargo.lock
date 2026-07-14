@@ -6141,6 +6141,7 @@ dependencies = [
  "log",
  "msixvc",
  "reqwest",
+ "rustix",
  "serde_json",
  "tao",
  "tempfile",

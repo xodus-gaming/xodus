@@ -1,11 +1,11 @@
 use xodus::tokens::TokenManager;
 
 pub async fn run(
-    client: &reqwest::Client,
-    tokens: &TokenManager,
-    path: String,
-    destination: String,
-    market: String,
+    _client: &reqwest::Client,
+    _tokens: &TokenManager,
+    _path: String,
+    _destination: String,
+    _market: String,
 ) {
     todo!("No longer implemented!!!!");
 }
