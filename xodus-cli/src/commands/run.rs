@@ -39,6 +39,7 @@ pub async fn run(
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();
 
     let out: &Path = Path::new(&source);
+    let out_absolute = std::fs::canonicalize(out).unwrap();
     let final_path = out.join(".xodus-streaming.msixvc");
 
     let mut file = OpenOptions::new()
@@ -62,16 +63,19 @@ pub async fn run(
         }
     }
 
-    let sfiles = xvd
-        .parse_ntfs_segment_metadata(&mut file, !lfiles.is_empty())
-        .await
-        .expect("ok");
-    for (n, sfile) in &sfiles {
-        if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-            println!("{}: {} {}", n, sfile.offset, sfile.length);
+    // Classic files
+    if lfiles.is_empty() {
+        let sfiles = xvd
+            .parse_ntfs_segment_metadata(&mut file, !lfiles.is_empty())
+            .await
+            .expect("ok");
+        for (n, sfile) in &sfiles {
+            if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+                println!("{}: {} {}", n, sfile.offset, sfile.length);
+            }
         }
+        lfiles.extend(sfiles);
     }
-    lfiles.extend(sfiles);
 
     let license = get_license(
         client,
@@ -120,11 +124,12 @@ pub async fn run(
         flags.remove(FdFlags::CLOEXEC);
         fcntl_setfd(stdf.as_fd(), flags).unwrap();
 
-        fds.push((file.0, stdf.as_raw_fd()));
+        fds.push((file.0, stdf.into_raw_fd()));
     }
 
     let mut env_value = String::new();
-    let nt_prefix = source.replace("/", "\\");
+    let nt_prefix = out_absolute.to_string_lossy().replace("/", "\\");
+    let nt_prefix = nt_prefix.trim_end_matches('\\');
 
     let mut nt_entry = None;
 
@@ -133,7 +138,8 @@ pub async fn run(
             env_value.push('|');
         }
 
-        let nt_path = format!("\\??\\Z:{}{}", nt_prefix, fd.0);
+        let nt_suffix = fd.0.trim_start_matches('\\');
+        let nt_path = format!("\\??\\Z:{}\\{}", nt_prefix, nt_suffix);
         if let Some(exe) = &exe {
             if *exe == fd.0 {
                 nt_entry = Some(nt_path)
@@ -142,7 +148,7 @@ pub async fn run(
             nt_entry = Some(nt_path)
         }
 
-        env_value.push_str(&format!("{}:\\??\\Z:{}{}", fd.1, nt_prefix, fd.0))
+        env_value.push_str(&format!("{}:\\??\\Z:{}\\{}", fd.1, nt_prefix, nt_suffix))
     }
 
     let Some(nt_entry) = nt_entry else {

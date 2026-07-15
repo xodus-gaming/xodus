@@ -144,7 +144,7 @@ pub async fn run(
         total_progess.finish();
     });
 
-    let out = Path::new(&destination);
+    let out: &Path = Path::new(&destination);
 
     std::fs::create_dir_all(out).expect("ok");
 

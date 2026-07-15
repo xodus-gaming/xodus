@@ -1026,6 +1026,7 @@ impl XvdFile {
         }
         let page_start = file_offset_in_section / PAGE_SIZE as u64;
         let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
+        let mut remaining = sfile.length;
 
         let mut page = [0u8; PAGE_SIZE];
 
@@ -1034,12 +1035,9 @@ impl XvdFile {
                 min((page_in_section - page_start) * 4096, sfile.length),
                 sfile.length,
             );
-            let to_write = sfile.length as usize
-                - min(
-                    (page_in_section - page_start) as usize * 4096,
-                    sfile.length as usize,
-                );
-            i.read_exact(&mut page[..to_write]).await.unwrap();
+            let to_write = remaining.min(PAGE_SIZE as u64) as usize;
+            i.read_exact(&mut page[..to_write]).await?;
+            page[to_write..].fill(0);
             if let Some(tweak) = tweak.as_mut() {
                 tweak.update_data_unit(match &s.unwrap().data_units {
                     Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {
@@ -1069,6 +1067,7 @@ impl XvdFile {
                 println!("Error write file {} waiting 30s", err);
                 sleep(tokio::time::Duration::from_secs(30)).await;
             }
+            remaining -= to_write as u64;
         }
         Ok(())
     }
