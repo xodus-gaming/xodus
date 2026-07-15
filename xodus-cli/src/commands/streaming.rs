@@ -8,9 +8,7 @@ use msixvc::{
     xvd::{SegmentFile, XvdFile},
 };
 use tokio::{
-    fs::{File, OpenOptions},
-    io::AsyncRead,
-    sync::mpsc::{Receiver, Sender},
+    fs::{File, OpenOptions}, io::{AsyncRead}, sync::mpsc::{Receiver, Sender},
 };
 use uuid::Uuid;
 use xodus::tokens::TokenManager;
@@ -46,7 +44,6 @@ pub async fn run(
     if source.starts_with("file://") {
         let fsrc = source.strip_prefix("file://").unwrap_or_default();
         let f = File::open(fsrc).await.unwrap();
-        // (f, f.metadata().await.unwrap().len() as u64)
         let l = f.metadata().await.unwrap().len();
         run_reader(
             client,
@@ -405,7 +402,7 @@ where
             if let Some(fpath) = url.strip_prefix("file://") {
                 let mut i = File::open(&fpath).await.unwrap();
                 remote_xvd_ref
-                    .mount_mem_fd(&mut i, &mut fout, &job.content, *full_key, progress)
+                    .extract_file(&mut i, &mut fout, &job.content, *full_key, progress)
                     .await
                     .expect("msg");
                 tx.send(ProgressEvent::Finished { id }).await.ok();
