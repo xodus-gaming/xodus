@@ -889,13 +889,14 @@ impl XvdFile {
         Ok(())
     }
 
-    pub async fn mount_mem_fd<Writer, Reader, Progress>(
+    async fn extract_file_ex<Writer, Reader, Progress>(
         &self,
         i: &mut Reader,
         out: &mut Writer,
         sfile: &SegmentFile,
         full_key: [u8; 32],
         mut progress: Progress,
+        decrypt_all: bool,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
         Reader: AsyncRead + Unpin,
@@ -916,7 +917,7 @@ impl XvdFile {
 
         let file_offset_in_section;
 
-        if let Some(s) = s {
+        if let Some(s) = s && (!sfile.keep_encrypted || decrypt_all){
             let mut tweak_key = [0u8; 16];
             let mut data_key = [0u8; 16];
             tweak_key.copy_from_slice(&full_key[..16]);
@@ -976,5 +977,40 @@ impl XvdFile {
             remaining -= to_write as u64;
         }
         Ok(())
+    }
+
+    // Reader is an full xvd file
+    pub async fn extract_file<Writer, Reader, Progress>(
+        &self,
+        i: &mut Reader,
+        out: &mut Writer,
+        sfile: &SegmentFile,
+        full_key: [u8; 32],
+        progress: Progress,
+    ) -> Result<(), Box<dyn std::error::Error>>
+    where
+        Reader: AsyncRead + AsyncSeek + Unpin,
+        Writer: AsyncWrite + Unpin,
+        Progress: FnMut(u64, u64),
+    {
+        i.seek(std::io::SeekFrom::Start(sfile.offset)).await?;
+        self.extract_file_ex(i, out, sfile, full_key, progress, false).await
+    }
+
+    // Reader points to file content
+    pub async fn mount_mem_fd<Writer, Reader, Progress>(
+        &self,
+        i: &mut Reader,
+        out: &mut Writer,
+        sfile: &SegmentFile,
+        full_key: [u8; 32],
+        progress: Progress,
+    ) -> Result<(), Box<dyn std::error::Error>>
+    where
+        Reader: AsyncRead + Unpin,
+        Writer: AsyncWrite + Unpin,
+        Progress: FnMut(u64, u64),
+    {
+        self.extract_file_ex(i, out, sfile, full_key, progress, true).await
     }
 }
