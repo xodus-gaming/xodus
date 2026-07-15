@@ -8,7 +8,9 @@ use msixvc::{
     xvd::{SegmentFile, XvdFile},
 };
 use tokio::{
-    fs::{File, OpenOptions}, io::{AsyncRead}, sync::mpsc::{Receiver, Sender},
+    fs::{File, OpenOptions},
+    io::AsyncRead,
+    sync::mpsc::{Receiver, Sender},
 };
 use uuid::Uuid;
 use xodus::tokens::TokenManager;
