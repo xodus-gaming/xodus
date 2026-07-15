@@ -917,7 +917,9 @@ impl XvdFile {
 
         let file_offset_in_section;
 
-        if let Some(s) = s && (!sfile.keep_encrypted || decrypt_all){
+        if let Some(s) = s
+            && (!sfile.keep_encrypted || decrypt_all)
+        {
             let mut tweak_key = [0u8; 16];
             let mut data_key = [0u8; 16];
             tweak_key.copy_from_slice(&full_key[..16]);
@@ -994,7 +996,8 @@ impl XvdFile {
         Progress: FnMut(u64, u64),
     {
         i.seek(std::io::SeekFrom::Start(sfile.offset)).await?;
-        self.extract_file_ex(i, out, sfile, full_key, progress, false).await
+        self.extract_file_ex(i, out, sfile, full_key, progress, false)
+            .await
     }
 
     // Reader points to file content
@@ -1011,6 +1014,7 @@ impl XvdFile {
         Writer: AsyncWrite + Unpin,
         Progress: FnMut(u64, u64),
     {
-        self.extract_file_ex(i, out, sfile, full_key, progress, true).await
+        self.extract_file_ex(i, out, sfile, full_key, progress, true)
+            .await
     }
 }
