@@ -1,11 +1,22 @@
 use xodus::tokens::TokenManager;
 
+use crate::commands::streaming;
+
 pub async fn run(
-    _client: &reqwest::Client,
-    _tokens: &TokenManager,
-    _path: String,
-    _destination: String,
-    _market: String,
+    client: &reqwest::Client,
+    tokens: &TokenManager,
+    path: String,
+    destination: String,
+    market: String,
 ) {
-    todo!("No longer implemented!!!!");
+    streaming::run(
+        client,
+        tokens,
+        "file://".to_owned() + &path,
+        destination,
+        false,
+        None,
+        Some(market),
+    )
+    .await;
 }

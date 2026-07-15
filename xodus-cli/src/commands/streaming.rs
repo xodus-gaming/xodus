@@ -8,7 +8,11 @@ use msixvc::{
     streaming,
     xvd::{SegmentFile, XvdFile},
 };
-use tokio::fs::OpenOptions;
+use tokio::{
+    fs::{File, OpenOptions},
+    io::AsyncRead,
+    sync::mpsc::{Receiver, Sender},
+};
 use uuid::Uuid;
 use xodus::tokens::TokenManager;
 
@@ -39,67 +43,121 @@ pub async fn run(
     parallel: Option<usize>,
     market: Option<String>,
 ) {
-    let vurl = if source.starts_with("http://") || source.starts_with("https://") {
-        source
+    let (tx, rx) = tokio::sync::mpsc::channel::<ProgressEvent>(256);
+    if source.starts_with("file://") {
+        let fsrc = source.strip_prefix("file://").unwrap_or_default();
+        let f = File::open(fsrc).await.unwrap();
+        // (f, f.metadata().await.unwrap().len() as u64)
+        let l = f.metadata().await.unwrap().len();
+        run_reader(
+            client,
+            tokens,
+            destination,
+            try_skip_ntfs,
+            parallel,
+            market,
+            f,
+            l,
+            &source,
+            &tx,
+            rx,
+        )
+        .await;
     } else {
-        let content_id = if Uuid::try_parse(&source).is_err() {
-            let content_id_task = get_content_id(client, source, market.clone()).await;
-            let Ok(content_id) = content_id_task else {
-                let Err(err) = content_id_task else {
+        let vurl = if source.starts_with("http://") || source.starts_with("https://") {
+            source
+        } else {
+            let content_id = if Uuid::try_parse(&source).is_err() {
+                let content_id_task = get_content_id(client, source, market.clone()).await;
+                let Ok(content_id) = content_id_task else {
+                    let Err(err) = content_id_task else {
+                        eprintln!("Unknown Error");
+                        return;
+                    };
+                    eprintln!("{}", err);
+                    return;
+                };
+                content_id
+            } else {
+                source
+            };
+            let package_result = get_packages(client, tokens, content_id.clone()).await;
+            let Ok(package) = package_result else {
+                let Err(err) = package_result else {
                     eprintln!("Unknown Error");
                     return;
                 };
                 eprintln!("{}", err);
                 return;
             };
-            content_id
-        } else {
-            source
-        };
-        let package_result = get_packages(client, tokens, content_id.clone()).await;
-        let Ok(package) = package_result else {
-            let Err(err) = package_result else {
-                eprintln!("Unknown Error");
+            let Some(file) = package
+                .package_files
+                .iter()
+                .find(|p| p.file_name.ends_with(".msixvc"))
+            else {
+                eprintln!("No .msixvc file found");
                 return;
             };
-            eprintln!("{}", err);
-            return;
+            format!(
+                "{}{}",
+                file.cdn_root_paths.first().unwrap(),
+                file.relative_url
+            )
         };
-        let Some(file) = package
-            .package_files
-            .iter()
-            .find(|p| p.file_name.ends_with(".msixvc"))
-        else {
-            eprintln!("No .msixvc file found");
-            return;
-        };
-        format!(
-            "{}{}",
-            file.cdn_root_paths.first().unwrap(),
-            file.relative_url
+        let url = &vurl;
+        let mut pos = 0;
+        let http_file = streaming::HttpRead::open(
+            client.clone(),
+            url,
+            Some(|c, _| {
+                if tx
+                    .try_send(ProgressEvent::Advanced {
+                        id: usize::MAX,
+                        delta: c - pos,
+                    })
+                    .is_ok()
+                {
+                    pos = c;
+                }
+            }),
         )
-    };
-    let url = &vurl;
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<ProgressEvent>(256);
-    let mut pos = 0;
-    let http_file = streaming::HttpRead::open(
-        client.clone(),
-        url,
-        Some(|c, _| {
-            if tx
-                .try_send(ProgressEvent::Advanced {
-                    id: usize::MAX,
-                    delta: c - pos,
-                })
-                .is_ok()
-            {
-                pos = c;
-            }
-        }),
-    )
-    .await
-    .expect("ok");
-    let l = http_file.len();
+        .await
+        .expect("ok");
+        let l = http_file.len();
+
+        run_reader(
+            client,
+            tokens,
+            destination,
+            try_skip_ntfs,
+            parallel,
+            market,
+            http_file,
+            l,
+            url,
+            &tx,
+            rx,
+        )
+        .await;
+    }
+}
+
+async fn run_reader<Reader>(
+    client: &reqwest::Client,
+    tokens: &TokenManager,
+    destination: String,
+    try_skip_ntfs: bool,
+    parallel: Option<usize>,
+    market: Option<String>,
+    reader: Reader,
+    l: u64,
+    url: &str,
+    tx: &Sender<ProgressEvent>,
+    mut rx: Receiver<ProgressEvent>,
+) -> ()
+where
+    Reader: AsyncRead + Unpin,
+{
     tokio::spawn(async move {
         let multi_progress = MultiProgress::new();
         let total_progess = multi_progress.add(ProgressBar::new(l as u64).with_style(
@@ -151,7 +209,7 @@ pub async fn run(
     let cache_path = out.join(".xodus-streaming-tmp.msixvc");
     let final_path = out.join(".xodus-streaming.msixvc");
 
-    let mut remote_file = streaming::PrefixCacheFile::new(http_file, l, cache_path.clone())
+    let mut remote_file = streaming::PrefixCacheFile::new(reader, l, cache_path.clone())
         .await
         .expect("no err");
     let remote_xvd = XvdFile::parse(&mut remote_file).await.expect("no err");
@@ -219,7 +277,8 @@ pub async fn run(
 
         if let Ok(sfiles) = xvd
             .parse_ntfs_segment_metadata(&mut file, !lfiles.is_empty())
-            .await {
+            .await
+        {
             for (n, sfile) in &sfiles {
                 if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
                     println!("{}: {} {}", n, sfile.offset, sfile.length);
@@ -364,18 +423,27 @@ pub async fn run(
             .await
             .ok();
 
-            remote_xvd_ref
-                .download_file_http(
-                    &client,
-                    url.to_owned(),
-                    &mut fout,
-                    &job.content,
-                    *full_key,
-                    progress,
-                )
-                .await
-                .expect("msg");
-            tx.send(ProgressEvent::Finished { id }).await.ok();
+            if let Some(fpath) = url.strip_prefix("file://") {
+                let mut i = File::open(&fpath).await.unwrap();
+                remote_xvd_ref
+                    .mount_mem_fd(&mut i, &mut fout, &job.content, *full_key, progress)
+                    .await
+                    .expect("msg");
+                tx.send(ProgressEvent::Finished { id }).await.ok();
+            } else {
+                remote_xvd_ref
+                    .download_file_http(
+                        &client,
+                        url.to_owned(),
+                        &mut fout,
+                        &job.content,
+                        *full_key,
+                        progress,
+                    )
+                    .await
+                    .expect("msg");
+                tx.send(ProgressEvent::Finished { id }).await.ok();
+            }
         }
     })
     .await;

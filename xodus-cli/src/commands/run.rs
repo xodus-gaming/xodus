@@ -1,4 +1,4 @@
-use std::os::fd::{AsFd, AsRawFd, IntoRawFd};
+use std::os::fd::{AsFd, IntoRawFd};
 use std::{collections::HashMap, path::Path};
 
 use msixvc::{
