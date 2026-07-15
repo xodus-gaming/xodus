@@ -1,11 +1,10 @@
 use crate::math::gf_mul_x;
 use crate::models::xvd::{PAGE_SIZE, XvcRegionId};
 
-use std::io::{self, Read, Seek, SeekFrom};
 use std::iter;
 
 use aes::Aes128;
-use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
+use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt};
 
 #[derive(Clone, Copy)]
 pub struct Tweak([u8; 16]);
@@ -29,112 +28,6 @@ impl Tweak {
         let mut block = aes::Block::from(self.0);
         tweak_cipher.encrypt_block(&mut block);
         u128::from_le_bytes(block.0)
-    }
-}
-
-pub struct SectionReader<'t, R> {
-    inner: R,
-    section_offset: u64,
-    section_length: u64,
-
-    tweak: Tweak,
-    tweak_cipher: Aes128,
-
-    data_cipher: Aes128,
-
-    // If integrity is enabled, this must contain one entry per page in the section.
-    // If integrity is disabled, use page_in_section as the data unit instead.
-    data_units: Option<&'t [u32]>,
-
-    // simplest useful cache
-    cached_page_index: Option<u64>,
-    cached_page_plaintext: [u8; PAGE_SIZE],
-}
-
-impl<'t, R: Read + Seek> SectionReader<'t, R> {
-    pub fn new(
-        inner: R,
-        section_offset: u64,
-        section_length: u64,
-        header_id: XvcRegionId,
-        vduid: [u8; 8],
-        full_key: [u8; 32],
-        data_units: Option<&'t [u32]>,
-    ) -> Self {
-        let mut tweak_key = [0u8; 16];
-        let mut data_key = [0u8; 16];
-        tweak_key.copy_from_slice(&full_key[..16]);
-        data_key.copy_from_slice(&full_key[16..]);
-
-        Self {
-            inner,
-            section_offset,
-            section_length,
-            tweak: Tweak::new(0, header_id, vduid),
-            tweak_cipher: Aes128::new((&tweak_key).into()),
-            data_cipher: Aes128::new((&data_key).into()),
-            data_units,
-            cached_page_index: None,
-            cached_page_plaintext: [0u8; PAGE_SIZE],
-        }
-    }
-
-    pub fn read_at(&mut self, offset_in_section: u64, mut out: &mut [u8]) -> io::Result<()> {
-        let end = offset_in_section
-            .checked_add(out.len() as u64)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "range overflow"))?;
-
-        if end > self.section_length {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "read exceeds section length",
-            ));
-        }
-
-        let mut cur_off = offset_in_section;
-
-        while !out.is_empty() {
-            let page_in_section = cur_off / PAGE_SIZE as u64;
-            let in_page = (cur_off % PAGE_SIZE as u64) as usize;
-            let copy_len = std::cmp::min(out.len(), PAGE_SIZE - in_page);
-
-            self.ensure_page_decrypted(page_in_section)?;
-            out[..copy_len]
-                .copy_from_slice(&self.cached_page_plaintext[in_page..in_page + copy_len]);
-
-            cur_off += copy_len as u64;
-            out = &mut out[copy_len..];
-        }
-
-        Ok(())
-    }
-
-    fn ensure_page_decrypted(&mut self, page_in_section: u64) -> io::Result<()> {
-        if self.cached_page_index == Some(page_in_section) {
-            return Ok(());
-        }
-
-        let file_offset = self
-            .section_offset
-            .checked_add(page_in_section * PAGE_SIZE as u64)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "file offset overflow"))?;
-
-        self.tweak.update_data_unit(match &self.data_units {
-            Some(units) => *units
-                .get(page_in_section as usize)
-                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing data unit"))?,
-            None => page_in_section as u32,
-        });
-
-        let mut page = [0u8; PAGE_SIZE];
-        self.inner.seek(SeekFrom::Start(file_offset))?;
-        self.inner.read_exact(&mut page)?;
-
-        decrypt_page_xts(&mut page, self.tweak, &self.tweak_cipher, &self.data_cipher);
-
-        self.cached_page_plaintext = page;
-        self.cached_page_index = Some(page_in_section);
-        Ok(())
     }
 }
 

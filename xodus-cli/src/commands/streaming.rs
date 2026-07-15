@@ -4,7 +4,6 @@ use fs2::available_space;
 use futures_util::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use msixvc::{
-    models::xvd::PAGE_SIZE,
     streaming,
     xvd::{SegmentFile, XvdFile},
 };
@@ -227,11 +226,6 @@ where
                     .parse_segment_metadata(&mut remote_file, v)
                     .await
                     .expect("ok");
-                for (n, sfile) in &sfiles {
-                    if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-                        println!("{}: {} {}", n, sfile.offset, sfile.length);
-                    }
-                }
                 rfiles = sfiles;
             }
         }
@@ -246,11 +240,6 @@ where
         .parse_ntfs_segment_metadata(&mut remote_file, !rfiles.is_empty())
         .await
         .expect("ok");
-    for (n, sfile) in &sfiles {
-        if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-            println!("{}: {} {}", n, sfile.offset, sfile.length);
-        }
-    }
     rfiles.extend(sfiles);
 
     let file = OpenOptions::new()
@@ -266,11 +255,6 @@ where
         for (k, v) in &files {
             if k == "SegmentMetadata.bin" {
                 let sfiles = xvd.parse_segment_metadata(&mut file, v).await.expect("ok");
-                for (n, sfile) in &sfiles {
-                    if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-                        println!("{}: {} {}", n, sfile.offset, sfile.length);
-                    }
-                }
                 lfiles = sfiles;
             }
         }
@@ -279,11 +263,6 @@ where
             .parse_ntfs_segment_metadata(&mut file, !lfiles.is_empty())
             .await
         {
-            for (n, sfile) in &sfiles {
-                if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-                    println!("{}: {} {}", n, sfile.offset, sfile.length);
-                }
-            }
             lfiles.extend(sfiles);
         }
     }

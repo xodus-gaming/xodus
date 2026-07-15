@@ -1,5 +1,6 @@
 use base64::prelude::*;
 use bergshamra::{DsigContext, Key, KeyData, KeyUsage, KeysManager};
+use log::{trace, warn};
 use rsa::rand_core::{OsRng, RngCore};
 
 use crate::models::devicecredential::{DeviceAddRequest, DeviceAddResponse};
@@ -224,10 +225,10 @@ pub async fn exchange_device_token(
     let result = bergshamra::verify(&ctx, &text).unwrap();
     match result {
         bergshamra::VerifyResult::Invalid { reason } => {
-            println!("DEVICE {}", reason);
+            warn!("DEVICE {}", reason);
         }
         bergshamra::VerifyResult::Valid { .. } => {
-            println!("signature valid");
+            trace!("signature valid");
         }
     }
 
@@ -438,10 +439,10 @@ pub async fn exchange_user_token(
     let result = bergshamra::verify(&ctx, &text).unwrap();
     match result {
         bergshamra::VerifyResult::Invalid { reason } => {
-            println!("USER {}", reason);
+            warn!("USER {}", reason);
         }
         bergshamra::VerifyResult::Valid { .. } => {
-            println!("signature valid");
+            trace!("signature valid");
         }
     }
 
