@@ -217,16 +217,16 @@ pub async fn run(
             }
         }
 
-        let sfiles = xvd
+        if let Ok(sfiles) = xvd
             .parse_ntfs_segment_metadata(&mut file, !lfiles.is_empty())
-            .await
-            .expect("ok");
-        for (n, sfile) in &sfiles {
-            if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-                println!("{}: {} {}", n, sfile.offset, sfile.length);
+            .await {
+            for (n, sfile) in &sfiles {
+                if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+                    println!("{}: {} {}", n, sfile.offset, sfile.length);
+                }
             }
+            lfiles.extend(sfiles);
         }
-        lfiles.extend(sfiles);
     }
 
     let license = get_license(
