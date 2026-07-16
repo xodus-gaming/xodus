@@ -52,6 +52,35 @@ enum SubCommand {
         #[arg(short, long)]
         market: Option<String>,
     },
+    #[command(about = "Generate or decrypt base64-encoded CLEP challenge data")]
+    Clep {
+        #[command(subcommand)]
+        action: ClepAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ClepAction {
+    #[command(
+        about = "Generate a base64-encoded CLEP challenge (V2 and V4) from SMBIOS/disk serial data"
+    )]
+    Generate {
+        #[arg(
+            long,
+            help = "Base64-encoded SMBIOS data (up to 256 bytes, zero-padded)"
+        )]
+        smbios: Option<String>,
+        #[arg(
+            long,
+            help = "Base64-encoded disk serial (up to 64 bytes, zero-padded)"
+        )]
+        disk_serial: Option<String>,
+    },
+    #[command(about = "Decrypt a base64-encoded CLEP challenge back into its plaintext fields")]
+    Decrypt {
+        #[clap(help = "Base64-encoded, obfuscated CLEP challenge data (2048 bytes)")]
+        data: String,
+    },
 }
 
 #[derive(Parser)]
@@ -130,6 +159,13 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::Clep { action } => match action {
+            ClepAction::Generate {
+                smbios,
+                disk_serial,
+            } => commands::clep::generate(smbios, disk_serial),
+            ClepAction::Decrypt { data } => commands::clep::decrypt(data),
+        },
     }
 
     xodus::secrets::destroy_secrets();

@@ -44,31 +44,108 @@ impl Cipher {
 
     const INITIAL_STATE: u32 = Cipher::initial_state();
 
+    // The 8 round functions shared by the key schedule and the Feistel
+    // cipher below: the key schedule walks them forward (round_1..round_8),
+    // the cipher walks the same functions backward (round_8..round_1).
+    const fn round_1(x: u32) -> u32 {
+        Self::MAGIC_04
+            .wrapping_mul((x ^ Self::MAGIC_HI).rotate_right(22))
+            .wrapping_sub(x.rotate_right(8))
+    }
+
+    const fn round_2(x: u32) -> u32 {
+        Self::MAGIC_04.wrapping_mul(x.rotate_right(15) ^ Self::MAGIC_01)
+    }
+
+    const fn round_3(x: u32) -> u32 {
+        (x >> 9).wrapping_add(Self::MAGIC_02.wrapping_mul((x ^ Self::MAGIC_03).rotate_left(3)))
+    }
+
+    const fn round_4(x: u32) -> u32 {
+        x.rotate_right(28) ^ Self::MAGIC_03.wrapping_mul((x ^ Self::MAGIC_HI).rotate_right(9))
+    }
+
+    const fn round_5(x: u32) -> u32 {
+        x.rotate_right(12).wrapping_add(
+            Self::MAGIC_04.wrapping_mul(x.wrapping_sub(Self::MAGIC_HI).rotate_right(14)),
+        )
+    }
+
+    const fn round_6(x: u32) -> u32 {
+        x.rotate_right(11) ^ Self::MAGIC_01.wrapping_mul((x ^ Self::MAGIC_02).rotate_left(2))
+    }
+
+    const fn round_7(x: u32) -> u32 {
+        x.wrapping_sub(Self::MAGIC_LO).wrapping_sub(Self::MAGIC_02)
+    }
+
+    const fn round_8(x: u32) -> u32 {
+        Self::MAGIC_03
+            .wrapping_mul((x ^ Self::MAGIC_01).rotate_left(2))
+            .wrapping_sub(x.rotate_right(18))
+    }
+
+    // Extra rounds used only by `encrypt_int`: `round_0` mixes the high
+    // block word into the state, `whiten` produces the final output word.
+    const fn round_0(x: u32) -> u32 {
+        Self::MAGIC_04
+            .wrapping_mul(x.wrapping_sub(Self::MAGIC_HI).rotate_right(18))
+            .wrapping_sub(x.rotate_right(9))
+    }
+
+    const fn whiten(x: u32) -> u32 {
+        Self::MAGIC_03
+            .wrapping_mul(x.wrapping_add(Self::MAGIC_HI).rotate_right(10))
+            .wrapping_sub(x.rotate_right(29))
+    }
+
+    const fn round(id: u8, x: u32) -> u32 {
+        match id {
+            1 => Self::round_1(x),
+            2 => Self::round_2(x),
+            3 => Self::round_3(x),
+            4 => Self::round_4(x),
+            5 => Self::round_5(x),
+            6 => Self::round_6(x),
+            7 => Self::round_7(x),
+            8 => Self::round_8(x),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Walks `rounds` in order, folding each round's output back into a
+    /// 2-word Feistel state: `(a, b) -> (b, a ^ round(b))`.
+    const fn run_rounds(mut a: u32, mut b: u32, rounds: [u8; 8]) -> (u32, u32) {
+        let mut i = 0;
+        while i < rounds.len() {
+            let c = a ^ Self::round(rounds[i], b);
+            a = b;
+            b = c;
+            i += 1;
+        }
+        (a, b)
+    }
+
+    /// Inverse of `run_rounds`: given the state produced by
+    /// `run_rounds(a, b, rounds)`, recovers the original `(a, b)`.
+    ///
+    /// Each forward step `(a, b) -> (b, a ^ round(b))` is undone by
+    /// `(a, b) -> (b ^ round(a), a)`, walking `rounds` back to front.
+    const fn run_rounds_inverse(mut a: u32, mut b: u32, rounds: [u8; 8]) -> (u32, u32) {
+        let mut i = rounds.len();
+        while i > 0 {
+            i -= 1;
+            let prev_a = b ^ Self::round(rounds[i], a);
+            b = a;
+            a = prev_a;
+        }
+        (a, b)
+    }
+
     const fn initial_state() -> u32 {
         // --- Key schedule: derive initial cipher state from hardcoded constants ---
         let k0 = !(Self::MAGIC_03.wrapping_mul(Self::MAGIC_HI.rotate_right(10)));
-        let k1 = Self::MAGIC_04
-            .wrapping_mul((k0 ^ Self::MAGIC_HI).rotate_right(22))
-            .wrapping_sub(k0.rotate_right(8));
-        let k2 = k0 ^ Self::MAGIC_04.wrapping_mul(k1.rotate_right(15) ^ Self::MAGIC_01);
-        let k3 = k1
-            ^ (k2 >> 9)
-                .wrapping_add(Self::MAGIC_02.wrapping_mul((k2 ^ Self::MAGIC_03).rotate_left(3)));
-        let k4 = k2
-            ^ k3.rotate_right(28)
-            ^ Self::MAGIC_03.wrapping_mul((k3 ^ Self::MAGIC_HI).rotate_right(9));
-        let k5 = k3
-            ^ k4.rotate_right(12).wrapping_add(
-                Self::MAGIC_04.wrapping_mul(k4.wrapping_sub(Self::MAGIC_HI).rotate_right(14)),
-            );
-        let k6 = k4
-            ^ k5.rotate_right(11)
-            ^ Self::MAGIC_01.wrapping_mul((k5 ^ Self::MAGIC_02).rotate_left(2));
-        let k7 = k5 ^ k6.wrapping_sub(Self::MAGIC_LO).wrapping_sub(Self::MAGIC_02);
-        let k8 = k6
-            ^ Self::MAGIC_03
-                .wrapping_mul((k7 ^ Self::MAGIC_01).rotate_left(2))
-                .wrapping_sub(k7.rotate_right(18));
+        let (_, k8) = Self::run_rounds(0, k0, [1, 2, 3, 4, 5, 6, 7, 8]);
         // let k9 = Self::MAGIC_04
         //    .wrapping_mul(k8.wrapping_sub(Self::MAGIC_HI).rotate_right(18))
         //    .wrapping_sub(k8.rotate_right(9));
@@ -90,43 +167,15 @@ impl Cipher {
         let pp_lo = self.plain as u32;
         let pp_hi = (self.plain >> 32) as u32;
 
-        // 10 Feistel rounds
+        // 10 Feistel rounds: a seed round mixing in the high block word,
+        // then the 8 shared round functions walked in reverse order
+        // (round_8..round_1) relative to the key schedule.
         let r0 = self.lo ^ block_lo;
-        let r1 = self.hi
-            ^ block_hi
-            ^ Self::MAGIC_04
-                .wrapping_mul(r0.wrapping_sub(Self::MAGIC_HI).rotate_right(18))
-                .wrapping_sub(r0.rotate_right(9));
-        let r2 = r0
-            ^ Self::MAGIC_03
-                .wrapping_mul((r1 ^ Self::MAGIC_01).rotate_left(2))
-                .wrapping_sub(r1.rotate_right(18));
-        let r3 = r1 ^ r2.wrapping_sub(Self::MAGIC_02).wrapping_sub(Self::MAGIC_LO);
-        let r4 = r2
-            ^ r3.rotate_right(11)
-            ^ Self::MAGIC_01.wrapping_mul((r3 ^ Self::MAGIC_02).rotate_left(2));
-        let r5 = r3
-            ^ r4.rotate_right(12).wrapping_add(
-                Self::MAGIC_04.wrapping_mul(r4.wrapping_sub(Self::MAGIC_HI).rotate_right(14)),
-            );
-        let r6 = r4
-            ^ r5.rotate_right(28)
-            ^ Self::MAGIC_03.wrapping_mul((r5 ^ Self::MAGIC_HI).rotate_right(9));
-        let r7 = r5
-            ^ (r6 >> 9)
-                .wrapping_add(Self::MAGIC_02.wrapping_mul((r6 ^ Self::MAGIC_03).rotate_left(3)));
-        let r8 = r6 ^ Self::MAGIC_04.wrapping_mul(r7.rotate_right(15) ^ Self::MAGIC_01);
-        let r9 = r7
-            ^ Self::MAGIC_04
-                .wrapping_mul((r8 ^ Self::MAGIC_HI).rotate_right(22))
-                .wrapping_sub(r8.rotate_right(8));
+        let r1 = self.hi ^ block_hi ^ Self::round_0(r0);
+        let (r8, r9) = Self::run_rounds(r0, r1, [8, 7, 6, 5, 4, 3, 2, 1]);
 
         // Output with CBC-like plaintext feedback
-        let new_lo = pp_lo
-            ^ r8
-            ^ Self::MAGIC_03
-                .wrapping_mul(r9.wrapping_add(Self::MAGIC_HI).rotate_right(10))
-                .wrapping_sub(r9.rotate_right(29));
+        let new_lo = pp_lo ^ r8 ^ Self::whiten(r9);
         let new_hi = r9 ^ pp_hi;
 
         // Update cipher state
@@ -142,6 +191,40 @@ impl Cipher {
         let block_num = u64::from_le_bytes(*block);
         let encrypted = self.encrypt_int(block_num);
         *block = encrypted.to_le_bytes();
+    }
+
+    const fn decrypt_int(&mut self, block: u64) -> u64 {
+        let new_lo = block as u32;
+        let new_hi = (block >> 32) as u32;
+        let old_lo = self.lo;
+        let old_hi = self.hi;
+        let pp_lo = self.plain as u32;
+        let pp_hi = (self.plain >> 32) as u32;
+
+        // Undo the output whitening to recover the post-round Feistel state
+        let r9 = new_hi ^ pp_hi;
+        let r8 = new_lo ^ pp_lo ^ Self::whiten(r9);
+
+        // Undo the 8 shared rounds to recover the pre-round Feistel state
+        let (r0, r1) = Self::run_rounds_inverse(r8, r9, [8, 7, 6, 5, 4, 3, 2, 1]);
+
+        // Undo the seed round to recover the plaintext block
+        let block_lo = old_lo ^ r0;
+        let block_hi = old_hi ^ r1 ^ Self::round_0(r0);
+        let plain = (block_lo as u64) | ((block_hi as u64) << 32);
+
+        // Update cipher state exactly as `encrypt_int` does
+        self.lo = new_lo;
+        self.hi = new_hi;
+        self.plain = plain;
+
+        plain
+    }
+
+    pub const fn decrypt_block(&mut self, block: &mut [u8; 8]) {
+        let block_num = u64::from_le_bytes(*block);
+        let decrypted = self.decrypt_int(block_num);
+        *block = decrypted.to_le_bytes();
     }
 }
 
@@ -165,6 +248,24 @@ pub fn clep_obfuscate(buffer: &mut [u8; 2048]) {
     }
 }
 
+/// Inverse of [`clep_obfuscate`].
+pub fn clep_deobfuscate(buffer: &mut [u8; 2048]) {
+    // --- IV setup: recover the original IV that was XORed into word2 ---
+    let blocks: &mut [[u8; 8]; 256] = transmute_mut!(buffer);
+    let [_word1, word2]: &mut [[u8; 4]; 2] = transmute_mut!(&mut blocks[0]);
+
+    let obfuscated_lo = u32::from_le_bytes(*word2);
+    let iv = Cipher::INITIAL_STATE ^ obfuscated_lo;
+    let mut cipher = Cipher::new(iv);
+
+    *word2 = iv.to_le_bytes();
+
+    // --- CBC-like decryption of 255 blocks (buffer[8..2048]) ---
+    for block in blocks.iter_mut().skip(1) {
+        cipher.decrypt_block(block);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,5 +279,38 @@ mod tests {
         smbios[..data.len()].copy_from_slice(&data);
 
         get_license_challange(smbios, disk_serial);
+    }
+
+    #[test]
+    fn test_deobfuscation_round_trip() {
+        let data = BASE64_STANDARD.decode("ARsBAAECAwRURVNUgAiBEM+htizwXQaZ3wYFBkJJT1MgbWFudWZhY3R1cmVyIGdvZXMgaGVyZSwgTHRkAFNPTUVJRAAzLjAAVG8gYmUgZmlsbGVkIGJ5IE8uRS5NLgBUbyBiZSBmaWxsZWQgYnkgTy5FLk0uAFRvIGJlIGZpbGxlZCBieSBPLkUuTS4AAA==").unwrap();
+        let mut smbios = [0; 256];
+        let disk_serial = [7u8; 64];
+        smbios[..data.len()].copy_from_slice(&data);
+
+        let (v2, v4) = get_license_challange(smbios, disk_serial);
+
+        let mut v2_roundtrip = v2;
+        clep_deobfuscate(&mut v2_roundtrip);
+        let mut v4_roundtrip = v4;
+        clep_deobfuscate(&mut v4_roundtrip);
+
+        let mut clepv2 = ClepV2::new_zeroed();
+        clepv2.version = 2;
+        clepv2.always_0 = 0;
+        clepv2.always_1 = true;
+        clepv2.smbios.copy_from_slice(&smbios);
+        clepv2.disk_serial.copy_from_slice(&disk_serial);
+        let mut clepv4 = ClepV4::new_zeroed();
+        clepv4.version = 4;
+        clepv4.debuger_not_present = 1;
+        clepv4.smbios = smbios;
+        clepv4.disk_serial = disk_serial;
+
+        let original_v2: [u8; 2048] = transmute!(clepv2);
+        let original_v4: [u8; 2048] = transmute!(clepv4);
+
+        assert_eq!(v2_roundtrip, original_v2);
+        assert_eq!(v4_roundtrip, original_v4);
     }
 }
