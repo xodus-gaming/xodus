@@ -699,7 +699,7 @@ impl XvdFile {
                     continue;
                 };
 
-                if only_plain && partition_offset + start > drive_data_offset + drive_plain_len {
+                if only_plain && partition_offset + start >= drive_data_offset + drive_plain_len {
                     continue;
                 }
 
