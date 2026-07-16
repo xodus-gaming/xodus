@@ -845,7 +845,8 @@ impl XvdFile {
                 }
                 let chunk = pending.split_to(4096);
                 page.copy_from_slice(&chunk);
-                if let Some(tweak) = tweak.as_mut() {
+                let to_write = remaining.min(PAGE_SIZE as u64) as usize;
+                let to_write = if let Some(tweak) = tweak.as_mut() {
                     tweak.update_data_unit(match &s.unwrap().data_units {
                         Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {
                             io::Error::new(
@@ -868,8 +869,13 @@ impl XvdFile {
                         tweak_cipher.as_ref().unwrap(),
                         data_cipher.as_ref().unwrap(),
                     );
-                }
-                let to_write = remaining.min(PAGE_SIZE as u64) as usize;
+                    to_write
+                } else if sfile.keep_encrypted {
+                    // Decryption needs full 4k blocks
+                    PAGE_SIZE
+                } else {
+                    to_write
+                };
                 while let Err(err) = out.write_all(&page[..to_write]).await {
                     eprintln!("Error write file {} waiting 30s", err);
                     println!("Error write file {} waiting 30s", err);
