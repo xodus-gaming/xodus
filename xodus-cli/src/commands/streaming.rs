@@ -47,7 +47,7 @@ pub async fn run(
         let fsrc = source.strip_prefix("file://").unwrap_or_default();
         let f = File::open(fsrc).await.unwrap();
         let l = f.metadata().await.unwrap().len();
-        run_reader(
+        run_cli_reader(
             client,
             tokens,
             destination,
@@ -123,7 +123,7 @@ pub async fn run(
         .expect("ok");
         let l = http_file.len();
 
-        run_reader(
+        run_cli_reader(
             client,
             tokens,
             destination,
@@ -140,7 +140,7 @@ pub async fn run(
     }
 }
 
-async fn run_reader<Reader>(
+async fn run_cli_reader<Reader>(
     client: &reqwest::Client,
     tokens: &TokenManager,
     destination: String,
@@ -197,9 +197,38 @@ where
             }
         }
 
-        total_progess.finish();
+        total_progess.abandon();
     });
+    run_reader(
+        client,
+        tokens,
+        destination,
+        try_skip_ntfs,
+        parallel,
+        market,
+        reader,
+        l,
+        url,
+        tx,
+    )
+    .await
+}
 
+async fn run_reader<Reader>(
+    client: &reqwest::Client,
+    tokens: &TokenManager,
+    destination: String,
+    try_skip_ntfs: bool,
+    parallel: Option<usize>,
+    market: Option<String>,
+    reader: Reader,
+    l: u64,
+    url: &str,
+    tx: &Sender<ProgressEvent>,
+) -> ()
+where
+    Reader: AsyncRead + Unpin,
+{
     let out: &Path = Path::new(&destination);
 
     std::fs::create_dir_all(out).expect("ok");
