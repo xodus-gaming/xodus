@@ -214,19 +214,17 @@ where
     let mut rfiles: HashMap<String, SegmentFile> = HashMap::new();
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();
 
-    if try_skip_ntfs {
-        let files = remote_xvd
-            .parse_user_package_files(&mut remote_file)
-            .await
-            .expect("ok");
-        for (k, v) in &files {
-            if k == "SegmentMetadata.bin" {
-                let sfiles = remote_xvd
-                    .parse_segment_metadata(&mut remote_file, v)
-                    .await
-                    .expect("ok");
-                rfiles = sfiles;
-            }
+    let files = remote_xvd
+        .parse_user_package_files(&mut remote_file)
+        .await
+        .expect("ok");
+    for (k, v) in &files {
+        if k == "SegmentMetadata.bin" {
+            let sfiles = remote_xvd
+                .parse_segment_metadata(&mut remote_file, v)
+                .await
+                .expect("ok");
+            rfiles = sfiles;
         }
     }
 

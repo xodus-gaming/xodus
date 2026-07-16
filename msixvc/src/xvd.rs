@@ -935,7 +935,6 @@ impl XvdFile {
         }
         let page_start = file_offset_in_section / PAGE_SIZE as u64;
         let page_count = sfile.length.div_ceil(PAGE_SIZE as u64);
-        let mut remaining = sfile.length;
 
         let mut page = [0u8; PAGE_SIZE];
 
@@ -944,10 +943,16 @@ impl XvdFile {
                 min((page_in_section - page_start) * 4096, sfile.length),
                 sfile.length,
             );
-            let to_write = remaining.min(PAGE_SIZE as u64) as usize;
-            i.read_exact(&mut page[..to_write]).await?;
-            page[to_write..].fill(0);
-            if let Some(tweak) = tweak.as_mut() {
+            i.read_exact(&mut page).await?;
+            let to_write = min(
+                PAGE_SIZE,
+                sfile.length as usize
+                    - min(
+                        (page_in_section - page_start) as usize * 4096 as usize,
+                        sfile.length as usize,
+                    ),
+            ) as usize;
+            let to_write = if let Some(tweak) = tweak.as_mut() {
                 tweak.update_data_unit(match &s.unwrap().data_units {
                     Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {
                         io::Error::new(
@@ -970,13 +975,18 @@ impl XvdFile {
                     tweak_cipher.as_ref().unwrap(),
                     data_cipher.as_ref().unwrap(),
                 );
-            }
+                to_write
+            } else if sfile.keep_encrypted {
+                // Decryption needs full 4k blocks
+                PAGE_SIZE
+            } else {
+                to_write
+            };
             while let Err(err) = out.write_all(&page[..to_write]).await {
                 eprintln!("Error write file {} waiting 30s", err);
                 println!("Error write file {} waiting 30s", err);
                 sleep(tokio::time::Duration::from_secs(30)).await;
             }
-            remaining -= to_write as u64;
         }
         Ok(())
     }
