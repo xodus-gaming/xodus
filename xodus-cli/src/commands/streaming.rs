@@ -228,16 +228,18 @@ where
         }
     }
 
-    tx.send(ProgressEvent::UpdateStatus {
-        name: "Downloading ntfs...".to_owned(),
-    })
-    .await
-    .ok();
-    let sfiles = remote_xvd
-        .parse_ntfs_segment_metadata(&mut remote_file, !rfiles.is_empty())
+    if !try_skip_ntfs || rfiles.is_empty() {
+        tx.send(ProgressEvent::UpdateStatus {
+            name: "Downloading ntfs...".to_owned(),
+        })
         .await
-        .expect("ok");
-    rfiles.extend(sfiles);
+        .ok();
+        let sfiles = remote_xvd
+            .parse_ntfs_segment_metadata(&mut remote_file, !rfiles.is_empty())
+            .await
+            .expect("ok");
+        rfiles.extend(sfiles);
+    }
 
     let file = OpenOptions::new()
         .read(true)
