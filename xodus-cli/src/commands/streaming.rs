@@ -439,14 +439,7 @@ where
                 tx.send(ProgressEvent::Finished { id }).await.ok();
             } else {
                 remote_xvd_ref
-                    .download_file_http(
-                        &client,
-                        url.to_owned(),
-                        &mut fout,
-                        &job.content,
-                        *full_key,
-                        progress,
-                    )
+                    .download_file_http(&client, url, &mut fout, &job.content, *full_key, progress)
                     .await
                     .expect("msg");
                 tx.send(ProgressEvent::Finished { id }).await.ok();

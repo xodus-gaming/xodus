@@ -724,7 +724,7 @@ impl XvdFile {
     pub async fn download_file_http<Writer, Progress>(
         &self,
         client: &reqwest::Client,
-        url: String,
+        url: &str,
         out: &mut Writer,
         sfile: &SegmentFile,
         full_key: [u8; 32],
@@ -779,7 +779,7 @@ impl XvdFile {
         if let Ok(Ok(Ok(response))) = timeout(
             stall_timeout,
             client
-                .get(url.clone())
+                .get(url)
                 .header(
                     RANGE,
                     format!(
@@ -813,7 +813,7 @@ impl XvdFile {
                 if let Ok(Ok(Ok(response))) = timeout(
                     stall_timeout,
                     client
-                        .get(url.clone())
+                        .get(url)
                         .header(
                             RANGE,
                             format!(
