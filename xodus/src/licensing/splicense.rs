@@ -92,8 +92,8 @@ pub struct EncryptedDeviceKey {
     /// Is always 4096.
     size: u16,
     version: u32,
-    key_schedule: [u32; 58],
-    _unknown1: [u8; 280],
+    key_schedule: [u32; 57],
+    _unknown1: [u8; 284],
     device_key: [u8; 16],
     _unknown2: [u8; 3562],
 }
@@ -103,8 +103,8 @@ pub struct EncryptedDeviceKey {
 pub struct ClepSignState {
     version: u32,
     key_data: [u8; 544],
-    key_schedule: [u32; 58],
-    _unknown: [u8; 3316],
+    key_schedule: [u32; 57],
+    _unknown: [u8; 3320],
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -308,14 +308,14 @@ impl SPLicense {
         Ok(license)
     }
 
-    pub fn parse_base64(string: String) -> Result<SPLicense, SPLicenseParseError> {
+    pub fn parse_base64(string: &str) -> Result<SPLicense, SPLicenseParseError> {
         let data = BASE64_STANDARD.decode(string)?;
         Ok(SPLicense::decode(&*data)?)
     }
 }
 
 pub trait EncryptedBuffer {
-    fn decryption_key(key_schedule: [u32; 58]) -> [u8; 16] {
+    fn decryption_key(key_schedule: [u32; 57]) -> [u8; 16] {
         let mut key = [0u32; 4];
 
         key[0] = key_schedule[46] ^ key_schedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
@@ -354,12 +354,16 @@ impl ClepSignState {
         let mut buffer: Vec<u8> = Vec::with_capacity(2048);
         let key = Self::decryption_key(self.key_schedule);
         let aes = aes::Aes128::new(&key.into());
-
+        let mut prev: u128 = 0;
         for chunk in self.key_data.chunks(16).into_iter() {
             let key_data: [u8; 16] = chunk.try_into().unwrap();
+            let next: u128 = transmute!(key_data);
             let mut dev_key = key_data.into();
             aes.decrypt_block(&mut dev_key);
-            buffer.extend_from_slice(&dev_key);
+            let dev: [u8; 16] = (*dev_key).try_into().unwrap();
+            let dev: u128 = transmute!(dev);
+            buffer.extend_from_slice((dev ^ prev).as_bytes());
+            prev = next;
         }
         buffer
     }

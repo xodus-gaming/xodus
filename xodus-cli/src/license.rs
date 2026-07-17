@@ -85,11 +85,11 @@ pub async fn get_license(
     .await
     .expect("failed to get license");
 
-    let game_splicense = SPLicense::parse_base64(game_license.splicense_block)
+    let game_splicense = SPLicense::parse_base64(&game_license.splicense_block)
         .expect("could not parse base64 game SPLicense");
 
     let dev_license = tokens.get_device_license().unwrap();
-    let device_license = SPLicense::parse_base64(dev_license.splicense)
+    let device_license = SPLicense::parse_base64(&dev_license.splicense)
         .expect("could not parse base64 device SPLicense");
     let key = device_license
         .encrypted_device_key
