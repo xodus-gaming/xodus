@@ -31,6 +31,7 @@ prost = "0.14.4"
 globset = "0.4.18"
 thiserror = "2.0.18"
 num-bigint-dig = "0.8.6"
+num-integer = "0.1.39"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 smbios-lib = "0.9.2"

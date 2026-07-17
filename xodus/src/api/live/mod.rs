@@ -36,10 +36,62 @@ pub async fn login_device_credential(
 pub async fn authenticate_device(
     client: &reqwest::Client,
     username: String,
-    password: String,
+    private_key: rsa::RsaPrivateKey,
 ) -> reqwest::Result<soap::Envelope> {
     let mut header = soap::Header::new();
-    header.security.username_token = Some(UsernameToken::devicetoken(username, password));
+    let public_key = rsa::RsaPublicKey::from(&private_key);
+    header.security.username_token = Some(UsernameToken::devicetoken(username));
+    header.security.signature = Some(soap::Signature {
+        xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
+        signed_info: SignedInfo {
+            canonicalization_method: AlgorithmNode {
+                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+            },
+            reference: vec![
+                SignatureReference {
+                    uri: "#RST0".to_string(),
+                    digest_method: AlgorithmNode {
+                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
+                    },
+                    digest_value: "".to_string(),
+                    transforms: SignatureTransforms {
+                        transform: vec![AlgorithmNode {
+                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                        }],
+                    },
+                },
+                SignatureReference {
+                    uri: "#Timestamp".to_string(),
+                    digest_method: AlgorithmNode {
+                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
+                    },
+                    digest_value: "".to_string(),
+                    transforms: SignatureTransforms {
+                        transform: vec![AlgorithmNode {
+                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                        }],
+                    },
+                },
+                SignatureReference {
+                    uri: "#PPAuthInfo".to_string(),
+                    digest_method: AlgorithmNode {
+                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
+                    },
+                    digest_value: "".to_string(),
+                    transforms: SignatureTransforms {
+                        transform: vec![AlgorithmNode {
+                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                        }],
+                    },
+                },
+            ],
+            signature_method: AlgorithmNode {
+                algorithm: "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256".to_string(),
+            },
+        },
+        signature_value: "".to_string(),
+        key_info: None,
+    });
     let body = soap::Body {
         body: soap::BodyContent::RequestSecurityToken(soap::RequestSecurityToken {
             id: "RST0".to_string(),
@@ -55,12 +107,34 @@ pub async fn authenticate_device(
     let envelope = soap::Envelope::new(header, body);
     let xml = quick_xml::se::to_string(&envelope).unwrap();
     let xml = format!("{XML_HEADER}\n{xml}");
+
+    let mut kmgr = KeysManager::new();
+    kmgr.add_key(Key::new(
+        KeyData::Rsa {
+            private: Some(private_key),
+            public: public_key,
+        },
+        KeyUsage::Sign,
+    ));
+
+    let ctx = DsigContext::new(kmgr).with_strict_verification(false);
+    let prefixes: [&str; 0] = [];
+    let min_xml = bergshamra::c14n::canonicalize(
+        xml.as_str(),
+        bergshamra_c14n::C14nMode::Exclusive,
+        None,
+        &prefixes,
+    )
+    .unwrap();
+
+    let signed = bergshamra::sign(&ctx, std::str::from_utf8(&min_xml).unwrap()).unwrap();
+
     let response = client
         .post("https://login.live.com/RST2.srf")
         .header("User-Agent", "MSAWindows/55 (OS 10.0.26100.0.0 ge_release; IDK 10.0.26100.5074 ge_release; Cfg 16.000.29325.00; Test 0)")
         .header("Content-Type", "application/soap+xml")
         .header("Host", "login.live.com")
-        .body(xml)
+        .body(signed)
         .send()
         .await?;
 

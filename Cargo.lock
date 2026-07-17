@@ -6110,6 +6110,7 @@ dependencies = [
  "keyring-core",
  "log",
  "num-bigint-dig",
+ "num-integer",
  "num_enum",
  "prost",
  "prost-build",

@@ -10,6 +10,7 @@ pub struct Device {
     pub splicense: String,
     pub username: String,
     pub password: String,
+    pub private_key: rsa::RsaPrivateKey,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

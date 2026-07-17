@@ -109,11 +109,11 @@ pub struct UsernameToken {
 }
 
 impl UsernameToken {
-    pub fn devicetoken(username: String, password: String) -> Self {
+    pub fn devicetoken(username: String) -> Self {
         Self {
             id: "devicesoftware".to_string(),
             username: Some(username),
-            password: Some(password),
+            password: None,
             username_hint: None,
             login_option: None,
         }

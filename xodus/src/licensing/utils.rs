@@ -1,4 +1,5 @@
 use num_bigint_dig::ModInverse;
+use num_integer::Integer;
 use rand::distr::{Alphanumeric, SampleString};
 use rsa::{BigUint, RsaPrivateKey};
 
@@ -36,21 +37,21 @@ pub fn parse_bcrypt_rsa_private(blob: &[u8]) -> rsa::errors::Result<RsaPrivateKe
 
     match magic {
         RSAFULLPRIVATE_MAGIC => {
-            let _dp = take(cb_p1);
-            let _dq = take(cb_p2);
-            let _qinv = take(cb_p1);
+            log::trace!("Got RSA Full Private");
             let d = take(cb_mod);
             RsaPrivateKey::from_components(n, e, d, vec![p, q])
         }
         RSAPRIVATE_MAGIC => {
+            log::trace!("Got RSA Private");
             // No d in the blob — recompute it.
             let one = BigUint::from(1u32);
-            let lambda = (&p - &one) * (&q - &one); // or lcm for stricter form
+            let p1 = &p - &one;
+            let p2 = &q - &one;
+            let lambda = p1.lcm(&p2);
             let d = BigUint::from_bytes_be(&e.to_bytes_be())
                 .mod_inverse(&lambda)
-                .expect("e not invertible")
-                .to_biguint()
-                .unwrap();
+                .and_then(|d| d.to_biguint())
+                .expect("e not invertible");
             RsaPrivateKey::from_components(n, e, d, vec![p, q])
         }
         _ => panic!("not an RSA private blob"),
