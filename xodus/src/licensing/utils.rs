@@ -3,6 +3,8 @@ use num_integer::Integer;
 use rand::distr::{Alphanumeric, SampleString};
 use rsa::{BigUint, RsaPrivateKey};
 
+use crate::licensing::splicense::BCryptRsaBlock;
+
 pub fn generate_suid() -> String {
     "S-1-5-21-0000000000-0000000000-0000000000-1001".to_string()
 }
@@ -11,7 +13,7 @@ pub fn generate_string(length: usize) -> String {
     Alphanumeric.sample_string(&mut rand::rng(), length)
 }
 
-pub fn parse_bcrypt_rsa_private(blob: &[u8]) -> rsa::errors::Result<RsaPrivateKey> {
+pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<RsaPrivateKey> {
     let u32_at = |o: usize| u32::from_le_bytes(blob[o..o + 4].try_into().unwrap()) as usize;
 
     let magic = u32_at(0);

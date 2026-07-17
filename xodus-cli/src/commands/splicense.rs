@@ -5,5 +5,5 @@ pub fn run(block: String) {
     let clep_sign_state = license.clep_sign_state.unwrap();
     let key = clep_sign_state.get_rsa_key();
 
-    println!("RSA key is {:?}", BASE64_STANDARD.encode(key))
+    println!("RSA key is {:?}", BASE64_STANDARD.encode(*key))
 }

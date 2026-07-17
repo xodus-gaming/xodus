@@ -92,8 +92,8 @@ pub struct EncryptedDeviceKey {
     /// Is always 4096.
     size: u16,
     version: u32,
-    key_schedule: [u32; 57],
-    _unknown1: [u8; 284],
+    key_schedule: [u32; 58],
+    _unknown1: [u8; 280],
     device_key: [u8; 16],
     _unknown2: [u8; 3562],
 }
@@ -103,12 +103,27 @@ pub struct EncryptedDeviceKey {
 pub struct ClepSignState {
     version: u32,
     key_data: [u8; 544],
-    key_schedule: [u32; 57],
-    _unknown: [u8; 3320],
+    key_schedule: [u32; 58],
+    _unknown: [u8; 3316],
+}
+
+#[derive(FromBytes, IntoBytes)]
+#[repr(C, packed)]
+pub struct ClepHmacState {
+    version: u32,
+    key_data: [u8; 48],
+    key_schedule: [u32; 58],
+    _unknown: [u8; 3812],
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct DeviceKey([u8; 16]);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct BCryptRsaBlock([u8; 544]);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct HmacBinarySecret([u8; 48]);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct PackedContentKey([u8; 40]);
@@ -315,7 +330,7 @@ impl SPLicense {
 }
 
 pub trait EncryptedBuffer {
-    fn decryption_key(key_schedule: [u32; 57]) -> [u8; 16] {
+    fn decryption_key(key_schedule: [u32; 58]) -> [u8; 16] {
         let mut key = [0u32; 4];
 
         key[0] = key_schedule[46] ^ key_schedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
@@ -325,52 +340,79 @@ pub trait EncryptedBuffer {
 
         transmute!(key)
     }
+
+    /// Decrypts `data` with AES-128-CBC (zero IV) using the key derived from `key_schedule`.
+    fn decrypt_cbc_zero_iv<const N: usize>(key_schedule: [u32; 58], data: &[u8; N]) -> [u8; N] {
+        let key = Self::decryption_key(key_schedule);
+        let aes = aes::Aes128::new(&key.into());
+
+        let mut out = [0u8; N];
+        let mut prev: u128 = 0;
+        for (chunk_in, chunk_out) in data.chunks_exact(16).zip(out.chunks_exact_mut(16)) {
+            let block: [u8; 16] = chunk_in.try_into().unwrap();
+            let next: u128 = transmute!(block);
+
+            let mut decrypted = block.into();
+            aes.decrypt_block(&mut decrypted);
+            let decrypted: [u8; 16] = (*decrypted).try_into().unwrap();
+            let decrypted: u128 = transmute!(decrypted);
+
+            chunk_out.copy_from_slice((decrypted ^ prev).as_bytes());
+            prev = next;
+        }
+        out
+    }
 }
 
 impl EncryptedBuffer for EncryptedDeviceKey {}
 impl EncryptedBuffer for ClepSignState {}
+impl EncryptedBuffer for ClepHmacState {}
 
 impl EncryptedDeviceKey {
     pub fn derive_device_key(&self) -> DeviceKey {
         assert!(self.version == 4);
 
-        let decryption_key = Self::decryption_key(self.key_schedule);
-        let aes = aes::Aes128::new(&decryption_key.into());
-
-        let mut device_key = self.device_key.into();
-        aes.decrypt_block(&mut device_key);
+        let device_key = Self::decrypt_cbc_zero_iv(self.key_schedule, &self.device_key);
 
         // Sanity check: the decrypted device key must be equal to the decryption key
-        assert_eq!(device_key, decryption_key);
+        assert_eq!(device_key, Self::decryption_key(self.key_schedule));
 
-        DeviceKey(device_key.0)
+        DeviceKey(device_key)
     }
 }
 
 impl ClepSignState {
-    pub fn get_rsa_key(&self) -> Vec<u8> {
+    pub fn get_rsa_key(&self) -> BCryptRsaBlock {
         assert!(self.version == 4);
+        BCryptRsaBlock(Self::decrypt_cbc_zero_iv(self.key_schedule, &self.key_data))
+    }
+}
 
-        let mut buffer: Vec<u8> = Vec::with_capacity(2048);
-        let key = Self::decryption_key(self.key_schedule);
-        let aes = aes::Aes128::new(&key.into());
-        let mut prev: u128 = 0;
-        for chunk in self.key_data.chunks(16).into_iter() {
-            let key_data: [u8; 16] = chunk.try_into().unwrap();
-            let next: u128 = transmute!(key_data);
-            let mut dev_key = key_data.into();
-            aes.decrypt_block(&mut dev_key);
-            let dev: [u8; 16] = (*dev_key).try_into().unwrap();
-            let dev: u128 = transmute!(dev);
-            buffer.extend_from_slice((dev ^ prev).as_bytes());
-            prev = next;
-        }
-        buffer
+impl ClepHmacState {
+    pub fn get_hmac_state(&self) -> HmacBinarySecret {
+        assert!(self.version == 4);
+        HmacBinarySecret(Self::decrypt_cbc_zero_iv(self.key_schedule, &self.key_data))
     }
 }
 
 impl Deref for DeviceKey {
     type Target = [u8; 16];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Deref for BCryptRsaBlock {
+    type Target = [u8; 544];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Deref for HmacBinarySecret {
+    type Target = [u8; 48];
 
     fn deref(&self) -> &Self::Target {
         &self.0
