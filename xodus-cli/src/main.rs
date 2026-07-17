@@ -57,6 +57,10 @@ enum SubCommand {
         #[command(subcommand)]
         action: ClepAction,
     },
+    #[command(about = "Decode SPLicenseBlock")]
+    SpLicense {
+        block: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -166,6 +170,7 @@ async fn main() {
             } => commands::clep::generate(smbios, disk_serial),
             ClepAction::Decrypt { data } => commands::clep::decrypt(data),
         },
+        SubCommand::SpLicense { block } => commands::splicense::run(block),
     }
 
     xodus::secrets::destroy_secrets();

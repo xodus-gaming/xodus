@@ -73,7 +73,7 @@ pub struct SPLicense {
     pub package_name: String,
     pub signature_origin: u16,
     pub signature_block: Vec<u8>,
-    pub clep_sign_state: Vec<u8>,
+    pub clep_sign_state: Option<Box<ClepSignState>>,
     pub encrypted_device_key: Option<Box<EncryptedDeviceKey>>,
     pub content_keys: HashMap<uuid::Uuid, PackedContentKey>,
     pub keyholder_public_key: Vec<u8>,
@@ -92,10 +92,19 @@ pub struct EncryptedDeviceKey {
     /// Is always 4096.
     size: u16,
     version: u32,
-    key_schedule: [u32; 57],
-    _unknown1: [u8; 284],
+    key_schedule: [u32; 58],
+    _unknown1: [u8; 280],
     device_key: [u8; 16],
     _unknown2: [u8; 3562],
+}
+
+#[derive(FromBytes, IntoBytes)]
+#[repr(C, packed)]
+pub struct ClepSignState {
+    version: u32,
+    key_data: [u8; 544],
+    key_schedule: [u32; 58],
+    _unknown: [u8; 3316],
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -217,7 +226,8 @@ impl SPLicense {
                 }
             }
             Ok(BlockId::ClepSignState) => {
-                self.clep_sign_state = read_vec(&mut reader, size)?;
+                let data: [u8; 4096] = read_array(&mut reader)?;
+                self.clep_sign_state = Some(Box::new(transmute!(data)));
             }
             Ok(BlockId::SignatureBlock) => {
                 let _unknown: [u8; 2] = read_array(&mut reader)?;
@@ -264,9 +274,11 @@ impl SPLicense {
                 | BlockId::UnkBlock4
                 | BlockId::UnkBlock5,
             ) => {
+                log::warn!("Unknown block in SPLicense");
                 let _unknown = read_vec(&mut reader, size)?;
             }
             _ => {
+                log::warn!("Unknown block in SPLicense");
                 let _unknown = read_vec(&mut reader, size)?;
             }
         }
@@ -302,22 +314,27 @@ impl SPLicense {
     }
 }
 
-impl EncryptedDeviceKey {
-    fn decryption_key(&self) -> [u8; 16] {
+pub trait EncryptedBuffer {
+    fn decryption_key(key_schedule: [u32; 58]) -> [u8; 16] {
         let mut key = [0u32; 4];
 
-        key[0] = self.key_schedule[46] ^ self.key_schedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
-        key[1] = self.key_schedule[36] ^ self.key_schedule[47] ^ 0xDF080E39;
-        key[2] = self.key_schedule[40] ^ self.key_schedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
-        key[3] = self.key_schedule[30] ^ self.key_schedule[41] ^ 0x37288CEC;
+        key[0] = key_schedule[46] ^ key_schedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
+        key[1] = key_schedule[36] ^ key_schedule[47] ^ 0xDF080E39;
+        key[2] = key_schedule[40] ^ key_schedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
+        key[3] = key_schedule[30] ^ key_schedule[41] ^ 0x37288CEC;
 
         transmute!(key)
     }
+}
 
+impl EncryptedBuffer for EncryptedDeviceKey {}
+impl EncryptedBuffer for ClepSignState {}
+
+impl EncryptedDeviceKey {
     pub fn derive_device_key(&self) -> DeviceKey {
         assert!(self.version == 4);
 
-        let decryption_key = self.decryption_key();
+        let decryption_key = Self::decryption_key(self.key_schedule);
         let aes = aes::Aes128::new(&decryption_key.into());
 
         let mut device_key = self.device_key.into();
@@ -327,6 +344,24 @@ impl EncryptedDeviceKey {
         assert_eq!(device_key, decryption_key);
 
         DeviceKey(device_key.0)
+    }
+}
+
+impl ClepSignState {
+    pub fn get_rsa_key(&self) -> Vec<u8> {
+        assert!(self.version == 4);
+
+        let mut buffer: Vec<u8> = Vec::with_capacity(2048);
+        let key = Self::decryption_key(self.key_schedule);
+        let aes = aes::Aes128::new(&key.into());
+
+        for chunk in self.key_data.chunks(16).into_iter() {
+            let key_data: [u8; 16] = chunk.try_into().unwrap();
+            let mut dev_key = key_data.into();
+            aes.decrypt_block(&mut dev_key);
+            buffer.extend_from_slice(&dev_key);
+        }
+        buffer
     }
 }
 
