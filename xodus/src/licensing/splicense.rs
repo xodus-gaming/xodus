@@ -123,7 +123,7 @@ pub struct DeviceKey([u8; 16]);
 pub struct BCryptRsaBlock([u8; 544]);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct HmacBinarySecret([u8; 48]);
+pub struct HmacBinarySecret([u8; 32]);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct PackedContentKey([u8; 40]);
@@ -391,7 +391,11 @@ impl ClepSignState {
 impl ClepHmacState {
     pub fn get_hmac_state(&self) -> HmacBinarySecret {
         assert!(self.version == 4);
-        HmacBinarySecret(Self::decrypt_cbc_zero_iv(self.key_schedule, &self.key_data))
+        HmacBinarySecret(
+            Self::decrypt_cbc_zero_iv(self.key_schedule, &self.key_data)[12..44]
+                .try_into()
+                .unwrap(),
+        )
     }
 }
 
@@ -412,7 +416,7 @@ impl Deref for BCryptRsaBlock {
 }
 
 impl Deref for HmacBinarySecret {
-    type Target = [u8; 48];
+    type Target = [u8; 32];
 
     fn deref(&self) -> &Self::Target {
         &self.0

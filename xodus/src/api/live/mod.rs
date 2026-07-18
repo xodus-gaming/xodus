@@ -1,7 +1,8 @@
 use base64::prelude::*;
 use bergshamra::{DsigContext, Key, KeyData, KeyUsage, KeysManager};
-use rsa::rand_core::{OsRng, RngCore};
+use zerocopy::transmute;
 
+use crate::licensing::splicense::ClepHmacState;
 use crate::models::devicecredential::{DeviceAddRequest, DeviceAddResponse};
 use crate::models::live::ExchangeUserTokenOutcome;
 use crate::models::soap::{
@@ -161,10 +162,13 @@ pub async fn exchange_device_token(
     header.security.encrypted_data = Some(encrypted_data);
     let nonce = utils::generate_nonce();
     let secret = BASE64_STANDARD.decode(shared_secret).unwrap();
+    let secret: [u8; 4096] = secret.try_into().unwrap();
+    let secret: ClepHmacState = transmute!(secret);
+    let secret = secret.get_hmac_state();
 
     let hmac_key = utils::generate_shared_key(
         32,
-        &secret,
+        &*secret,
         "WS-SecureConversationWS-SecureConversation",
         &nonce,
     );
@@ -287,7 +291,7 @@ pub async fn exchange_device_token(
     let nonce = BASE64_STANDARD.decode(nonce).unwrap();
     let key = utils::generate_shared_key(
         32,
-        &secret,
+        &*secret,
         "WS-SecureConversationWS-SecureConversation",
         &nonce,
     );
@@ -305,7 +309,7 @@ pub async fn exchange_device_token(
         }
     }
 
-    match utils::decrypt_response(res_envelope, &secret).expect("Failed to decrypt") {
+    match utils::decrypt_response(res_envelope, &*secret).expect("Failed to decrypt") {
         (soap::BodyContent::RequestSecurityTokenResponse(res), _) => Ok(res),
         (soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection), _) => {
             let token = collection.security_tokens.remove(0);
@@ -343,13 +347,15 @@ pub async fn exchange_user_token(
         value_type: "urn:liveid:device".to_owned(),
         value: device_token,
     }];
-    let mut nonce = [0u8; 32];
-    _ = OsRng.try_fill_bytes(&mut nonce);
-    let secret = BASE64_STANDARD.decode(shared_secret).unwrap();
 
+    let nonce = utils::generate_nonce();
+    let secret = BASE64_STANDARD.decode(shared_secret).unwrap();
+    let secret: [u8; 4096] = secret.try_into().unwrap();
+    let secret: ClepHmacState = transmute!(secret);
+    let secret = secret.get_hmac_state();
     let hmac_key = utils::generate_shared_key(
         32,
-        &secret,
+        &*secret,
         "WS-SecureConversationWS-SecureConversation",
         &nonce,
     );
@@ -501,7 +507,7 @@ pub async fn exchange_user_token(
     let nonce = BASE64_STANDARD.decode(nonce).unwrap();
     let key = utils::generate_shared_key(
         32,
-        &secret,
+        &*secret,
         "WS-SecureConversationWS-SecureConversation",
         &nonce,
     );
@@ -519,7 +525,7 @@ pub async fn exchange_user_token(
         }
     }
 
-    let (body, pp) = utils::decrypt_response(res_envelope, &secret).expect("Failed to decrypt");
+    let (body, pp) = utils::decrypt_response(res_envelope, &*secret).expect("Failed to decrypt");
 
     match body {
         soap::BodyContent::Fault(_) => Ok(ExchangeUserTokenOutcome::Fault(pp)),
