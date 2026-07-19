@@ -80,6 +80,8 @@ Omitting the `<Signature>` element from this request causes the server to return
 
 The first `RST2.srf` call after provisioning exchanges the device credential for a device STS token. Only `Username` is sent in `wsse:UsernameToken` - the password from `deviceaddcredential.srf` would also be accepted here, but a password-authenticated device token isn't trusted enough to be used against Xbox services. Instead, the whole request is signed (`rsa-sha256`) with the device's private RSA key, which is recovered by decrypting `ClepSignState` from the `SPLicenseBlock` returned by `deviceaddcredential.srf`. See [CLEP secrets](./clep.md#clepsignstate) for how that key is extracted.
 
+`TPMInfo` makes the first `RST2.srf` call return an addtional `EncryptedKey` entry that changes the HMAC signing key deriviation for subsequent `RST2.srf` exchanges. This is main reason we don't support `TPMInfo`  right now.
+
 ### Sample request
 
 ```xml
