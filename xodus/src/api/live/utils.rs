@@ -11,6 +11,9 @@ use crate::models::soap;
 
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
+/// SP800_108 HMAC with counter
+/// - key_usage - KDF_LABEL
+/// - nonce - KDF_CONTEXT
 pub fn generate_shared_key(
     key_length: usize,
     in_key: &[u8],

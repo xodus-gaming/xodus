@@ -62,17 +62,23 @@ All blobs are base64 encoded
 - 4100 - SMBIOS board version
 - 4101 - SMBIOS serial number - assigned by OEM - can be empty with `error="-2147024894"`
 - 4102 - SMBIOS UUID - assigned by OEM
-- 8196 - CLEP blob #1 - possibly V2 request data
-- 8197 - CLEP blob #2 - possibly V4 request data
+- 8196 - CLEP challenge blob V2
+- 8197 - CLEP challenge blob V4
 - 8195 - ??? - 48 byte sequence
 - 4144 - ??? - 32 byte blob - SHA256 of something ??
 - 4145 - SMBIOS chassis type
 - 4160 - ?? - can be empty with `error="-2147024894"`
 - 4161 - ?? - can be empty with `error="-2147024894"`
 
+The CLEP challenge blobs (8196/8197) are `ClepV2`/`ClepV4` structs (SMBIOS, disk serial, TPM data) run through a custom Feistel-like cipher before being base64 encoded - not real encryption, just obfuscation with no key material involved. See `xodus/src/clep/challenge.rs` for the exact rounds. This is a different, unrelated concept from `ClepSignState`/`ClepHmacState`, which are AES-encrypted secrets returned by the server - see [CLEP secrets](./clep.md).
+
+`TPMInfo` is sent even on devices without a real TPM - its role is to hand the server an additional RSA key that adds extra security to later token exchanges. See [CLEP secrets](./clep.md#tpminfos-role). Xodus omits `TPMInfo` entirely for now, for simplicity.
+
 ## RST2.srf
 
-In below example it is possible to ommit signatures in this requiest in order to receive raw unencrypted data
+Omitting the `<Signature>` element from this request causes the server to return raw, unencrypted data instead of an encrypted payload - useful for inspecting responses while reverse engineering, but not something a real client does.
+
+The first `RST2.srf` call after provisioning exchanges the device credential for a device STS token. Only `Username` is sent in `wsse:UsernameToken` - the password from `deviceaddcredential.srf` would also be accepted here, but a password-authenticated device token isn't trusted enough to be used against Xbox services. Instead, the whole request is signed (`rsa-sha256`) with the device's private RSA key, which is recovered by decrypting `ClepSignState` from the `SPLicenseBlock` returned by `deviceaddcredential.srf`. See [CLEP secrets](./clep.md#clepsignstate) for how that key is extracted.
 
 ### Sample request
 

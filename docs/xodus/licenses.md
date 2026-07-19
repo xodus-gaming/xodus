@@ -21,3 +21,5 @@ flowchart TD
 
 ```
 
+`DeviceLicense` here decrypts to an `EncryptedDeviceKey` block, which uses the same AES/key-schedule encoding as `ClepSignState`/`ClepHmacState` - see [CLEP secrets](./clep.md#shared-encoding).
+
