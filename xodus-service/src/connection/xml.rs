@@ -67,9 +67,12 @@ pub async fn parse_message(
             )
             .await;
 
-            let ms_device_token: Option<Token> = device_token_resp.ok().map(|t| t.into());
-            let ms_device_rps_token = if let Some(Token::Compact(ms_device_token)) = ms_device_token {
-                Some(ms_device_token)
+            let ms_device_rps_token = if let Some((Token::Compact(ms_device_token), Ok(lifetime))) =
+                device_token_resp.ok().map(|t| {
+                    let expiry = chrono::DateTime::parse_from_rfc3339(&t.lifetime.expires);
+                    (t.into(), expiry)
+                }) {
+                Some((ms_device_token, lifetime.timestamp()))
             } else {
                 None
             };
@@ -118,7 +121,10 @@ pub async fn parse_message(
                     let payload = MSATokenResponse {
                         token: user_token,
                         expiry: expiry.timestamp(),
-                        device_rps: ms_device_rps_token.unwrap_or(String::default()),
+                        device_expiry: ms_device_rps_token.as_ref().map(|(_, r)| *r).unwrap_or(0),
+                        device_rps: ms_device_rps_token
+                            .map(|(t, _)| t)
+                            .unwrap_or_else(String::new),
                     };
                     let payload = quick_xml::se::to_string(&payload)?;
                     Ok(payload.as_bytes().to_vec())
