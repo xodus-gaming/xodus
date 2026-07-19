@@ -57,6 +57,23 @@ pub async fn parse_message(
                 "xboxlive.signin".to_owned()
             };
             let device_token = context.device_token.as_ref().unwrap();
+            let device_token_resp = xodus::api::live::exchange_device_token(
+                &context.client,
+                device_token.token.clone(),
+                device_token.binary_secret.clone().unwrap(),
+                "{28C08266-F973-4AE6-FFE4-409B249F138F}".to_string(),
+                "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0".to_owned(),
+                Some(soap::PolicyReference::token_broker()),
+            )
+            .await;
+
+            let ms_device_token: Option<Token> = device_token_resp.ok().map(|t| t.into());
+            let ms_device_rps_token = if let Some(Token::Compact(ms_device_token)) = ms_device_token {
+                Some(ms_device_token)
+            } else {
+                None
+            };
+
             let user_token = xodus::api::live::exchange_user_token(
                 &context.client,
                 token.token,
@@ -101,6 +118,7 @@ pub async fn parse_message(
                     let payload = MSATokenResponse {
                         token: user_token,
                         expiry: expiry.timestamp(),
+                        device_rps: ms_device_rps_token.unwrap_or(String::default()),
                     };
                     let payload = quick_xml::se::to_string(&payload)?;
                     Ok(payload.as_bytes().to_vec())
