@@ -6,16 +6,13 @@ use crate::{
     },
     models::{
         devicecredential::{
-            Authentication, ClientInfo, DeviceAddRequest, DeviceInfo, RsaKeyValue, TpmInfo,
-            TpmKeyValue,
+            Authentication, ClientInfo, DeviceAddRequest, DeviceInfo
         },
         secrets::Device,
         soap::BodyContent,
     },
     tokens::manager::TokenManager,
 };
-use base64::prelude::*;
-use rsa::traits::PublicKeyParts;
 
 /// Provisions a device (if none is stored yet) or re-authenticates an existing one
 /// (if its STS token is missing/expired), persisting the result through `tokens`.
@@ -32,24 +29,13 @@ pub async fn ensure_device_credentials(client: &reqwest::Client, tokens: &TokenM
 async fn provision_device(client: &reqwest::Client, tokens: &TokenManager) {
     let username = format!("02{}", generate_string(14));
     let password = generate_string(20);
-    let mut rng = rand08::thread_rng();
-    let private_key = rsa::RsaPrivateKey::new(&mut rng, 2048).expect("Failed to generate RSA key");
-    let public_key = rsa::RsaPublicKey::from(&private_key);
     let provision = DeviceAddRequest {
         client_info: ClientInfo::default(),
         authentication: Authentication::new(username.clone(), password.clone()),
         device_info: Some(DeviceInfo {
             id: "DeviceInfo".to_string(),
             components: hardware::probe_provision_components(),
-            tpm_info: Some(TpmInfo {
-                key_value: TpmKeyValue {
-                    rsa_key_value: RsaKeyValue {
-                        modulus: BASE64_STANDARD.encode(public_key.n().to_bytes_le()),
-                        exponent: BASE64_STANDARD.encode(public_key.e().to_bytes_le()),
-                    },
-                    storage_key_blob: None,
-                },
-            }),
+            tpm_info: None
         }),
     };
 
@@ -64,7 +50,6 @@ async fn provision_device(client: &reqwest::Client, tokens: &TokenManager) {
         hwid: dev.hw_device_id,
         device_id: dev.license.binding.device_id.unwrap_or_default(),
         splicense: dev.license.splicense_block,
-        private_key,
     };
 
     tokens
