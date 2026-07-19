@@ -532,3 +532,45 @@ pub async fn exchange_user_token(
         body => Ok(ExchangeUserTokenOutcome::Issued(body)),
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        api::live::exchange_device_token,
+        models::{secrets::Token, soap},
+        tokens::{TokenManager, device::ensure_device_credentials},
+    };
+
+    #[tokio::test]
+    async fn test_get_xbox_live_dev_token() {
+        let client = reqwest::Client::new();
+
+        let mgr = TokenManager::with_memory();
+        ensure_device_credentials(&client, &mgr).await;
+
+        let token: Token = mgr.get_device_sts_token().unwrap();
+        let Token::Legacy(token) = token else {
+            todo!("no a LegacyToken");
+        };
+
+        let proof_token = token.binary_secret.unwrap();
+
+        let resp = exchange_device_token(
+            &client,
+            token.token,
+            proof_token,
+            "{28C08266-F973-4AE6-FFE4-409B249F138F}".to_string(),
+            "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0".to_owned(),
+            Some(soap::PolicyReference::token_broker()),
+        )
+        .await
+        .unwrap();
+
+        let ms_device_token: Token = resp.into();
+        let Token::Compact(ms_device_token) = ms_device_token else {
+            todo!("Unsupported token");
+        };
+
+        println!("{}", ms_device_token);
+    }
+}

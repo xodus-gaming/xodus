@@ -5,9 +5,7 @@ use crate::{
         utils::{generate_string, parse_bcrypt_rsa_private},
     },
     models::{
-        devicecredential::{
-            Authentication, ClientInfo, DeviceAddRequest, DeviceInfo
-        },
+        devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo},
         secrets::Device,
         soap::BodyContent,
     },
@@ -35,7 +33,7 @@ async fn provision_device(client: &reqwest::Client, tokens: &TokenManager) {
         device_info: Some(DeviceInfo {
             id: "DeviceInfo".to_string(),
             components: hardware::probe_provision_components(),
-            tpm_info: None
+            tpm_info: None,
         }),
     };
 
