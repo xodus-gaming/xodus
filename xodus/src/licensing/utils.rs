@@ -50,7 +50,8 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Rs
             let p1 = &p - &one;
             let p2 = &q - &one;
             let lambda = p1.lcm(&p2);
-            let d = BigUint::from_bytes_be(&e.to_bytes_be())
+            let d = e
+                .clone()
                 .mod_inverse(&lambda)
                 .and_then(|d| d.to_biguint())
                 .expect("e not invertible");

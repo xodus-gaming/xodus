@@ -154,6 +154,42 @@ fn read_vec<R: Read>(mut reader: R, len: usize) -> io::Result<Vec<u8>> {
     Ok(buf)
 }
 
+fn decryption_key(key_schedule: [u32; 58]) -> [u8; 16] {
+    let mut key = [0u32; 4];
+
+    key[0] = key_schedule[46] ^ key_schedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
+    key[1] = key_schedule[36] ^ key_schedule[47] ^ 0xDF080E39;
+    key[2] = key_schedule[40] ^ key_schedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
+    key[3] = key_schedule[30] ^ key_schedule[41] ^ 0x37288CEC;
+
+    transmute!(key)
+}
+
+/// Decrypts `data` with AES-128-CBC (zero IV) using the key derived from `key_schedule`.
+fn decrypt_cbc_zero_iv<const N: usize>(key_schedule: [u32; 58], data: &[u8; N]) -> [u8; N] {
+    const { assert!(N.is_multiple_of(16)) }
+    let key = decryption_key(key_schedule);
+    let aes = aes::Aes128::new(&key.into());
+
+    let mut out = [0u8; N];
+    let mut prev: u128 = 0;
+    let data_chunks = data.as_chunks::<16>().0;
+    let output_chunks = out.as_chunks_mut::<16>().0;
+    for (chunk_in, chunk_out) in data_chunks.into_iter().zip(output_chunks) {
+        let block: [u8; 16] = *chunk_in;
+        let next = u128::from_le_bytes(block);
+
+        let mut decrypted = block.into();
+        aes.decrypt_block(&mut decrypted);
+        let decrypted = decrypted.0;
+        let decrypted = u128::from_le_bytes(decrypted);
+
+        chunk_out.copy_from_slice((decrypted ^ prev).as_bytes());
+        prev = next;
+    }
+    out
+}
+
 #[derive(Debug, Error)]
 pub enum SPLicenseDecodeError {
     #[error("IO error: {0}")]
@@ -329,53 +365,14 @@ impl SPLicense {
     }
 }
 
-pub trait EncryptedBuffer {
-    fn decryption_key(key_schedule: [u32; 58]) -> [u8; 16] {
-        let mut key = [0u32; 4];
-
-        key[0] = key_schedule[46] ^ key_schedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
-        key[1] = key_schedule[36] ^ key_schedule[47] ^ 0xDF080E39;
-        key[2] = key_schedule[40] ^ key_schedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
-        key[3] = key_schedule[30] ^ key_schedule[41] ^ 0x37288CEC;
-
-        transmute!(key)
-    }
-
-    /// Decrypts `data` with AES-128-CBC (zero IV) using the key derived from `key_schedule`.
-    fn decrypt_cbc_zero_iv<const N: usize>(key_schedule: [u32; 58], data: &[u8; N]) -> [u8; N] {
-        let key = Self::decryption_key(key_schedule);
-        let aes = aes::Aes128::new(&key.into());
-
-        let mut out = [0u8; N];
-        let mut prev: u128 = 0;
-        for (chunk_in, chunk_out) in data.chunks_exact(16).zip(out.chunks_exact_mut(16)) {
-            let block: [u8; 16] = chunk_in.try_into().unwrap();
-            let next: u128 = transmute!(block);
-
-            let mut decrypted = block.into();
-            aes.decrypt_block(&mut decrypted);
-            let decrypted: [u8; 16] = (*decrypted).try_into().unwrap();
-            let decrypted: u128 = transmute!(decrypted);
-
-            chunk_out.copy_from_slice((decrypted ^ prev).as_bytes());
-            prev = next;
-        }
-        out
-    }
-}
-
-impl EncryptedBuffer for EncryptedDeviceKey {}
-impl EncryptedBuffer for ClepSignState {}
-impl EncryptedBuffer for ClepHmacState {}
-
 impl EncryptedDeviceKey {
     pub fn derive_device_key(&self) -> DeviceKey {
         assert!(self.version == 4);
 
-        let device_key = Self::decrypt_cbc_zero_iv(self.key_schedule, &self.device_key);
+        let device_key = decrypt_cbc_zero_iv(self.key_schedule, &self.device_key);
 
         // Sanity check: the decrypted device key must be equal to the decryption key
-        assert_eq!(device_key, Self::decryption_key(self.key_schedule));
+        assert_eq!(device_key, decryption_key(self.key_schedule));
 
         DeviceKey(device_key)
     }
@@ -384,7 +381,7 @@ impl EncryptedDeviceKey {
 impl ClepSignState {
     pub fn get_rsa_key(&self) -> BCryptRsaBlock {
         assert!(self.version == 4);
-        BCryptRsaBlock(Self::decrypt_cbc_zero_iv(self.key_schedule, &self.key_data))
+        BCryptRsaBlock(decrypt_cbc_zero_iv(self.key_schedule, &self.key_data))
     }
 }
 
@@ -392,7 +389,7 @@ impl ClepHmacState {
     pub fn get_hmac_state(&self) -> HmacBinarySecret {
         assert!(self.version == 4);
         HmacBinarySecret(
-            Self::decrypt_cbc_zero_iv(self.key_schedule, &self.key_data)[12..44]
+            decrypt_cbc_zero_iv(self.key_schedule, &self.key_data)[12..44]
                 .try_into()
                 .unwrap(),
         )

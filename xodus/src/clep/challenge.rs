@@ -47,38 +47,46 @@ impl Cipher {
     // The 8 round functions shared by the key schedule and the Feistel
     // cipher below: the key schedule walks them forward (round_1..round_8),
     // the cipher walks the same functions backward (round_8..round_1).
+    #[inline]
     const fn round_1(x: u32) -> u32 {
         Self::MAGIC_04
             .wrapping_mul((x ^ Self::MAGIC_HI).rotate_right(22))
             .wrapping_sub(x.rotate_right(8))
     }
 
+    #[inline]
     const fn round_2(x: u32) -> u32 {
         Self::MAGIC_04.wrapping_mul(x.rotate_right(15) ^ Self::MAGIC_01)
     }
 
+    #[inline]
     const fn round_3(x: u32) -> u32 {
         (x >> 9).wrapping_add(Self::MAGIC_02.wrapping_mul((x ^ Self::MAGIC_03).rotate_left(3)))
     }
 
+    #[inline]
     const fn round_4(x: u32) -> u32 {
         x.rotate_right(28) ^ Self::MAGIC_03.wrapping_mul((x ^ Self::MAGIC_HI).rotate_right(9))
     }
 
+    #[inline]
     const fn round_5(x: u32) -> u32 {
         x.rotate_right(12).wrapping_add(
             Self::MAGIC_04.wrapping_mul(x.wrapping_sub(Self::MAGIC_HI).rotate_right(14)),
         )
     }
 
+    #[inline]
     const fn round_6(x: u32) -> u32 {
         x.rotate_right(11) ^ Self::MAGIC_01.wrapping_mul((x ^ Self::MAGIC_02).rotate_left(2))
     }
 
+    #[inline]
     const fn round_7(x: u32) -> u32 {
         x.wrapping_sub(Self::MAGIC_LO).wrapping_sub(Self::MAGIC_02)
     }
 
+    #[inline]
     const fn round_8(x: u32) -> u32 {
         Self::MAGIC_03
             .wrapping_mul((x ^ Self::MAGIC_01).rotate_left(2))
@@ -87,42 +95,31 @@ impl Cipher {
 
     // Extra rounds used only by `encrypt_int`: `round_0` mixes the high
     // block word into the state, `whiten` produces the final output word.
+    #[inline]
     const fn round_0(x: u32) -> u32 {
         Self::MAGIC_04
             .wrapping_mul(x.wrapping_sub(Self::MAGIC_HI).rotate_right(18))
             .wrapping_sub(x.rotate_right(9))
     }
 
+    #[inline]
     const fn whiten(x: u32) -> u32 {
         Self::MAGIC_03
             .wrapping_mul(x.wrapping_add(Self::MAGIC_HI).rotate_right(10))
             .wrapping_sub(x.rotate_right(29))
     }
 
-    const fn round(id: u8, x: u32) -> u32 {
-        match id {
-            1 => Self::round_1(x),
-            2 => Self::round_2(x),
-            3 => Self::round_3(x),
-            4 => Self::round_4(x),
-            5 => Self::round_5(x),
-            6 => Self::round_6(x),
-            7 => Self::round_7(x),
-            8 => Self::round_8(x),
-            _ => unreachable!(),
-        }
-    }
-
     /// Walks `rounds` in order, folding each round's output back into a
     /// 2-word Feistel state: `(a, b) -> (b, a ^ round(b))`.
-    const fn run_rounds(mut a: u32, mut b: u32, rounds: [u8; 8]) -> (u32, u32) {
-        let mut i = 0;
-        while i < rounds.len() {
-            let c = a ^ Self::round(rounds[i], b);
-            a = b;
-            b = c;
-            i += 1;
-        }
+    const fn run_rounds(a: u32, b: u32) -> (u32, u32) {
+        let (a, b) = (b, a ^ Self::round_1(b));
+        let (a, b) = (b, a ^ Self::round_2(b));
+        let (a, b) = (b, a ^ Self::round_3(b));
+        let (a, b) = (b, a ^ Self::round_4(b));
+        let (a, b) = (b, a ^ Self::round_5(b));
+        let (a, b) = (b, a ^ Self::round_6(b));
+        let (a, b) = (b, a ^ Self::round_7(b));
+        let (a, b) = (b, a ^ Self::round_8(b));
         (a, b)
     }
 
@@ -131,21 +128,22 @@ impl Cipher {
     ///
     /// Each forward step `(a, b) -> (b, a ^ round(b))` is undone by
     /// `(a, b) -> (b ^ round(a), a)`, walking `rounds` back to front.
-    const fn run_rounds_inverse(mut a: u32, mut b: u32, rounds: [u8; 8]) -> (u32, u32) {
-        let mut i = rounds.len();
-        while i > 0 {
-            i -= 1;
-            let prev_a = b ^ Self::round(rounds[i], a);
-            b = a;
-            a = prev_a;
-        }
+    const fn run_rounds_inverse(a: u32, b: u32) -> (u32, u32) {
+        let (a, b) = (b ^ Self::round_8(a), a);
+        let (a, b) = (b ^ Self::round_7(a), a);
+        let (a, b) = (b ^ Self::round_6(a), a);
+        let (a, b) = (b ^ Self::round_5(a), a);
+        let (a, b) = (b ^ Self::round_4(a), a);
+        let (a, b) = (b ^ Self::round_3(a), a);
+        let (a, b) = (b ^ Self::round_2(a), a);
+        let (a, b) = (b ^ Self::round_1(a), a);
         (a, b)
     }
 
     const fn initial_state() -> u32 {
         // --- Key schedule: derive initial cipher state from hardcoded constants ---
         let k0 = !(Self::MAGIC_03.wrapping_mul(Self::MAGIC_HI.rotate_right(10)));
-        let (_, k8) = Self::run_rounds(0, k0, [1, 2, 3, 4, 5, 6, 7, 8]);
+        let (_, k8) = Self::run_rounds(0, k0);
         // let k9 = Self::MAGIC_04
         //    .wrapping_mul(k8.wrapping_sub(Self::MAGIC_HI).rotate_right(18))
         //    .wrapping_sub(k8.rotate_right(9));
@@ -172,7 +170,7 @@ impl Cipher {
         // (round_8..round_1) relative to the key schedule.
         let r0 = self.lo ^ block_lo;
         let r1 = self.hi ^ block_hi ^ Self::round_0(r0);
-        let (r8, r9) = Self::run_rounds(r0, r1, [8, 7, 6, 5, 4, 3, 2, 1]);
+        let (r8, r9) = Self::run_rounds_inverse(r0, r1);
 
         // Output with CBC-like plaintext feedback
         let new_lo = pp_lo ^ r8 ^ Self::whiten(r9);
@@ -206,7 +204,7 @@ impl Cipher {
         let r8 = new_lo ^ pp_lo ^ Self::whiten(r9);
 
         // Undo the 8 shared rounds to recover the pre-round Feistel state
-        let (r0, r1) = Self::run_rounds_inverse(r8, r9, [8, 7, 6, 5, 4, 3, 2, 1]);
+        let (r0, r1) = Self::run_rounds(r8, r9);
 
         // Undo the seed round to recover the plaintext block
         let block_lo = old_lo ^ r0;
