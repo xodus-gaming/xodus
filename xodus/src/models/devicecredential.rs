@@ -58,6 +58,8 @@ pub struct DeviceInfo {
     pub id: String,
     #[serde(rename = "Component")]
     pub components: Vec<Component>,
+    #[serde(rename = "TPMInfo", skip_serializing_if = "Option::is_none")]
+    pub tpm_info: Option<TpmInfo>,
 }
 
 #[derive(Serialize, Debug)]
@@ -86,6 +88,27 @@ impl Component {
             error: None,
         }
     }
+}
+
+#[derive(Serialize, Debug)]
+pub struct TpmInfo {
+    #[serde(rename = "KeyValue")]
+    pub key_value: TpmKeyValue,
+}
+
+#[derive(Serialize, Debug)]
+pub struct TpmKeyValue {
+    #[serde(rename = "RSAKeyValue")]
+    pub rsa_key_value: RsaKeyValue,
+    #[serde(rename = "StorageKeyBlob", skip_serializing_if = "Option::is_none")]
+    pub storage_key_blob: Option<String>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct RsaKeyValue {
+    pub modulus: String,
+    pub exponent: String,
 }
 
 #[derive(Deserialize, Debug)]

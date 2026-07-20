@@ -1,6 +1,9 @@
 use crate::{
     hardware,
-    licensing::utils::generate_string,
+    licensing::{
+        splicense::SPLicense,
+        utils::{generate_string, parse_bcrypt_rsa_private},
+    },
     models::{
         devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo},
         secrets::Device,
@@ -30,6 +33,7 @@ async fn provision_device(client: &reqwest::Client, tokens: &TokenManager) {
         device_info: Some(DeviceInfo {
             id: "DeviceInfo".to_string(),
             components: hardware::probe_provision_components(),
+            tpm_info: None,
         }),
     };
 
@@ -50,7 +54,12 @@ async fn provision_device(client: &reqwest::Client, tokens: &TokenManager) {
         .save_device_license(&device)
         .expect("Failed to save device license");
 
-    let resp = crate::api::live::authenticate_device(client, username, password)
+    let sp_license = SPLicense::parse_base64(&device.splicense).expect("Failed to parse SPLicense");
+    let clep_sign_state = sp_license.clep_sign_state.expect("Missing clep sign state");
+    let key = clep_sign_state.get_rsa_key();
+    let private_key = parse_bcrypt_rsa_private(&key).unwrap();
+
+    let resp = crate::api::live::authenticate_device(client, username, private_key)
         .await
         .expect("Failed to auth device");
 
@@ -60,7 +69,12 @@ async fn provision_device(client: &reqwest::Client, tokens: &TokenManager) {
 }
 
 async fn reauthenticate_device(client: &reqwest::Client, tokens: &TokenManager, license: Device) {
-    let resp = crate::api::live::authenticate_device(client, license.username, license.password)
+    let sp_license =
+        SPLicense::parse_base64(&license.splicense).expect("Failed to parse SPLicense");
+    let clep_sign_state = sp_license.clep_sign_state.expect("Missing clep sign state");
+    let key = clep_sign_state.get_rsa_key();
+    let private_key = parse_bcrypt_rsa_private(&key).unwrap();
+    let resp = crate::api::live::authenticate_device(client, license.username, private_key)
         .await
         .expect("Failed to auth device");
 

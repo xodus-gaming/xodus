@@ -50,6 +50,15 @@ impl TokenManager {
         )
     }
 
+    /// Keychain for persistent storage, in-memory for ephemeral - the default
+    /// wiring for both `xodus-cli` and `xodus-service` today.
+    pub fn with_memory() -> Self {
+        Self::new(
+            Arc::new(MemoryBackend::default()),
+            Arc::new(MemoryBackend::default()),
+        )
+    }
+
     // ---- Device identity / license -----------------------------------------
 
     pub fn get_device_license(&self) -> Result<Device, TokenStoreError> {

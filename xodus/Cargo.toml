@@ -12,7 +12,7 @@ serde_json = "1.0.145"
 quick-xml = { version = "0.40.1", features = ["serialize", "overlapped-lists"] }
 log = "0.4.28"
 chrono = { workspace = true }
-base64 = "0.22.1"
+base64 = { workspace = true }
 rand = "0.10.0"
 uuid = "1.23.1"
 aes = "0.9.0"
@@ -21,7 +21,7 @@ zerocopy = { version = "0.8.48", features = ["derive"] }
 bergshamra-c14n = "0.5.1"
 hmac = "0.12.0"
 bergshamra = "0.5.1"
-rsa = "0.9.10"
+rsa = { version = "0.9.10", features = ["serde"] }
 cbc = "0.2.1"
 url = "2.5.8"
 aes-keywrap = "0.9.0"
@@ -29,6 +29,8 @@ num_enum = "0.7.6"
 prost = "0.14.4"
 globset = "0.4.18"
 thiserror = "2.0.18"
+num-bigint-dig = "0.8.6"
+num-integer = "0.1.39"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 smbios-lib = "0.9.2"

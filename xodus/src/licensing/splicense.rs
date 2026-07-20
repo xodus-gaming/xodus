@@ -73,7 +73,7 @@ pub struct SPLicense {
     pub package_name: String,
     pub signature_origin: u16,
     pub signature_block: Vec<u8>,
-    pub clep_sign_state: Vec<u8>,
+    pub clep_sign_state: Option<Box<ClepSignState>>,
     pub encrypted_device_key: Option<Box<EncryptedDeviceKey>>,
     pub content_keys: HashMap<uuid::Uuid, PackedContentKey>,
     pub keyholder_public_key: Vec<u8>,
@@ -92,14 +92,38 @@ pub struct EncryptedDeviceKey {
     /// Is always 4096.
     size: u16,
     version: u32,
-    key_schedule: [u32; 57],
-    _unknown1: [u8; 284],
+    key_schedule: [u32; 58],
+    _unknown1: [u8; 280],
     device_key: [u8; 16],
     _unknown2: [u8; 3562],
 }
 
+#[derive(FromBytes, IntoBytes)]
+#[repr(C, packed)]
+pub struct ClepSignState {
+    version: u32,
+    key_data: [u8; 544],
+    key_schedule: [u32; 58],
+    _unknown: [u8; 3316],
+}
+
+#[derive(FromBytes, IntoBytes)]
+#[repr(C, packed)]
+pub struct ClepHmacState {
+    version: u32,
+    key_data: [u8; 48],
+    key_schedule: [u32; 58],
+    _unknown: [u8; 3812],
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct DeviceKey([u8; 16]);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct BCryptRsaBlock([u8; 544]);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct HmacBinarySecret([u8; 32]);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct PackedContentKey([u8; 40]);
@@ -128,6 +152,42 @@ fn read_vec<R: Read>(mut reader: R, len: usize) -> io::Result<Vec<u8>> {
     let mut buf = vec![0u8; len];
     reader.read_exact(&mut buf)?;
     Ok(buf)
+}
+
+fn decryption_key(key_schedule: [u32; 58]) -> [u8; 16] {
+    let mut key = [0u32; 4];
+
+    key[0] = key_schedule[46] ^ key_schedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
+    key[1] = key_schedule[36] ^ key_schedule[47] ^ 0xDF080E39;
+    key[2] = key_schedule[40] ^ key_schedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
+    key[3] = key_schedule[30] ^ key_schedule[41] ^ 0x37288CEC;
+
+    transmute!(key)
+}
+
+/// Decrypts `data` with AES-128-CBC (zero IV) using the key derived from `key_schedule`.
+fn decrypt_cbc_zero_iv<const N: usize>(key_schedule: [u32; 58], data: &[u8; N]) -> [u8; N] {
+    const { assert!(N.is_multiple_of(16)) }
+    let key = decryption_key(key_schedule);
+    let aes = aes::Aes128::new(&key.into());
+
+    let mut out = [0u8; N];
+    let mut prev: u128 = 0;
+    let data_chunks = data.as_chunks::<16>().0;
+    let output_chunks = out.as_chunks_mut::<16>().0;
+    for (chunk_in, chunk_out) in data_chunks.into_iter().zip(output_chunks) {
+        let block: [u8; 16] = *chunk_in;
+        let next = u128::from_le_bytes(block);
+
+        let mut decrypted = block.into();
+        aes.decrypt_block(&mut decrypted);
+        let decrypted = decrypted.0;
+        let decrypted = u128::from_le_bytes(decrypted);
+
+        chunk_out.copy_from_slice((decrypted ^ prev).as_bytes());
+        prev = next;
+    }
+    out
 }
 
 #[derive(Debug, Error)]
@@ -217,7 +277,8 @@ impl SPLicense {
                 }
             }
             Ok(BlockId::ClepSignState) => {
-                self.clep_sign_state = read_vec(&mut reader, size)?;
+                let data: [u8; 4096] = read_array(&mut reader)?;
+                self.clep_sign_state = Some(Box::new(transmute!(data)));
             }
             Ok(BlockId::SignatureBlock) => {
                 let _unknown: [u8; 2] = read_array(&mut reader)?;
@@ -264,9 +325,11 @@ impl SPLicense {
                 | BlockId::UnkBlock4
                 | BlockId::UnkBlock5,
             ) => {
+                log::warn!("Unknown block in SPLicense");
                 let _unknown = read_vec(&mut reader, size)?;
             }
             _ => {
+                log::warn!("Unknown block in SPLicense");
                 let _unknown = read_vec(&mut reader, size)?;
             }
         }
@@ -296,42 +359,61 @@ impl SPLicense {
         Ok(license)
     }
 
-    pub fn parse_base64(string: String) -> Result<SPLicense, SPLicenseParseError> {
+    pub fn parse_base64(string: &str) -> Result<SPLicense, SPLicenseParseError> {
         let data = BASE64_STANDARD.decode(string)?;
         Ok(SPLicense::decode(&*data)?)
     }
 }
 
 impl EncryptedDeviceKey {
-    fn decryption_key(&self) -> [u8; 16] {
-        let mut key = [0u32; 4];
-
-        key[0] = self.key_schedule[46] ^ self.key_schedule[56] ^ 0xE20DF371 ^ 0xCCB22FE6;
-        key[1] = self.key_schedule[36] ^ self.key_schedule[47] ^ 0xDF080E39;
-        key[2] = self.key_schedule[40] ^ self.key_schedule[51] ^ 0x6D09B2F5 ^ 0x2AE17AB9;
-        key[3] = self.key_schedule[30] ^ self.key_schedule[41] ^ 0x37288CEC;
-
-        transmute!(key)
-    }
-
     pub fn derive_device_key(&self) -> DeviceKey {
         assert!(self.version == 4);
 
-        let decryption_key = self.decryption_key();
-        let aes = aes::Aes128::new(&decryption_key.into());
-
-        let mut device_key = self.device_key.into();
-        aes.decrypt_block(&mut device_key);
+        let device_key = decrypt_cbc_zero_iv(self.key_schedule, &self.device_key);
 
         // Sanity check: the decrypted device key must be equal to the decryption key
-        assert_eq!(device_key, decryption_key);
+        assert_eq!(device_key, decryption_key(self.key_schedule));
 
-        DeviceKey(device_key.0)
+        DeviceKey(device_key)
+    }
+}
+
+impl ClepSignState {
+    pub fn get_rsa_key(&self) -> BCryptRsaBlock {
+        assert!(self.version == 4);
+        BCryptRsaBlock(decrypt_cbc_zero_iv(self.key_schedule, &self.key_data))
+    }
+}
+
+impl ClepHmacState {
+    pub fn get_hmac_state(&self) -> HmacBinarySecret {
+        assert!(self.version == 4);
+        HmacBinarySecret(
+            decrypt_cbc_zero_iv(self.key_schedule, &self.key_data)[12..44]
+                .try_into()
+                .unwrap(),
+        )
     }
 }
 
 impl Deref for DeviceKey {
     type Target = [u8; 16];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Deref for BCryptRsaBlock {
+    type Target = [u8; 544];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Deref for HmacBinarySecret {
+    type Target = [u8; 32];
 
     fn deref(&self) -> &Self::Target {
         &self.0

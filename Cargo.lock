@@ -3982,6 +3982,7 @@ dependencies = [
  "pkcs1",
  "pkcs8 0.10.2",
  "rand_core 0.6.4",
+ "serde",
  "sha2 0.10.9",
  "signature 2.2.0",
  "spki 0.7.3",
@@ -6108,6 +6109,8 @@ dependencies = [
  "hmac 0.12.1",
  "keyring-core",
  "log",
+ "num-bigint-dig",
+ "num-integer",
  "num_enum",
  "prost",
  "prost-build",
@@ -6131,6 +6134,7 @@ name = "xodus-cli"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "env_logger",
