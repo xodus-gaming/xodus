@@ -40,7 +40,7 @@ const XMLDSIG_HMAC_SHA256: &str = "http://www.w3.org/2001/04/xmldsig-more#hmac-s
 const XMLDSIG_RSA_SHA256: &str = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
 
 fn default_signature_references(multiple_policies: bool) -> Vec<SignatureReference> {
-    let refs = vec![
+    let refs: &[&str; 3] = &[
         if multiple_policies { "#RSTS" } else { "#RST0" },
         "#Timestamp",
         "#PPAuthInfo",
@@ -51,7 +51,7 @@ fn default_signature_references(multiple_policies: bool) -> Vec<SignatureReferen
 fn generate_signature_references(
     hash_alg: &str,
     canon_alg: &str,
-    refs: Vec<&str>,
+    refs: &[&str],
 ) -> Vec<SignatureReference> {
     let mut ret = Vec::with_capacity(refs.len());
     for item in refs {
