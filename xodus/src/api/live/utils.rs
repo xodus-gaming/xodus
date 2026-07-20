@@ -7,7 +7,7 @@ use rsa::sha2::Sha256;
 use std::cmp::min;
 use zerocopy::IntoBytes;
 
-use crate::models::soap;
+use crate::models::soap::{self, StringStorage};
 
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
@@ -69,8 +69,8 @@ pub fn generate_nonce() -> [u8; 32] {
     nonce
 }
 
-pub fn decrypt_response(
-    envelope: soap::Envelope,
+pub fn decrypt_response<Str: StringStorage>(
+    envelope: soap::Envelope<Str>,
     secret: &[u8],
 ) -> Result<(soap::BodyContent, Option<soap::PP>), Box<dyn std::error::Error>> {
     let mut pp = envelope.header.pp;

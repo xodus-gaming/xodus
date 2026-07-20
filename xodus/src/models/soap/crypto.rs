@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
-use crate::models::soap::StringStorage;
+use crate::models::soap::{FromStrRef, StringStorage};
 
 use super::base::ReferenceUri;
 
@@ -62,48 +62,51 @@ impl SignatureKeyInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AlgorithmNode<'t> {
+pub struct AlgorithmNode<Str: StringStorage> {
     #[serde(rename = "@Algorithm")]
-    pub algorithm: Cow<'t, str>,
+    pub algorithm: Str,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignatureTransforms<'t> {
+pub struct SignatureTransforms<Str: StringStorage> {
     #[serde(rename = "Transform")]
-    pub transform: Vec<AlgorithmNode<'t>>,
+    pub transform: Vec<AlgorithmNode<Str>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignatureReference<'t> {
+pub struct SignatureReference<Str: StringStorage> {
     #[serde(rename = "@URI")]
-    pub uri: String,
+    pub uri: Str,
     #[serde(rename = "Transforms")]
-    pub transforms: SignatureTransforms<'t>,
+    pub transforms: SignatureTransforms<Str>,
     #[serde(rename = "DigestMethod")]
-    pub digest_method: AlgorithmNode<'t>,
+    pub digest_method: AlgorithmNode<Str>,
     #[serde(rename = "DigestValue")]
-    pub digest_value: String,
+    pub digest_value: Str,
 }
 
-impl<'t> SignatureReference<'t> {
-    pub fn exclusive(uri: &str) -> Self {
+impl<Str: StringStorage> SignatureReference<Str> {
+    pub fn exclusive<'t>(uri: &'t str) -> Self
+    where
+        Str: FromStrRef<'t>,
+    {
         Self {
-            uri: uri.to_string(),
+            uri: Str::st(uri),
             transforms: SignatureTransforms {
                 transform: vec![AlgorithmNode {
-                    algorithm: Cow::Borrowed("http://www.w3.org/2001/10/xml-exc-c14n#"),
+                    algorithm: Str::st("http://www.w3.org/2001/10/xml-exc-c14n#"),
                 }],
             },
             digest_method: AlgorithmNode {
-                algorithm: Cow::Borrowed("http://www.w3.org/2001/04/xmlenc#sha256"),
+                algorithm: Str::st("http://www.w3.org/2001/04/xmlenc#sha256"),
             },
-            digest_value: String::new(),
+            digest_value: Str::st(""),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignedInfo<Str : StringStorage> {
+pub struct SignedInfo<Str: StringStorage> {
     #[serde(rename = "CanonicalizationMethod")]
     pub canonicalization_method: AlgorithmNode<Str>,
     #[serde(rename = "SignatureMethod")]
@@ -112,14 +115,14 @@ pub struct SignedInfo<Str : StringStorage> {
     pub reference: Vec<SignatureReference<Str>>,
 }
 
-impl<Str : StringStorage> Default for SignedInfo<Str> {
+impl<Str: FromStrRef<'static>> Default for SignedInfo<Str> {
     fn default() -> Self {
         Self {
             canonicalization_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".into(),
+                algorithm: Str::st("http://www.w3.org/2001/10/xml-exc-c14n#"),
             },
             signature_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256".into(),
+                algorithm: Str::st("http://www.w3.org/2001/04/xmldsig-more#hmac-sha256"),
             },
             reference: vec![
                 SignatureReference::exclusive("#RST0"),
@@ -131,7 +134,7 @@ impl<Str : StringStorage> Default for SignedInfo<Str> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Signature<Str : StringStorage> {
+pub struct Signature<Str: StringStorage> {
     #[serde(rename = "@xmlns")]
     pub xmlns: Str,
     #[serde(rename = "SignedInfo")]
@@ -142,12 +145,12 @@ pub struct Signature<Str : StringStorage> {
     pub key_info: Option<SignatureKeyInfo>,
 }
 
-impl<Str : StringStorage> Signature<Str> {
+impl<Str: FromStrRef<'static>> Signature<Str> {
     pub fn empty_hmac() -> Self {
         Self {
-            xmlns: "http://www.w3.org/2000/09/xmldsig#",
+            xmlns: Str::st("http://www.w3.org/2000/09/xmldsig#"),
             signed_info: SignedInfo::default(),
-            signature_value: "",
+            signature_value: Str::st(""),
             key_info: Some(SignatureKeyInfo::sign_key()),
         }
     }

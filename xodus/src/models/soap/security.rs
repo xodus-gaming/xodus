@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::soap::StringStorage;
+
 use super::base::{RequestedTokenReference, Timestamp};
 use super::crypto::{EncryptedData, SecurityTokenReference, Signature};
 use super::tokens::BinarySecurityTokenReq;
@@ -65,7 +67,7 @@ impl Default for AuthInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Security<Str : StringStorage> {
+pub struct Security<Str: StringStorage> {
     #[serde(rename = "wsse:UsernameToken", skip_serializing_if = "Option::is_none")]
     pub username_token: Option<UsernameToken>,
     #[serde(
@@ -91,7 +93,7 @@ pub struct Security<Str : StringStorage> {
     #[serde(rename = "wsu:Timestamp", alias = "Timestamp")]
     pub timestamp: Timestamp,
     #[serde(rename = "Signature", skip_serializing_if = "Option::is_none")]
-    pub signature: Option<Signature<str>>,
+    pub signature: Option<Signature<Str>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

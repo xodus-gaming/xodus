@@ -7,8 +7,8 @@ use crate::models::devicecredential::{DeviceAddRequest, DeviceAddResponse};
 use crate::models::live::ExchangeUserTokenOutcome;
 use crate::models::soap::{
     self, AlgorithmNode, AppliesTo, BinarySecurityTokenReq, DerivedKeyToken, EncryptedData,
-    EndpointReference, ReferenceUri, RequestMultipleSecurityTokens, SecurityTokenReference,
-    SignatureReference, SignatureTransforms, SignedInfo, UsernameToken,
+    EndpointReference, FromStrRef, Header, ReferenceUri, RequestMultipleSecurityTokens,
+    SecurityTokenReference, SignatureReference, SignatureTransforms, SignedInfo, UsernameToken,
 };
 
 mod utils;
@@ -39,7 +39,10 @@ const XML_EXC_C14N: &str = "http://www.w3.org/2001/10/xml-exc-c14n#";
 const XMLDSIG_HMAC_SHA256: &str = "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256";
 const XMLDSIG_RSA_SHA256: &str = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
 
-fn default_signature_references<'t>(multiple_policies: bool) -> Vec<SignatureReference<'t>> {
+fn default_signature_references<'t, Str>(multiple_policies: bool) -> Vec<SignatureReference<Str>>
+where
+    Str: FromStrRef<'t>,
+{
     let refs: &[&str; 3] = &[
         if multiple_policies { "#RSTS" } else { "#RST0" },
         "#Timestamp",
@@ -48,22 +51,25 @@ fn default_signature_references<'t>(multiple_policies: bool) -> Vec<SignatureRef
     generate_signature_references(XML_ENC_SHA256, XML_EXC_C14N, refs)
 }
 
-fn generate_signature_references<'t>(
+fn generate_signature_references<'t, Str>(
     hash_alg: &'t str,
     canon_alg: &'t str,
-    refs: &[&str],
-) -> Vec<SignatureReference<'t>> {
+    refs: &[&'t str],
+) -> Vec<SignatureReference<Str>>
+where
+    Str: FromStrRef<'t>,
+{
     let mut ret = Vec::with_capacity(refs.len());
     for item in refs {
         ret.push(SignatureReference {
-            uri: item.to_string(),
+            uri: Str::st(item),
             digest_method: AlgorithmNode {
-                algorithm: hash_alg.into(),
+                algorithm: Str::st(hash_alg),
             },
-            digest_value: "".to_string(),
+            digest_value: Str::st(""),
             transforms: SignatureTransforms {
                 transform: vec![AlgorithmNode {
-                    algorithm: canon_alg.into(),
+                    algorithm: Str::st(canon_alg),
                 }],
             },
         });
@@ -75,22 +81,22 @@ pub async fn authenticate_device(
     client: &reqwest::Client,
     username: String,
     private_key: rsa::RsaPrivateKey,
-) -> reqwest::Result<soap::Envelope> {
-    let mut header = soap::Header::new();
+) -> reqwest::Result<soap::Envelope<String>> {
+    let mut header: Header<&str> = soap::Header::new();
     let public_key = rsa::RsaPublicKey::from(&private_key);
     header.security.username_token = Some(UsernameToken::devicetoken(username));
     header.security.signature = Some(soap::Signature {
-        xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
+        xmlns: "http://www.w3.org/2000/09/xmldsig#",
         signed_info: SignedInfo {
             canonicalization_method: AlgorithmNode {
-                algorithm: XML_EXC_C14N.into(),
+                algorithm: XML_EXC_C14N,
             },
             reference: default_signature_references(false),
             signature_method: AlgorithmNode {
-                algorithm: XMLDSIG_RSA_SHA256.into(),
+                algorithm: XMLDSIG_RSA_SHA256,
             },
         },
-        signature_value: "".to_string(),
+        signature_value: "",
         key_info: None,
     });
     let body = soap::Body {
@@ -140,7 +146,8 @@ pub async fn authenticate_device(
         .await?;
 
     let text = response.text().await?;
-    let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
+    let res_envelope: soap::Envelope<String> =
+        quick_xml::de::from_str(&text).expect("Failed to de xml");
 
     Ok(res_envelope)
 }
@@ -242,7 +249,8 @@ pub async fn exchange_device_token(
 
     let text = response.text().await?;
 
-    let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
+    let res_envelope: soap::Envelope<String> =
+        quick_xml::de::from_str(&text).expect("Failed to de xml");
     let mut nonce = None;
     for token in &res_envelope.header.security.derived_key_tokens {
         if token.id == "SignKey" {
@@ -421,7 +429,8 @@ pub async fn exchange_user_token(
 
     let text = response.text().await?;
 
-    let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
+    let res_envelope: soap::Envelope<String> =
+        quick_xml::de::from_str(&text).expect("Failed to de xml");
     let mut nonce = None;
     for token in &res_envelope.header.security.derived_key_tokens {
         if token.id == "SignKey" {

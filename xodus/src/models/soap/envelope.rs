@@ -8,14 +8,30 @@ use super::tokens::{
     RequestSecurityTokenResponseCollection,
 };
 
-pub trait StringStorage<'t>: AsRef<str> + Clone + From<&'t str> {}
+pub trait StringStorage: AsRef<str> + Clone {}
 
-impl StringStorage<'_> for String {}
-impl<'a> StringStorage<'a> for &'a str {}
+pub trait FromStrRef<'src>: StringStorage {
+    fn st<'p: 'src>(s: &'p str) -> Self;
+}
+
+impl StringStorage for String {}
+impl<'a> StringStorage for &'a str {}
+
+impl<'a, 't: 'a> FromStrRef<'t> for &'a str {
+    fn st<'p: 't>(s: &'p str) -> Self {
+        s
+    }
+}
+
+impl<'t> FromStrRef<'t> for String {
+    fn st<'p: 't>(s: &'p str) -> Self {
+        s.to_owned()
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename = "s:Envelope")]
-pub struct Envelope<'t, Str : StringStorage<'t>> {
+pub struct Envelope<Str: StringStorage> {
     #[serde(rename = "@xmlns:s")]
     pub s: Option<Str>,
     #[serde(rename = "@xmlns:ps")]
@@ -36,27 +52,32 @@ pub struct Envelope<'t, Str : StringStorage<'t>> {
     pub wst: Option<Str>,
 
     #[serde(rename = "s:Header", alias = "Header")]
-    pub header: Header<'t, Str>,
+    pub header: Header<Str>,
     #[serde(rename = "s:Body", alias = "Body")]
     pub body: Body,
 }
 
-impl<'t, Str : StringStorage<'t>> Envelope<'t, Str> {
-    pub fn new(header: Header<'t>, body: Body) -> Self {
+impl<Str: StringStorage> Envelope<Str> {
+    pub fn new(header: Header<Str>, body: Body) -> Self
+    where
+        Str: FromStrRef<'static>,
+    {
         Self {
-            s: Some(Str::from("http://www.w3.org/2003/05/soap-envelope")),
-            ps: Some("http://schemas.microsoft.com/Passport/SoapServices/PPCRL".to_owned()),
-            wsse:
-                Some("http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
-                    .to_owned()),
-            saml: Some("urn:oasis:names:tc:SAML:1.0:assertion".to_owned()),
-            wsp: Some("http://schemas.xmlsoap.org/ws/2004/09/policy".to_owned()),
-            wsu:
-                Some("http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"
-                    .to_owned()),
-            wsa: Some("http://www.w3.org/2005/08/addressing".to_owned()),
-            wssc: Some("http://schemas.xmlsoap.org/ws/2005/02/sc".to_owned()),
-            wst: Some("http://schemas.xmlsoap.org/ws/2005/02/trust".to_owned()),
+            s: Some(Str::st("http://www.w3.org/2003/05/soap-envelope")),
+            ps: Some(Str::st(
+                "http://schemas.microsoft.com/Passport/SoapServices/PPCRL",
+            )),
+            wsse: Some(Str::st(
+                "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd",
+            )),
+            saml: Some(Str::st("urn:oasis:names:tc:SAML:1.0:assertion")),
+            wsp: Some(Str::st("http://schemas.xmlsoap.org/ws/2004/09/policy")),
+            wsu: Some(Str::st(
+                "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd",
+            )),
+            wsa: Some(Str::st("http://www.w3.org/2005/08/addressing")),
+            wssc: Some(Str::st("http://schemas.xmlsoap.org/ws/2005/02/sc")),
+            wst: Some(Str::st("http://schemas.xmlsoap.org/ws/2005/02/trust")),
             header,
             body,
         }
@@ -64,7 +85,7 @@ impl<'t, Str : StringStorage<'t>> Envelope<'t, Str> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Header<'t, Str : StringStorage<'t>> {
+pub struct Header<Str: StringStorage> {
     #[serde(rename = "wsa:Action", alias = "Action")]
     pub action: MustUnderstandValue,
     #[serde(rename = "wsa:To", alias = "To")]
@@ -89,7 +110,7 @@ pub struct Header<'t, Str : StringStorage<'t>> {
     pub pp: Option<PP>,
 }
 
-impl<'t> Header<'t> {
+impl<Str: StringStorage> Header<Str> {
     pub fn new() -> Self {
         let now = chrono::Utc::now();
         Self {
