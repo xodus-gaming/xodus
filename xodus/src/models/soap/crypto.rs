@@ -28,8 +28,8 @@ pub struct CipherData {
 }
 
 impl CipherData {
-    pub fn new(key: String) -> Self {
-        Self { cipher_value: key }
+    pub fn new(key: &str) -> Self {
+        Self { cipher_value: key.to_owned() }
     }
 }
 
@@ -233,13 +233,13 @@ impl NamedKeyInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct EncryptedData {
+pub struct EncryptedData<Str: StringStorage> {
     #[serde(rename = "@Id")]
-    pub id: String,
+    pub id: Str,
     #[serde(rename = "@xmlns")]
-    pub xmlns: String,
+    pub xmlns: Str,
     #[serde(rename = "@Type")]
-    pub el_type: String,
+    pub el_type: Str,
 
     pub encryption_method: EncryptionMethod,
     #[serde(rename = "ds:KeyInfo", alias = "KeyInfo")]
@@ -247,23 +247,26 @@ pub struct EncryptedData {
     pub cipher_data: CipherData,
 }
 
-impl EncryptedData {
-    pub fn devicesoftware(key: String) -> Self {
+impl<Str: StringStorage> EncryptedData<Str> {
+    pub fn devicesoftware<'t>(key: &'t str) -> Self
+    where Str: FromStrRef<'t>
+    {
         Self {
-            id: "devicesoftware".to_string(),
-            xmlns: "http://www.w3.org/2001/04/xmlenc#".to_string(),
-            el_type: "http://www.w3.org/2001/04/xmlenc#Element".to_string(),
+            id: Str::st("devicesoftware"),
+            xmlns: Str::st("http://www.w3.org/2001/04/xmlenc#"),
+            el_type: Str::st("http://www.w3.org/2001/04/xmlenc#Element"),
             encryption_method: EncryptionMethod::default(),
             key_info: KeyInfoWrap::sts(),
             cipher_data: CipherData::new(key),
         }
     }
 
-    pub fn binary_da_token(key: String) -> Self {
+    pub fn binary_da_token<'t>(key: &'t str) -> Self
+    where Str: FromStrRef<'t> {
         Self {
-            id: "BinaryDAToken0".to_string(),
-            xmlns: "http://www.w3.org/2001/04/xmlenc#".to_string(),
-            el_type: "http://www.w3.org/2001/04/xmlenc#Element".to_string(),
+            id: Str::st("BinaryDAToken0"),
+            xmlns: Str::st("http://www.w3.org/2001/04/xmlenc#"),
+            el_type: Str::st("http://www.w3.org/2001/04/xmlenc#Element"),
             encryption_method: EncryptionMethod::default(),
             key_info: KeyInfoWrap::sts(),
             cipher_data: CipherData::new(key),
@@ -273,8 +276,8 @@ impl EncryptedData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct EncryptedPP {
-    pub encrypted_data: EncryptedData,
+pub struct EncryptedPP<Str: StringStorage> {
+    pub encrypted_data: EncryptedData<Str>,
 }
 
 #[cfg(test)]

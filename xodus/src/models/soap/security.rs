@@ -75,7 +75,7 @@ pub struct Security<Str: StringStorage> {
         alias = "EncryptedData",
         skip_serializing_if = "Option::is_none"
     )]
-    pub encrypted_data: Option<EncryptedData>,
+    pub encrypted_data: Option<EncryptedData<Str>>,
     #[serde(
         rename = "wsse:BinarySecurityToken",
         alias = "BinarySecurityToken",

@@ -159,7 +159,7 @@ pub async fn exchange_device_token(
     hosting_app: String,
     scope: String,
     policy: Option<soap::PolicyReference>,
-) -> reqwest::Result<soap::RequestSecurityTokenResponse> {
+) -> reqwest::Result<soap::RequestSecurityTokenResponse<String>> {
     let mut header: Header<&str> = soap::Header::new();
     if let Some(i) = header.auth_info.as_mut() {
         i.hosting_app = hosting_app;
@@ -300,7 +300,7 @@ pub async fn exchange_user_token(
     inline_ux: Option<String>,
     hosting_app: String,
     scope_policies: &[(String, Option<soap::PolicyReference>)],
-) -> reqwest::Result<ExchangeUserTokenOutcome> {
+) -> reqwest::Result<ExchangeUserTokenOutcome<String>> {
     let mut header: Header<&str> = soap::Header::new();
     if let Some(i) = header.auth_info.as_mut() {
         i.hosting_app = hosting_app;
@@ -310,8 +310,15 @@ pub async fn exchange_user_token(
         i.inline_ft = inline_token
     }
     header.security.username_token = Some(soap::UsernameToken::user_hint(username));
-    let data: EncryptedData = quick_xml::de::from_str(&user_token).unwrap();
-    header.security.encrypted_data = Some(data);
+    let data: EncryptedData<String> = quick_xml::de::from_str(&user_token).unwrap();
+    header.security.encrypted_data = Some(EncryptedData {
+        cipher_data: data.cipher_data,
+        el_type: &data.el_type,
+        encryption_method: data.encryption_method,
+        id: &data.id,
+        key_info: data.key_info,
+        xmlns: &data.xmlns,
+    });
 
     header.security.binary_security_token = vec![BinarySecurityTokenReq {
         id: "DeviceDAToken".to_string(),

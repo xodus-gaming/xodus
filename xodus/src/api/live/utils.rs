@@ -7,7 +7,7 @@ use rsa::sha2::Sha256;
 use std::cmp::min;
 use zerocopy::IntoBytes;
 
-use crate::models::soap::{self, StringStorage};
+use crate::models::soap::{self};
 
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
@@ -69,10 +69,10 @@ pub fn generate_nonce() -> [u8; 32] {
     nonce
 }
 
-pub fn decrypt_response<Str: StringStorage>(
-    envelope: soap::Envelope<Str>,
+pub fn decrypt_response(
+    envelope: soap::Envelope<String>,
     secret: &[u8],
-) -> Result<(soap::BodyContent, Option<soap::PP>), Box<dyn std::error::Error>> {
+) -> Result<(soap::BodyContent<String>, Option<soap::PP>), Box<dyn std::error::Error>> {
     let mut pp = envelope.header.pp;
     if let Some(enc_pp) = envelope.header.encrypted_pp {
         let id = enc_pp
@@ -148,7 +148,7 @@ pub fn decrypt_response<Str: StringStorage>(
             .expect("Failed");
         let result = std::str::from_utf8(&block).unwrap();
         println!("{result}"); // Useful debugging technique
-        let security_token_res: soap::BodyContent = quick_xml::de::from_str(result).unwrap();
+        let security_token_res: soap::BodyContent<String> = quick_xml::de::from_str(result).unwrap();
 
         return Ok((security_token_res, pp));
     }

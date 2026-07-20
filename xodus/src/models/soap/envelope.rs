@@ -8,7 +8,7 @@ use super::tokens::{
     RequestSecurityTokenResponseCollection,
 };
 
-pub trait StringStorage: AsRef<str> + Clone {}
+pub trait StringStorage: AsRef<str> + Clone + Serialize {}
 
 pub trait FromStrRef<'src>: StringStorage {
     fn st<'p: 'src>(s: &'p str) -> Self;
@@ -54,11 +54,11 @@ pub struct Envelope<Str: StringStorage> {
     #[serde(rename = "s:Header", alias = "Header")]
     pub header: Header<Str>,
     #[serde(rename = "s:Body", alias = "Body")]
-    pub body: Body,
+    pub body: Body<Str>,
 }
 
 impl<Str: StringStorage> Envelope<Str> {
-    pub fn new(header: Header<Str>, body: Body) -> Self
+    pub fn new(header: Header<Str>, body: Body<Str>) -> Self
     where
         Str: FromStrRef<'static>,
     {
@@ -101,7 +101,7 @@ pub struct Header<Str: StringStorage> {
         alias = "EncryptedPP",
         skip_serializing_if = "Option::is_none"
     )]
-    pub encrypted_pp: Option<EncryptedPP>,
+    pub encrypted_pp: Option<EncryptedPP<Str>>,
     #[serde(
         rename = "psf:pp",
         alias = "pp",
@@ -144,20 +144,20 @@ impl<Str: StringStorage> Header<Str> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Body {
+pub struct Body<Str: StringStorage> {
     #[serde(rename = "$value")]
-    pub body: BodyContent,
+    pub body: BodyContent<Str>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum BodyContent {
+pub enum BodyContent<Str: StringStorage> {
     #[serde(rename = "wst:RequestSecurityToken")]
     RequestSecurityToken(RequestSecurityToken),
     #[serde(rename = "ps:RequestMultipleSecurityTokens")]
     RequestMultipleSecurityTokens(RequestMultipleSecurityTokens),
 
-    RequestSecurityTokenResponseCollection(RequestSecurityTokenResponseCollection),
-    RequestSecurityTokenResponse(RequestSecurityTokenResponse),
-    EncryptedData(EncryptedData),
+    RequestSecurityTokenResponseCollection(RequestSecurityTokenResponseCollection<Str>),
+    RequestSecurityTokenResponse(RequestSecurityTokenResponse<Str>),
+    EncryptedData(EncryptedData<Str>),
     Fault(Fault),
 }
