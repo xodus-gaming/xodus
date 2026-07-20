@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 
 use crate::models::soap::{FromStrRef, StringStorage};
 
