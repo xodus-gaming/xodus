@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
+use crate::models::soap::StringStorage;
+
 use super::base::ReferenceUri;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,16 +103,16 @@ impl<'t> SignatureReference<'t> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignedInfo<'t> {
+pub struct SignedInfo<Str : StringStorage> {
     #[serde(rename = "CanonicalizationMethod")]
-    pub canonicalization_method: AlgorithmNode<'t>,
+    pub canonicalization_method: AlgorithmNode<Str>,
     #[serde(rename = "SignatureMethod")]
-    pub signature_method: AlgorithmNode<'t>,
+    pub signature_method: AlgorithmNode<Str>,
     #[serde(rename = "Reference")]
-    pub reference: Vec<SignatureReference<'t>>,
+    pub reference: Vec<SignatureReference<Str>>,
 }
 
-impl<'t> Default for SignedInfo<'t> {
+impl<Str : StringStorage> Default for SignedInfo<Str> {
     fn default() -> Self {
         Self {
             canonicalization_method: AlgorithmNode {
@@ -129,23 +131,23 @@ impl<'t> Default for SignedInfo<'t> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Signature<'t> {
+pub struct Signature<Str : StringStorage> {
     #[serde(rename = "@xmlns")]
-    pub xmlns: String,
+    pub xmlns: Str,
     #[serde(rename = "SignedInfo")]
-    pub signed_info: SignedInfo<'t>,
+    pub signed_info: SignedInfo<Str>,
     #[serde(rename = "SignatureValue")]
-    pub signature_value: String,
+    pub signature_value: Str,
     #[serde(rename = "KeyInfo", skip_serializing_if = "Option::is_none")]
     pub key_info: Option<SignatureKeyInfo>,
 }
 
-impl<'t> Signature<'t> {
+impl<Str : StringStorage> Signature<Str> {
     pub fn empty_hmac() -> Self {
         Self {
-            xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
+            xmlns: "http://www.w3.org/2000/09/xmldsig#",
             signed_info: SignedInfo::default(),
-            signature_value: String::new(),
+            signature_value: "",
             key_info: Some(SignatureKeyInfo::sign_key()),
         }
     }

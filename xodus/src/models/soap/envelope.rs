@@ -8,38 +8,43 @@ use super::tokens::{
     RequestSecurityTokenResponseCollection,
 };
 
+pub trait StringStorage<'t>: AsRef<str> + Clone + From<&'t str> {}
+
+impl StringStorage<'_> for String {}
+impl<'a> StringStorage<'a> for &'a str {}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename = "s:Envelope")]
-pub struct Envelope<'t> {
+pub struct Envelope<'t, Str : StringStorage<'t>> {
     #[serde(rename = "@xmlns:s")]
-    pub s: Option<String>,
+    pub s: Option<Str>,
     #[serde(rename = "@xmlns:ps")]
-    pub ps: Option<String>,
+    pub ps: Option<Str>,
     #[serde(rename = "@xmlns:wsse")]
-    pub wsse: Option<String>,
+    pub wsse: Option<Str>,
     #[serde(rename = "@xmlns:saml")]
-    pub saml: Option<String>,
+    pub saml: Option<Str>,
     #[serde(rename = "@xmlns:wsp")]
-    pub wsp: Option<String>,
+    pub wsp: Option<Str>,
     #[serde(rename = "@xmlns:wsu")]
-    pub wsu: Option<String>,
+    pub wsu: Option<Str>,
     #[serde(rename = "@xmlns:wsa")]
-    pub wsa: Option<String>,
+    pub wsa: Option<Str>,
     #[serde(rename = "@xmlns:wssc")]
-    pub wssc: Option<String>,
+    pub wssc: Option<Str>,
     #[serde(rename = "@xmlns:wst")]
-    pub wst: Option<String>,
+    pub wst: Option<Str>,
 
     #[serde(rename = "s:Header", alias = "Header")]
-    pub header: Header<'t>,
+    pub header: Header<'t, Str>,
     #[serde(rename = "s:Body", alias = "Body")]
     pub body: Body,
 }
 
-impl<'t> Envelope<'t> {
+impl<'t, Str : StringStorage<'t>> Envelope<'t, Str> {
     pub fn new(header: Header<'t>, body: Body) -> Self {
         Self {
-            s: Some("http://www.w3.org/2003/05/soap-envelope".to_owned()),
+            s: Some(Str::from("http://www.w3.org/2003/05/soap-envelope")),
             ps: Some("http://schemas.microsoft.com/Passport/SoapServices/PPCRL".to_owned()),
             wsse:
                 Some("http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
@@ -59,7 +64,7 @@ impl<'t> Envelope<'t> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Header<'t> {
+pub struct Header<'t, Str : StringStorage<'t>> {
     #[serde(rename = "wsa:Action", alias = "Action")]
     pub action: MustUnderstandValue,
     #[serde(rename = "wsa:To", alias = "To")]
@@ -69,7 +74,7 @@ pub struct Header<'t> {
     #[serde(rename = "ps:AuthInfo")]
     pub auth_info: Option<AuthInfo>,
     #[serde(rename = "wsse:Security", alias = "Security")]
-    pub security: Security<'t>,
+    pub security: Security<Str>,
     #[serde(
         rename = "psf:EncryptedPP",
         alias = "EncryptedPP",
