@@ -88,7 +88,7 @@ pub async fn parse_message(
                 "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
                 &[
                     (
-                        format!("scope={scope}&api-version=2.0&clientid={}", req.client_id),
+                        format!("scope={scope}&api-version=2.0"), // &clientid={} not working...
                         Some(soap::PolicyReference::token_broker()),
                     ),
                     ("http://Passport.NET/tb".to_string(), None),
