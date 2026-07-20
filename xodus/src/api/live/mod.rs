@@ -160,7 +160,7 @@ pub async fn exchange_device_token(
     scope: String,
     policy: Option<soap::PolicyReference>,
 ) -> reqwest::Result<soap::RequestSecurityTokenResponse> {
-    let mut header = soap::Header::new();
+    let mut header: Header<&str> = soap::Header::new();
     if let Some(i) = header.auth_info.as_mut() {
         i.hosting_app = hosting_app;
         i.sso_flags = "SsoRestr".to_string();
@@ -189,17 +189,17 @@ pub async fn exchange_device_token(
         requested_token_reference: Some(soap::RequestedTokenReference { key_identifier: soap::KeyIdentifier { value_type: "http://docs.oasis-open.org/wss/2004/XX/oasis-2004XX-wss-saml-token-profile-1.0#SAMLAssertionID".to_string(), value: None }, reference: soap::ReferenceUri { uri: "".to_string() } })
     }];
     header.security.signature = Some(soap::Signature {
-        xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
+        xmlns: "http://www.w3.org/2000/09/xmldsig#",
         signed_info: SignedInfo {
             canonicalization_method: AlgorithmNode {
-                algorithm: XML_EXC_C14N.into(),
+                algorithm: XML_EXC_C14N,
             },
             reference: default_signature_references(false),
             signature_method: AlgorithmNode {
-                algorithm: XMLDSIG_HMAC_SHA256.into(),
+                algorithm: XMLDSIG_HMAC_SHA256,
             },
         },
-        signature_value: "".to_string(),
+        signature_value: "",
         key_info: Some(soap::SignatureKeyInfo {
             security_token_reference: SecurityTokenReference {
                 reference: ReferenceUri {
@@ -301,7 +301,7 @@ pub async fn exchange_user_token(
     hosting_app: String,
     scope_policies: &[(String, Option<soap::PolicyReference>)],
 ) -> reqwest::Result<ExchangeUserTokenOutcome> {
-    let mut header = soap::Header::new();
+    let mut header: Header<&str> = soap::Header::new();
     if let Some(i) = header.auth_info.as_mut() {
         i.hosting_app = hosting_app;
         i.sso_flags = "SsoRestr".to_string();
@@ -342,7 +342,7 @@ pub async fn exchange_user_token(
     }];
     let multiple_policies = scope_policies.len() > 1;
     header.security.signature = Some(soap::Signature {
-        xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
+        xmlns: "http://www.w3.org/2000/09/xmldsig#",
         signed_info: SignedInfo {
             canonicalization_method: AlgorithmNode {
                 algorithm: XML_EXC_C14N.into(),
@@ -352,7 +352,7 @@ pub async fn exchange_user_token(
                 algorithm: XMLDSIG_HMAC_SHA256.into(),
             },
         },
-        signature_value: "".to_string(),
+        signature_value: "",
         key_info: Some(soap::SignatureKeyInfo {
             security_token_reference: SecurityTokenReference {
                 reference: ReferenceUri {
