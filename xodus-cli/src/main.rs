@@ -61,6 +61,7 @@ enum SubCommand {
         exe: Option<String>,
         #[arg(short, long)]
         market: Option<String>,
+    },
     #[command(about = "Generate or decrypt base64-encoded CLEP challenge data")]
     Clep {
         #[command(subcommand)]
