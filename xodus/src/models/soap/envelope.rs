@@ -10,7 +10,7 @@ use super::tokens::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename = "s:Envelope")]
-pub struct Envelope {
+pub struct Envelope<'t> {
     #[serde(rename = "@xmlns:s")]
     pub s: Option<String>,
     #[serde(rename = "@xmlns:ps")]
@@ -31,13 +31,13 @@ pub struct Envelope {
     pub wst: Option<String>,
 
     #[serde(rename = "s:Header", alias = "Header")]
-    pub header: Header,
+    pub header: Header<'t>,
     #[serde(rename = "s:Body", alias = "Body")]
     pub body: Body,
 }
 
-impl Envelope {
-    pub fn new(header: Header, body: Body) -> Self {
+impl<'t> Envelope<'t> {
+    pub fn new(header: Header<'t>, body: Body) -> Self {
         Self {
             s: Some("http://www.w3.org/2003/05/soap-envelope".to_owned()),
             ps: Some("http://schemas.microsoft.com/Passport/SoapServices/PPCRL".to_owned()),
@@ -59,7 +59,7 @@ impl Envelope {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Header {
+pub struct Header<'t> {
     #[serde(rename = "wsa:Action", alias = "Action")]
     pub action: MustUnderstandValue,
     #[serde(rename = "wsa:To", alias = "To")]
@@ -69,7 +69,7 @@ pub struct Header {
     #[serde(rename = "ps:AuthInfo")]
     pub auth_info: Option<AuthInfo>,
     #[serde(rename = "wsse:Security", alias = "Security")]
-    pub security: Security,
+    pub security: Security<'t>,
     #[serde(
         rename = "psf:EncryptedPP",
         alias = "EncryptedPP",
@@ -84,7 +84,7 @@ pub struct Header {
     pub pp: Option<PP>,
 }
 
-impl Header {
+impl<'t> Header<'t> {
     pub fn new() -> Self {
         let now = chrono::Utc::now();
         Self {

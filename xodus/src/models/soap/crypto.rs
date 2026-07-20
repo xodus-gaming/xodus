@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 
 use super::base::ReferenceUri;
 
@@ -59,40 +60,40 @@ impl SignatureKeyInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AlgorithmNode {
+pub struct AlgorithmNode<'t> {
     #[serde(rename = "@Algorithm")]
-    pub algorithm: String,
+    pub algorithm: Cow<'t, str>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignatureTransforms {
+pub struct SignatureTransforms<'t> {
     #[serde(rename = "Transform")]
-    pub transform: Vec<AlgorithmNode>,
+    pub transform: Vec<AlgorithmNode<'t>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignatureReference {
+pub struct SignatureReference<'t> {
     #[serde(rename = "@URI")]
     pub uri: String,
     #[serde(rename = "Transforms")]
-    pub transforms: SignatureTransforms,
+    pub transforms: SignatureTransforms<'t>,
     #[serde(rename = "DigestMethod")]
-    pub digest_method: AlgorithmNode,
+    pub digest_method: AlgorithmNode<'t>,
     #[serde(rename = "DigestValue")]
     pub digest_value: String,
 }
 
-impl SignatureReference {
+impl<'t> SignatureReference<'t> {
     pub fn exclusive(uri: &str) -> Self {
         Self {
             uri: uri.to_string(),
             transforms: SignatureTransforms {
                 transform: vec![AlgorithmNode {
-                    algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                    algorithm: Cow::Borrowed("http://www.w3.org/2001/10/xml-exc-c14n#"),
                 }],
             },
             digest_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
+                algorithm: Cow::Borrowed("http://www.w3.org/2001/04/xmlenc#sha256"),
             },
             digest_value: String::new(),
         }
@@ -100,23 +101,23 @@ impl SignatureReference {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignedInfo {
+pub struct SignedInfo<'t> {
     #[serde(rename = "CanonicalizationMethod")]
-    pub canonicalization_method: AlgorithmNode,
+    pub canonicalization_method: AlgorithmNode<'t>,
     #[serde(rename = "SignatureMethod")]
-    pub signature_method: AlgorithmNode,
+    pub signature_method: AlgorithmNode<'t>,
     #[serde(rename = "Reference")]
-    pub reference: Vec<SignatureReference>,
+    pub reference: Vec<SignatureReference<'t>>,
 }
 
-impl Default for SignedInfo {
+impl<'t> Default for SignedInfo<'t> {
     fn default() -> Self {
         Self {
             canonicalization_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".into(),
             },
             signature_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256".to_string(),
+                algorithm: "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256".into(),
             },
             reference: vec![
                 SignatureReference::exclusive("#RST0"),
@@ -128,18 +129,18 @@ impl Default for SignedInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Signature {
+pub struct Signature<'t> {
     #[serde(rename = "@xmlns")]
     pub xmlns: String,
     #[serde(rename = "SignedInfo")]
-    pub signed_info: SignedInfo,
+    pub signed_info: SignedInfo<'t>,
     #[serde(rename = "SignatureValue")]
     pub signature_value: String,
     #[serde(rename = "KeyInfo", skip_serializing_if = "Option::is_none")]
     pub key_info: Option<SignatureKeyInfo>,
 }
 
-impl Signature {
+impl<'t> Signature<'t> {
     pub fn empty_hmac() -> Self {
         Self {
             xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
