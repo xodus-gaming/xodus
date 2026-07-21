@@ -5,3 +5,4 @@ pub mod license;
 pub mod login;
 pub mod splicense;
 pub mod streaming;
+pub mod spy;

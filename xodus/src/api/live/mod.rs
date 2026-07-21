@@ -11,7 +11,7 @@ use crate::models::soap::{
     SecurityTokenReference, SignatureReference, SignatureTransforms, SignedInfo, UsernameToken,
 };
 
-mod utils;
+pub mod utils;
 
 pub const XML_HEADER: &str = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
 

@@ -151,9 +151,9 @@ pub struct Body<Str: StringStorage> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BodyContent<Str: StringStorage> {
-    #[serde(rename = "wst:RequestSecurityToken")]
+    #[serde(rename = "wst:RequestSecurityToken", alias = "RequestSecurityToken")]
     RequestSecurityToken(RequestSecurityToken),
-    #[serde(rename = "ps:RequestMultipleSecurityTokens")]
+    #[serde(rename = "ps:RequestMultipleSecurityTokens", alias = "RequestMultipleSecurityTokens")]
     RequestMultipleSecurityTokens(RequestMultipleSecurityTokens),
 
     RequestSecurityTokenResponseCollection(RequestSecurityTokenResponseCollection<Str>),

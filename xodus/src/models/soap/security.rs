@@ -68,7 +68,7 @@ impl Default for AuthInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Security<Str: StringStorage> {
-    #[serde(rename = "wsse:UsernameToken", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "wsse:UsernameToken", alias = "UsernameToken", default, skip_serializing_if = "Option::is_none")]
     pub username_token: Option<UsernameToken>,
     #[serde(
         rename = "EncryptedData",
@@ -100,13 +100,13 @@ pub struct Security<Str: StringStorage> {
 pub struct UsernameToken {
     #[serde(rename = "@wsu:Id", alias = "@Id")]
     pub id: String,
-    #[serde(rename = "wsse:Username", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "wsse:Username", alias = "Username", skip_serializing_if = "Option::is_none")]
     pub username: Option<String>,
-    #[serde(rename = "wsse:Password", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "wsse:Password", alias = "Password", skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
-    #[serde(rename = "wsse:UsernameHint", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "wsse:UsernameHint", alias = "UsernameHint", skip_serializing_if = "Option::is_none")]
     pub username_hint: Option<String>,
-    #[serde(rename = "wsse:LoginOption", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "wsse:LoginOption", alias = "LoginOption", skip_serializing_if = "Option::is_none")]
     pub login_option: Option<String>,
 }
 

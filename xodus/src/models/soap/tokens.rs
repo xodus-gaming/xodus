@@ -52,7 +52,7 @@ pub struct RequestedSecurityToken<Str: StringStorage> {
 pub struct BinarySecurityTokenRes {
     #[serde(rename = "@Id")]
     pub id: String,
-    #[serde(rename = "$value")]
+    #[serde(rename = "$value", default)]
     pub value: String,
     #[serde(rename = "@ValueType", skip_serializing_if = "Option::is_none")]
     pub value_type: Option<String>,
@@ -65,7 +65,7 @@ pub struct BinarySecurityTokenReq {
     pub id: String,
     #[serde(rename = "@ValueType")]
     pub value_type: String,
-    #[serde(rename = "$value")]
+    #[serde(rename = "$value", default)]
     pub value: String,
 }
 
@@ -81,7 +81,7 @@ pub struct RequestMultipleSecurityTokens {
     pub id: String,
     #[serde(rename = "@xmlns:ps")]
     pub ps: String,
-    #[serde(rename = "wst:RequestSecurityToken")]
+    #[serde(rename = "wst:RequestSecurityToken", alias = "RequestSecurityToken")]
     pub security_tokens: Vec<RequestSecurityToken>,
 }
 

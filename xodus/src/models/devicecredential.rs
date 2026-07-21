@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize, ser::Error};
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct DeviceAddRequest {
     pub client_info: ClientInfo,
@@ -15,7 +15,7 @@ impl std::fmt::Display for DeviceAddRequest {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct ClientInfo {
     #[serde(rename = "@name")]
@@ -35,7 +35,7 @@ impl Default for ClientInfo {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct Authentication {
     pub membername: String,
@@ -51,7 +51,7 @@ impl Authentication {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct DeviceInfo {
     #[serde(rename = "@Id")]
@@ -62,7 +62,7 @@ pub struct DeviceInfo {
     pub tpm_info: Option<TpmInfo>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Component {
     #[serde(rename = "@name")]
     pub name: u32,
@@ -90,13 +90,13 @@ impl Component {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TpmInfo {
     #[serde(rename = "KeyValue")]
     pub key_value: TpmKeyValue,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TpmKeyValue {
     #[serde(rename = "RSAKeyValue")]
     pub rsa_key_value: RsaKeyValue,
@@ -104,7 +104,7 @@ pub struct TpmKeyValue {
     pub storage_key_blob: Option<String>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct RsaKeyValue {
     pub modulus: String,
@@ -198,6 +198,6 @@ pub struct KeyHolderLicense {
 pub struct ServerInfo {
     #[serde(rename = "@ServerTime")]
     pub server_time: String,
-    #[serde(rename = "$value")]
+    #[serde(rename = "$value", default)]
     pub id: String,
 }

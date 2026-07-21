@@ -8,7 +8,7 @@ use super::base::ReferenceUri;
 pub struct EncryptionMethod {
     #[serde(rename = "@Algorithm")]
     pub algorithm: String,
-    #[serde(rename = "$value")]
+    #[serde(rename = "$value", default)]
     pub val: Option<String>,
 }
 

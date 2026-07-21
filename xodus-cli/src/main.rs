@@ -85,6 +85,11 @@ enum ClepAction {
         #[clap(help = "Base64-encoded, obfuscated CLEP challenge data (2048 bytes)")]
         data: String,
     },
+    #[command(about = "Spy har file contents with downgraded device security")]
+    Spy {
+        #[clap(help = "Orderd set of har files starting from initial setup to decrypt later responses")]
+        files: Vec<String>,
+    },
 }
 
 #[derive(Parser)]
@@ -169,6 +174,7 @@ async fn main() {
                 disk_serial,
             } => commands::clep::generate(smbios, disk_serial),
             ClepAction::Decrypt { data } => commands::clep::decrypt(data),
+            ClepAction::Spy { files } => commands::spy::run(files).await,
         },
         SubCommand::SpLicense { block } => commands::splicense::run(block),
     }

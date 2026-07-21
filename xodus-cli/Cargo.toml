@@ -10,6 +10,10 @@ msixvc = { path = "../msixvc" }
 base64 = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true }
+zerocopy = { version = "0.8.48", features = ["derive"] }
+bergshamra-c14n = "0.5.1"
+hmac = "0.12.0"
+bergshamra = "0.5.1"
 tao = "0.35.2"
 wry = "0.55.1"
 async-trait = "0.1.89"
@@ -23,3 +27,6 @@ futures-util = "0.3.31"
 uuid = "1.23.1"
 indicatif = "0.18.4"
 fs2 = "0.4.3"
+har = "0.9.0"
+quick-xml = { version = "0.40.1", features = ["serialize", "overlapped-lists"] }
+
