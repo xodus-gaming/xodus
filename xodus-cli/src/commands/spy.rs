@@ -1,9 +1,22 @@
-use std::{collections::HashMap, fs::File, io::{Read, Seek, SeekFrom::Start}};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{Read, Seek, SeekFrom::Start},
+};
 
 use base64::Engine;
 use bergshamra::{DsigContext, Key, KeyData, KeyUsage, KeysManager};
 use reqwest::header;
-use xodus::{api::{self, live::utils}, licensing::splicense::{ClepHmacState, SPLicense}, models::{devicecredential::{DeviceAddRequest, DeviceAddResponse}, secrets::{Device, Token, TokenStore}, soap::{self, BodyContent, EncryptedData, Envelope}}, tokens::{TokenManager, device::save_device_sts_token}};
+use xodus::{
+    api::{self, live::utils},
+    licensing::splicense::{ClepHmacState, SPLicense},
+    models::{
+        devicecredential::{DeviceAddRequest, DeviceAddResponse},
+        secrets::{Device, Token, TokenStore},
+        soap::{self, BodyContent, EncryptedData, Envelope},
+    },
+    tokens::{TokenManager, device::save_device_sts_token},
+};
 use zerocopy::transmute;
 
 pub(crate) async fn run(files: Vec<String>) {
@@ -15,9 +28,14 @@ pub(crate) async fn run(files: Vec<String>) {
             let client = reqwest::Client::new();
 
             // println!("{}", e.response.content.text.as_ref().unwrap());
-            let resp: DeviceAddResponse = quick_xml::de::from_str(e.response.content.text.as_ref().unwrap()).expect("Failed to de xml");
+            let resp: DeviceAddResponse =
+                quick_xml::de::from_str(e.response.content.text.as_ref().unwrap())
+                    .expect("Failed to de xml");
             // println!("{}", resp.success);
-            let req: DeviceAddRequest = quick_xml::de::from_str(e.request.post_data.as_ref().unwrap().text.as_ref().unwrap()).expect("Failed to de xml");
+            let req: DeviceAddRequest = quick_xml::de::from_str(
+                e.request.post_data.as_ref().unwrap().text.as_ref().unwrap(),
+            )
+            .expect("Failed to de xml");
 
             // println!("{}", req.authentication.membername);
 
@@ -35,20 +53,38 @@ pub(crate) async fn run(files: Vec<String>) {
         } else if e.request.url == "https://login.live.com/RST2.srf" {
             println!("RST2");
             // println!("{}", e.request.post_data.as_ref().unwrap().text.as_ref().unwrap());
-            let req : Envelope<String> = quick_xml::de::from_str(e.request.post_data.as_ref().unwrap().text.as_ref().unwrap()).expect("Failed to de xml");
-            let resp_str = if let Some(enc) = &e.response.content.encoding && enc == "base64" { String::from_utf8(base64::engine::general_purpose::STANDARD.decode(e.response.content.text.as_ref().unwrap()).unwrap()).unwrap() } else { e.response.content.text.as_ref().unwrap().to_owned()};
-            let resp : Envelope<String> = quick_xml::de::from_str(&resp_str).expect("Failed to de xml");
+            let req: Envelope<String> = quick_xml::de::from_str(
+                e.request.post_data.as_ref().unwrap().text.as_ref().unwrap(),
+            )
+            .expect("Failed to de xml");
+            let resp_str = if let Some(enc) = &e.response.content.encoding
+                && enc == "base64"
+            {
+                String::from_utf8(
+                    base64::engine::general_purpose::STANDARD
+                        .decode(e.response.content.text.as_ref().unwrap())
+                        .unwrap(),
+                )
+                .unwrap()
+            } else {
+                e.response.content.text.as_ref().unwrap().to_owned()
+            };
+            let resp: Envelope<String> =
+                quick_xml::de::from_str(&resp_str).expect("Failed to de xml");
             // println!("{:?}", req);
             // println!("{:?}", resp);
 
-            if let Some(user) = req.header.security.username_token && user.id == "devicesoftware" {
+            if let Some(user) = req.header.security.username_token
+                && user.id == "devicesoftware"
+            {
                 if let BodyContent::RequestSecurityTokenResponse(resp) = resp.body.body {
                     // save_device_sts_token(&tokens, resp);
-                    let token : Token = resp.into();
+                    let token: Token = resp.into();
                     let Token::Legacy(token) = token else {
                         panic!("Hmm");
                     };
-                    let data: EncryptedData<String> = quick_xml::de::from_str(&token.token).unwrap();
+                    let data: EncryptedData<String> =
+                        quick_xml::de::from_str(&token.token).unwrap();
                     println!("tkn={}", data.cipher_data.cipher_value);
                     secs.insert(data.cipher_data.cipher_value, token.binary_secret.unwrap());
                 } else {
@@ -71,7 +107,9 @@ pub(crate) async fn run(files: Vec<String>) {
 
             let shared_secret = proof_token;
 
-            let secret = base64::engine::general_purpose::STANDARD.decode(&shared_secret).unwrap();
+            let secret = base64::engine::general_purpose::STANDARD
+                .decode(&shared_secret)
+                .unwrap();
             let secret: [u8; 4096] = secret.try_into().unwrap();
             let secret: ClepHmacState = transmute!(secret);
             let secret = secret.get_hmac_state();
@@ -85,7 +123,9 @@ pub(crate) async fn run(files: Vec<String>) {
                 }
             }
             let nonce = nonce.unwrap();
-            let nonce = base64::engine::general_purpose::STANDARD.decode(nonce).unwrap();
+            let nonce = base64::engine::general_purpose::STANDARD
+                .decode(nonce)
+                .unwrap();
             let key = utils::generate_shared_key(
                 32,
                 &*secret,
@@ -100,24 +140,31 @@ pub(crate) async fn run(files: Vec<String>) {
             match result {
                 bergshamra::VerifyResult::Invalid { reason } => {
                     println!("DEVICE {}", reason);
-                    println!("{}", e.request.post_data.as_ref().unwrap().text.as_ref().unwrap());
+                    println!(
+                        "{}",
+                        e.request.post_data.as_ref().unwrap().text.as_ref().unwrap()
+                    );
                 }
                 bergshamra::VerifyResult::Valid { .. } => {
                     println!("signature valid");
 
-                    let res = match utils::decrypt_response(res_envelope, &*secret).expect("Failed to decrypt") {
+                    let res = match utils::decrypt_response(res_envelope, &*secret)
+                        .expect("Failed to decrypt")
+                    {
                         (soap::BodyContent::RequestSecurityTokenResponse(res), _) => Some(res),
-                        (soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection), _) => {
+                        (
+                            soap::BodyContent::RequestSecurityTokenResponseCollection(
+                                mut collection,
+                            ),
+                            _,
+                        ) => {
                             let token = collection.security_tokens.remove(0);
                             Some(token)
                         }
                         (b, _) => None,
                     };
-
                 }
             }
-
-
         }
     };
 
@@ -125,7 +172,7 @@ pub(crate) async fn run(files: Vec<String>) {
         println!("====={f}=====");
 
         let mut reader = File::open(f).unwrap();
-        let mut bom= [0u8; 3];
+        let mut bom = [0u8; 3];
         reader.read_exact(&mut bom).unwrap();
         if bom != [0xEF, 0xBB, 0xBF] {
             reader.seek(Start(0)).unwrap();
@@ -137,5 +184,5 @@ pub(crate) async fn run(files: Vec<String>) {
         for e in &entries.entries {
             process(e);
         }
-    } 
+    }
 }

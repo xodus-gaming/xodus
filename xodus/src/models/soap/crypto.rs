@@ -29,7 +29,9 @@ pub struct CipherData {
 
 impl CipherData {
     pub fn new(key: &str) -> Self {
-        Self { cipher_value: key.to_owned() }
+        Self {
+            cipher_value: key.to_owned(),
+        }
     }
 }
 
@@ -249,7 +251,8 @@ pub struct EncryptedData<Str: StringStorage> {
 
 impl<Str: StringStorage> EncryptedData<Str> {
     pub fn devicesoftware<'t>(key: &'t str) -> Self
-    where Str: FromStrRef<'t>
+    where
+        Str: FromStrRef<'t>,
     {
         Self {
             id: Str::st("devicesoftware"),
@@ -262,7 +265,9 @@ impl<Str: StringStorage> EncryptedData<Str> {
     }
 
     pub fn binary_da_token<'t>(key: &'t str) -> Self
-    where Str: FromStrRef<'t> {
+    where
+        Str: FromStrRef<'t>,
+    {
         Self {
             id: Str::st("BinaryDAToken0"),
             xmlns: Str::st("http://www.w3.org/2001/04/xmlenc#"),

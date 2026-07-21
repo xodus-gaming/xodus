@@ -87,7 +87,9 @@ enum ClepAction {
     },
     #[command(about = "Spy har file contents with downgraded device security")]
     Spy {
-        #[clap(help = "Orderd set of har files starting from initial setup to decrypt later responses")]
+        #[clap(
+            help = "Orderd set of har files starting from initial setup to decrypt later responses"
+        )]
         files: Vec<String>,
     },
 }

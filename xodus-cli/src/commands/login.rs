@@ -64,7 +64,10 @@ impl LoginHandler {
         }
     }
 
-    fn exchange_user_token(&self, prop: DAProperty) -> reqwest::Result<ExchangeUserTokenOutcome<String>> {
+    fn exchange_user_token(
+        &self,
+        prop: DAProperty,
+    ) -> reqwest::Result<ExchangeUserTokenOutcome<String>> {
         let client = self.client.clone();
         let device_token = self.device.token.clone();
         let binary_secret = self.device.binary_secret.clone();

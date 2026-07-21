@@ -1,10 +1,15 @@
 use crate::{
-    hardware, licensing::{
+    hardware,
+    licensing::{
         splicense::SPLicense,
         utils::{generate_string, parse_bcrypt_rsa_private},
-    }, models::{
-        devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo}, secrets::Device, soap::{BodyContent, StringStorage},
-    }, tokens::manager::TokenManager,
+    },
+    models::{
+        devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo},
+        secrets::Device,
+        soap::{BodyContent, StringStorage},
+    },
+    tokens::manager::TokenManager,
 };
 
 /// Provisions a device (if none is stored yet) or re-authenticates an existing one
