@@ -53,14 +53,11 @@ pub async fn parse_message(
             };
             let (scope, client_id) = if req.msa_full_trust {
                 (
-                    "service::user.auth.xboxlive.com::MBI_SSL".to_owned(),
+                    "service::user.auth.xboxlive.com::MBI_SSL",
                     format!("clientid={}", req.client_id),
                 )
             } else {
-                (
-                    "xboxlive.signin".to_owned(),
-                    format!("clientId={}", req.client_id),
-                )
+                ("xboxlive.signin", format!("clientId={}", req.client_id))
             };
             let device_token = context.device_token.as_ref().unwrap();
             let device_token_resp = xodus::api::live::exchange_device_token(

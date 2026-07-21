@@ -41,7 +41,7 @@ pub async fn authenticate_device(
     private_key: rsa::RsaPrivateKey,
 ) -> reqwest::Result<soap::Envelope> {
     let (signed_xml, _request) = rst::RSTRequestBuilder::new()
-        .username_token(UsernameToken::devicetoken(username))
+        .username(UsernameToken::devicetoken(username))
         .signature(rst::RSTSignature::RSA(private_key))
         .scope_policy("http://Passport.NET/tb", None)
         .build();

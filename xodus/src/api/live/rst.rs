@@ -160,7 +160,7 @@ impl<'a> RSTRequestBuilder<'a> {
         self
     }
 
-    pub fn username_token(mut self, username_token: soap::UsernameToken) -> Self {
+    pub fn username(mut self, username_token: soap::UsernameToken) -> Self {
         self.header.security.username_token = Some(username_token);
         self
     }
