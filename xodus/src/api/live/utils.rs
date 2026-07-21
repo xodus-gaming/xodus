@@ -13,14 +13,14 @@ type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
 /// SP800_108 HMAC with counter
 /// - key_usage - KDF_LABEL
-/// - nonce - KDF_CONTEXT
+/// - context - KDF_CONTEXT
 pub fn generate_shared_key(
     key_length: usize,
     in_key: &[u8],
     key_usage: &str,
-    nonce: &[u8],
+    context: &[u8],
 ) -> [u8; 32] {
-    let len: usize = 4 + key_usage.len() + 1 + nonce.len() + 4;
+    let len: usize = 4 + key_usage.len() + 1 + context.len() + 4;
     let mut shared_key_material: Vec<u8> = vec![0; len];
 
     let mut offset = 0;
@@ -31,8 +31,8 @@ pub fn generate_shared_key(
     // Already zerod
     offset += 1;
 
-    shared_key_material[offset..offset + nonce.len()].copy_from_slice(nonce);
-    offset += nonce.len();
+    shared_key_material[offset..offset + context.len()].copy_from_slice(context);
+    offset += context.len();
 
     let key_bit_length = u32::try_from(key_length * 8).unwrap();
     shared_key_material[offset..offset + 4].copy_from_slice(&key_bit_length.to_be_bytes());

@@ -10,6 +10,7 @@ pub struct Device {
     pub splicense: String,
     pub username: String,
     pub password: String,
+    pub private_key: rsa::RsaPrivateKey,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -17,6 +18,8 @@ pub struct LegacyToken {
     pub key_name: Option<String>,
     pub token: String,
     pub binary_secret: Option<String>,
+    #[serde(default)]
+    pub tpm_key: Option<String>,
     pub lifetime: Timestamp,
 }
 
@@ -34,10 +37,18 @@ impl From<soap::RequestSecurityTokenResponse> for Token {
                 let encrypted_data = value.requested_security_token.encrypted_data.unwrap();
                 let key_name = encrypted_data.key_info.key_name.clone();
                 let token = quick_xml::se::to_string(&encrypted_data).unwrap();
+                let binary_secret = value
+                    .requested_proof_token
+                    .as_ref()
+                    .map(|t| t.binary_secret.clone());
+                let tpm_key = value
+                    .requested_proof_token
+                    .and_then(|t| t.encrypted_key.map(|k| k.cipher_data.cipher_value));
                 Self::Legacy(LegacyToken {
                     key_name,
                     token,
-                    binary_secret: value.requested_proof_token.map(|t| t.binary_secret),
+                    binary_secret,
+                    tpm_key,
                     lifetime: value.lifetime,
                 })
             }

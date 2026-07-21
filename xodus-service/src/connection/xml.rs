@@ -51,10 +51,16 @@ pub async fn parse_message(
             let Token::Legacy(token) = context.tokens().get_user_sts_token()? else {
                 return Ok(vec![]);
             };
-            let scope = if req.msa_full_trust {
-                "service::user.auth.xboxlive.com::MBI_SSL".to_owned()
+            let (scope, client_id) = if req.msa_full_trust {
+                (
+                    "service::user.auth.xboxlive.com::MBI_SSL".to_owned(),
+                    format!("clientid={}", req.client_id),
+                )
             } else {
-                "xboxlive.signin".to_owned()
+                (
+                    "xboxlive.signin".to_owned(),
+                    format!("clientId={}", req.client_id),
+                )
             };
             let device_token = context.device_token.as_ref().unwrap();
             let device_token_resp = xodus::api::live::exchange_device_token(
@@ -88,7 +94,7 @@ pub async fn parse_message(
                 "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
                 &[
                     (
-                        format!("scope={scope}&api-version=2.0&clientid={}", req.client_id),
+                        format!("scope={scope}&api-version=2.0&{}", client_id),
                         Some(soap::PolicyReference::token_broker()),
                     ),
                     ("http://Passport.NET/tb".to_string(), None),
