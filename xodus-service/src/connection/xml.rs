@@ -57,6 +57,26 @@ pub async fn parse_message(
                 "xboxlive.signin".to_owned()
             };
             let device_token = context.device_token.as_ref().unwrap();
+            let device_token_resp = xodus::api::live::exchange_device_token(
+                &context.client,
+                device_token.token.clone(),
+                device_token.binary_secret.clone().unwrap(),
+                "{28C08266-F973-4AE6-FFE4-409B249F138F}".to_string(),
+                "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0".to_owned(),
+                Some(soap::PolicyReference::token_broker()),
+            )
+            .await;
+
+            let ms_device_rps_token = if let Some((Token::Compact(ms_device_token), Ok(lifetime))) =
+                device_token_resp.ok().map(|t| {
+                    let expiry = chrono::DateTime::parse_from_rfc3339(&t.lifetime.expires);
+                    (t.into(), expiry)
+                }) {
+                Some((ms_device_token, lifetime.timestamp()))
+            } else {
+                None
+            };
+
             let user_token = xodus::api::live::exchange_user_token(
                 &context.client,
                 token.token,
@@ -65,7 +85,7 @@ pub async fn parse_message(
                 device_token.binary_secret.clone().unwrap(),
                 None,
                 Some("Silent".to_string()),
-                "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
+                req.client_id.to_string(),
                 &[
                     (
                         format!("scope={scope}&api-version=2.0&clientid={}", req.client_id),
@@ -101,6 +121,10 @@ pub async fn parse_message(
                     let payload = MSATokenResponse {
                         token: user_token,
                         expiry: expiry.timestamp(),
+                        device_expiry: ms_device_rps_token.as_ref().map(|(_, r)| *r).unwrap_or(0),
+                        device_rps: ms_device_rps_token
+                            .map(|(t, _)| t)
+                            .unwrap_or_else(String::new),
                     };
                     let payload = quick_xml::se::to_string(&payload)?;
                     Ok(payload.as_bytes().to_vec())

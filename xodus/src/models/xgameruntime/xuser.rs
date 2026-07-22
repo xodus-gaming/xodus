@@ -15,4 +15,6 @@ pub struct MSATokenRequest {
 pub struct MSATokenResponse {
     pub token: String,
     pub expiry: i64,
+    pub device_rps: String,
+    pub device_expiry: i64,
 }
