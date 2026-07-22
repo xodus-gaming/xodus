@@ -65,7 +65,7 @@ impl Default for AuthInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Security {
+pub struct Security<'t> {
     #[serde(rename = "wsse:UsernameToken", skip_serializing_if = "Option::is_none")]
     pub username_token: Option<UsernameToken>,
     #[serde(
@@ -91,7 +91,7 @@ pub struct Security {
     #[serde(rename = "wsu:Timestamp", alias = "Timestamp")]
     pub timestamp: Timestamp,
     #[serde(rename = "Signature", skip_serializing_if = "Option::is_none")]
-    pub signature: Option<Signature>,
+    pub signature: Option<Signature<'t>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

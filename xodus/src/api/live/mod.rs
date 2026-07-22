@@ -34,6 +34,43 @@ pub async fn login_device_credential(
     Ok(resp)
 }
 
+const XML_ENC_SHA256: &str = "http://www.w3.org/2001/04/xmlenc#sha256";
+const XML_EXC_C14N: &str = "http://www.w3.org/2001/10/xml-exc-c14n#";
+const XMLDSIG_HMAC_SHA256: &str = "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256";
+const XMLDSIG_RSA_SHA256: &str = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
+
+fn default_signature_references<'t>(multiple_policies: bool) -> Vec<SignatureReference<'t>> {
+    let refs: &[&str; 3] = &[
+        if multiple_policies { "#RSTS" } else { "#RST0" },
+        "#Timestamp",
+        "#PPAuthInfo",
+    ];
+    generate_signature_references(XML_ENC_SHA256, XML_EXC_C14N, refs)
+}
+
+fn generate_signature_references<'t>(
+    hash_alg: &'t str,
+    canon_alg: &'t str,
+    refs: &[&str],
+) -> Vec<SignatureReference<'t>> {
+    let mut ret = Vec::with_capacity(refs.len());
+    for item in refs {
+        ret.push(SignatureReference {
+            uri: item.to_string(),
+            digest_method: AlgorithmNode {
+                algorithm: hash_alg.into(),
+            },
+            digest_value: "".to_string(),
+            transforms: SignatureTransforms {
+                transform: vec![AlgorithmNode {
+                    algorithm: canon_alg.into(),
+                }],
+            },
+        });
+    }
+    ret
+}
+
 pub async fn authenticate_device(
     client: &reqwest::Client,
     username: String,
@@ -46,48 +83,11 @@ pub async fn authenticate_device(
         xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
         signed_info: SignedInfo {
             canonicalization_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                algorithm: XML_EXC_C14N.into(),
             },
-            reference: vec![
-                SignatureReference {
-                    uri: "#RST0".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#Timestamp".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#PPAuthInfo".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-            ],
+            reference: default_signature_references(false),
             signature_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256".to_string(),
+                algorithm: XMLDSIG_RSA_SHA256.into(),
             },
         },
         signature_value: "".to_string(),
@@ -185,48 +185,11 @@ pub async fn exchange_device_token(
         xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
         signed_info: SignedInfo {
             canonicalization_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                algorithm: XML_EXC_C14N.into(),
             },
-            reference: vec![
-                SignatureReference {
-                    uri: "#RST0".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#Timestamp".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#PPAuthInfo".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-            ],
+            reference: default_signature_references(false),
             signature_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256".to_string(),
+                algorithm: XMLDSIG_HMAC_SHA256.into(),
             },
         },
         signature_value: "".to_string(),
@@ -374,48 +337,11 @@ pub async fn exchange_user_token(
         xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
         signed_info: SignedInfo {
             canonicalization_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                algorithm: XML_EXC_C14N.into(),
             },
-            reference: vec![
-                SignatureReference {
-                    uri: if multiple_policies { "#RSTS" } else { "#RST0" }.to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#Timestamp".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#PPAuthInfo".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-            ],
+            reference: default_signature_references(multiple_policies),
             signature_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256".to_string(),
+                algorithm: XMLDSIG_HMAC_SHA256.into(),
             },
         },
         signature_value: "".to_string(),
