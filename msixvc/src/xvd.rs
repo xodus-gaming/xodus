@@ -1,5 +1,5 @@
-use aes::Aes128;
 use aes::cipher::KeyInit;
+use aes::{Aes128Dec, Aes128Enc};
 use bytes::Bytes;
 use futures_util::StreamExt;
 use ntfs::{Ntfs, NtfsFile, NtfsReadSeek};
@@ -17,6 +17,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncSeekExt},
 };
 use tokio_util::io::SyncIoBridge;
+use uuid::Uuid;
 use zerocopy::IntoBytes;
 
 use crate::models::xvd::{
@@ -25,7 +26,7 @@ use crate::models::xvd::{
 };
 use crate::streaming_ntfs::collect_ntfs_stream_layouts;
 
-use crate::crypt::{SectionReader, Tweak, decrypt_page_xts};
+use crate::crypt::{SectionReader, TweakGenerator, decrypt_page_xts};
 use crate::math::{
     bytes_to_pages, calculate_hash_block_num_and_run_for_block_num, offset_to_page_number,
 };
@@ -376,7 +377,7 @@ pub struct EncryptedSectionInfo {
     section_length: u64,
 
     header_id: XvcRegionId,
-    vduid: [u8; 8],
+    vduid: Uuid,
 
     // If integrity is enabled, this must contain one entry per page in the section.
     // If integrity is disabled, use page_in_section as the data unit instead.
@@ -521,7 +522,7 @@ impl XvdFile {
                 section_offset: h.offset,
                 section_length: h.length,
                 header_id: h.region_id,
-                vduid: xvd_header.vduid.to_bytes_le()[..8].try_into().unwrap(),
+                vduid: xvd_header.vduid,
                 data_units: Some(data_units),
                 first_segment_index: h.first_segment_index,
                 data_hashs,
@@ -607,19 +608,14 @@ impl XvdFile {
             for segment_no in section.first_segment_index..segment_header.segment_count {
                 let segment = &segments[segment_no as usize];
                 let s = segment.path_length;
-                let mut buf = vec![0u16, 0];
-                buf.resize(s as usize, 0);
+                let mut buf = vec![0u16; s as usize];
                 file.seek(SeekFrom::Start(
                     segment_metadata.offset + paths_offset + segment.path_offset as u64,
                 ))
                 .await?;
                 file.read_exact(buf.as_mut_bytes()).await?;
-                let file_name: String = String::from_utf16(buf.as_slice()).unwrap();
-                let page_length = if segment.filesize == 0 {
-                    1
-                } else {
-                    segment.filesize.div_ceil(PAGE_SIZE as u64)
-                };
+                let file_name = String::from_utf16(&buf).unwrap();
+                let page_length = segment.filesize.div_ceil(PAGE_SIZE as u64).max(1);
                 if page_offset * (PAGE_SIZE as u64)
                     >= section.section_offset + section.section_length
                 {
@@ -836,9 +832,9 @@ impl XvdFile {
             tweak_key.copy_from_slice(&full_key[..16]);
             data_key.copy_from_slice(&full_key[16..]);
 
-            tweak = Some(Tweak::new(0, s.header_id, s.vduid));
-            tweak_cipher = Some(Aes128::new((&tweak_key).into()));
-            data_cipher = Some(Aes128::new((&data_key).into()));
+            tweak = Some(TweakGenerator::new(s.header_id, s.vduid));
+            tweak_cipher = Some(Aes128Enc::new((&tweak_key).into()));
+            data_cipher = Some(Aes128Dec::new((&data_key).into()));
             file_offset_in_section = sfile.offset - s.section_offset;
         } else {
             // TODO for data integrity we need a section for unencrypted sections...
@@ -926,7 +922,7 @@ impl XvdFile {
                 let chunk = pending.split_to(4096);
                 page.copy_from_slice(&chunk);
                 if let Some(tweak) = tweak.as_mut() {
-                    tweak.update_data_unit(match &s.unwrap().data_units {
+                    let tweak = tweak.with_data_unit(match &s.unwrap().data_units {
                         Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {
                             io::Error::new(
                                 io::ErrorKind::InvalidInput,
@@ -944,7 +940,7 @@ impl XvdFile {
                     });
                     decrypt_page_xts(
                         &mut page,
-                        *tweak,
+                        tweak,
                         tweak_cipher.as_ref().unwrap(),
                         data_cipher.as_ref().unwrap(),
                     );
