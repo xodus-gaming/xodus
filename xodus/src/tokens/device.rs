@@ -7,7 +7,7 @@ use crate::{
     models::{
         devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo},
         secrets::Device,
-        soap::BodyContent,
+        soap::{BodyContent, StringStorage},
     },
     tokens::manager::TokenManager,
 };
@@ -41,7 +41,7 @@ async fn provision_device(client: &reqwest::Client, tokens: &TokenManager) {
         .await
         .expect("Failed to get device creds");
 
-    let device = Device {
+    let device: Device = Device {
         username: username.clone(),
         password: password.clone(),
         puid: dev.puid,
@@ -83,9 +83,9 @@ async fn reauthenticate_device(client: &reqwest::Client, tokens: &TokenManager, 
     }
 }
 
-fn save_device_sts_token(
+pub fn save_device_sts_token<Str: StringStorage>(
     tokens: &TokenManager,
-    resp: crate::models::soap::RequestSecurityTokenResponse,
+    resp: crate::models::soap::RequestSecurityTokenResponse<Str>,
 ) {
     let key_name = resp
         .requested_security_token

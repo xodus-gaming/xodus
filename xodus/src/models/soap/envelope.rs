@@ -8,50 +8,76 @@ use super::tokens::{
     RequestSecurityTokenResponseCollection,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename = "s:Envelope")]
-pub struct Envelope {
-    #[serde(rename = "@xmlns:s")]
-    pub s: Option<String>,
-    #[serde(rename = "@xmlns:ps")]
-    pub ps: Option<String>,
-    #[serde(rename = "@xmlns:wsse")]
-    pub wsse: Option<String>,
-    #[serde(rename = "@xmlns:saml")]
-    pub saml: Option<String>,
-    #[serde(rename = "@xmlns:wsp")]
-    pub wsp: Option<String>,
-    #[serde(rename = "@xmlns:wsu")]
-    pub wsu: Option<String>,
-    #[serde(rename = "@xmlns:wsa")]
-    pub wsa: Option<String>,
-    #[serde(rename = "@xmlns:wssc")]
-    pub wssc: Option<String>,
-    #[serde(rename = "@xmlns:wst")]
-    pub wst: Option<String>,
+pub trait StringStorage: AsRef<str> + Clone + Serialize {}
 
-    #[serde(rename = "s:Header", alias = "Header")]
-    pub header: Header,
-    #[serde(rename = "s:Body", alias = "Body")]
-    pub body: Body,
+pub trait FromStrRef<'src>: StringStorage {
+    fn st<'p: 'src>(s: &'p str) -> Self;
 }
 
-impl Envelope {
-    pub fn new(header: Header, body: Body) -> Self {
+impl StringStorage for String {}
+impl<'a> StringStorage for &'a str {}
+
+impl<'a, 't: 'a> FromStrRef<'t> for &'a str {
+    fn st<'p: 't>(s: &'p str) -> Self {
+        s
+    }
+}
+
+impl<'t> FromStrRef<'t> for String {
+    fn st<'p: 't>(s: &'p str) -> Self {
+        s.to_owned()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename = "s:Envelope")]
+pub struct Envelope<Str: StringStorage> {
+    #[serde(rename = "@xmlns:s")]
+    pub s: Option<Str>,
+    #[serde(rename = "@xmlns:ps")]
+    pub ps: Option<Str>,
+    #[serde(rename = "@xmlns:wsse")]
+    pub wsse: Option<Str>,
+    #[serde(rename = "@xmlns:saml")]
+    pub saml: Option<Str>,
+    #[serde(rename = "@xmlns:wsp")]
+    pub wsp: Option<Str>,
+    #[serde(rename = "@xmlns:wsu")]
+    pub wsu: Option<Str>,
+    #[serde(rename = "@xmlns:wsa")]
+    pub wsa: Option<Str>,
+    #[serde(rename = "@xmlns:wssc")]
+    pub wssc: Option<Str>,
+    #[serde(rename = "@xmlns:wst")]
+    pub wst: Option<Str>,
+
+    #[serde(rename = "s:Header", alias = "Header")]
+    pub header: Header<Str>,
+    #[serde(rename = "s:Body", alias = "Body")]
+    pub body: Body<Str>,
+}
+
+impl<Str: StringStorage> Envelope<Str> {
+    pub fn new(header: Header<Str>, body: Body<Str>) -> Self
+    where
+        Str: FromStrRef<'static>,
+    {
         Self {
-            s: Some("http://www.w3.org/2003/05/soap-envelope".to_owned()),
-            ps: Some("http://schemas.microsoft.com/Passport/SoapServices/PPCRL".to_owned()),
-            wsse:
-                Some("http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
-                    .to_owned()),
-            saml: Some("urn:oasis:names:tc:SAML:1.0:assertion".to_owned()),
-            wsp: Some("http://schemas.xmlsoap.org/ws/2004/09/policy".to_owned()),
-            wsu:
-                Some("http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"
-                    .to_owned()),
-            wsa: Some("http://www.w3.org/2005/08/addressing".to_owned()),
-            wssc: Some("http://schemas.xmlsoap.org/ws/2005/02/sc".to_owned()),
-            wst: Some("http://schemas.xmlsoap.org/ws/2005/02/trust".to_owned()),
+            s: Some(Str::st("http://www.w3.org/2003/05/soap-envelope")),
+            ps: Some(Str::st(
+                "http://schemas.microsoft.com/Passport/SoapServices/PPCRL",
+            )),
+            wsse: Some(Str::st(
+                "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd",
+            )),
+            saml: Some(Str::st("urn:oasis:names:tc:SAML:1.0:assertion")),
+            wsp: Some(Str::st("http://schemas.xmlsoap.org/ws/2004/09/policy")),
+            wsu: Some(Str::st(
+                "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd",
+            )),
+            wsa: Some(Str::st("http://www.w3.org/2005/08/addressing")),
+            wssc: Some(Str::st("http://schemas.xmlsoap.org/ws/2005/02/sc")),
+            wst: Some(Str::st("http://schemas.xmlsoap.org/ws/2005/02/trust")),
             header,
             body,
         }
@@ -59,7 +85,7 @@ impl Envelope {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Header {
+pub struct Header<Str: StringStorage> {
     #[serde(rename = "wsa:Action", alias = "Action")]
     pub action: MustUnderstandValue,
     #[serde(rename = "wsa:To", alias = "To")]
@@ -69,13 +95,13 @@ pub struct Header {
     #[serde(rename = "ps:AuthInfo")]
     pub auth_info: Option<AuthInfo>,
     #[serde(rename = "wsse:Security", alias = "Security")]
-    pub security: Security,
+    pub security: Security<Str>,
     #[serde(
         rename = "psf:EncryptedPP",
         alias = "EncryptedPP",
         skip_serializing_if = "Option::is_none"
     )]
-    pub encrypted_pp: Option<EncryptedPP>,
+    pub encrypted_pp: Option<EncryptedPP<Str>>,
     #[serde(
         rename = "psf:pp",
         alias = "pp",
@@ -84,7 +110,7 @@ pub struct Header {
     pub pp: Option<PP>,
 }
 
-impl Header {
+impl<Str: StringStorage> Header<Str> {
     pub fn new() -> Self {
         let now = chrono::Utc::now();
         Self {
@@ -118,20 +144,23 @@ impl Header {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Body {
+pub struct Body<Str: StringStorage> {
     #[serde(rename = "$value")]
-    pub body: BodyContent,
+    pub body: BodyContent<Str>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum BodyContent {
-    #[serde(rename = "wst:RequestSecurityToken")]
+pub enum BodyContent<Str: StringStorage> {
+    #[serde(rename = "wst:RequestSecurityToken", alias = "RequestSecurityToken")]
     RequestSecurityToken(RequestSecurityToken),
-    #[serde(rename = "ps:RequestMultipleSecurityTokens")]
+    #[serde(
+        rename = "ps:RequestMultipleSecurityTokens",
+        alias = "RequestMultipleSecurityTokens"
+    )]
     RequestMultipleSecurityTokens(RequestMultipleSecurityTokens),
 
-    RequestSecurityTokenResponseCollection(RequestSecurityTokenResponseCollection),
-    RequestSecurityTokenResponse(RequestSecurityTokenResponse),
-    EncryptedData(EncryptedData),
+    RequestSecurityTokenResponseCollection(RequestSecurityTokenResponseCollection<Str>),
+    RequestSecurityTokenResponse(RequestSecurityTokenResponse<Str>),
+    EncryptedData(EncryptedData<Str>),
     Fault(Fault),
 }

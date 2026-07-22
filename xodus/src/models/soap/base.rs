@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct MustUnderstandValue {
     #[serde(rename = "@s:mustUnderstand")]
     pub must_understand: Option<String>,
-    #[serde(rename = "$value")]
+    #[serde(rename = "$value", default)]
     pub value: String,
 }
 
@@ -26,7 +26,7 @@ pub struct Timestamp {
 pub struct KeyIdentifier {
     #[serde(rename = "@ValueType")]
     pub value_type: String,
-    #[serde(rename = "$value")]
+    #[serde(rename = "$value", default)]
     pub value: Option<String>,
 }
 
@@ -38,10 +38,19 @@ pub struct ReferenceUri {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestedTokenReference {
-    #[serde(rename = "wsse:KeyIdentifier")]
+    #[serde(rename = "wsse:KeyIdentifier", alias = "KeyIdentifier", default)]
     pub key_identifier: KeyIdentifier,
-    #[serde(rename = "wsse:Reference")]
+    #[serde(rename = "wsse:Reference", alias = "Reference")]
     pub reference: ReferenceUri,
+}
+
+impl Default for KeyIdentifier {
+    fn default() -> Self {
+        Self {
+                value_type: "http://docs.oasis-open.org/wss/2004/XX/oasis-2004XX-wss-saml-token-profile-1.0#SAMLAssertionID".to_string(),
+                value: None,
+        }
+    }
 }
 
 impl Default for RequestedTokenReference {
@@ -72,7 +81,7 @@ pub struct EndpointReference {
 pub struct PolicyReference {
     #[serde(rename = "@URI")]
     pub uri: String,
-    #[serde(rename = "$value")]
+    #[serde(rename = "$value", default)]
     pub val: String,
 }
 

@@ -64,7 +64,10 @@ impl LoginHandler {
         }
     }
 
-    fn exchange_user_token(&self, prop: DAProperty) -> reqwest::Result<ExchangeUserTokenOutcome> {
+    fn exchange_user_token(
+        &self,
+        prop: DAProperty,
+    ) -> reqwest::Result<ExchangeUserTokenOutcome<String>> {
         let client = self.client.clone();
         let device_token = self.device.token.clone();
         let binary_secret = self.device.binary_secret.clone();
@@ -99,7 +102,7 @@ impl LoginHandler {
 }
 
 impl webview::SessionHandler for LoginHandler {
-    type Output = Option<soap::BodyContent>;
+    type Output = Option<soap::BodyContent<String>>;
 
     fn bootstrap(
         &mut self,

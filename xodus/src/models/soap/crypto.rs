@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::soap::{FromStrRef, StringStorage};
+
 use super::base::ReferenceUri;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncryptionMethod {
     #[serde(rename = "@Algorithm")]
     pub algorithm: String,
-    #[serde(rename = "$value")]
+    #[serde(rename = "$value", default)]
     pub val: Option<String>,
 }
 
@@ -26,8 +28,10 @@ pub struct CipherData {
 }
 
 impl CipherData {
-    pub fn new(key: String) -> Self {
-        Self { cipher_value: key }
+    pub fn new(key: &str) -> Self {
+        Self {
+            cipher_value: key.to_owned(),
+        }
     }
 }
 
@@ -59,64 +63,67 @@ impl SignatureKeyInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AlgorithmNode {
+pub struct AlgorithmNode<Str: StringStorage> {
     #[serde(rename = "@Algorithm")]
-    pub algorithm: String,
+    pub algorithm: Str,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignatureTransforms {
+pub struct SignatureTransforms<Str: StringStorage> {
     #[serde(rename = "Transform")]
-    pub transform: Vec<AlgorithmNode>,
+    pub transform: Vec<AlgorithmNode<Str>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignatureReference {
+pub struct SignatureReference<Str: StringStorage> {
     #[serde(rename = "@URI")]
-    pub uri: String,
+    pub uri: Str,
     #[serde(rename = "Transforms")]
-    pub transforms: SignatureTransforms,
+    pub transforms: SignatureTransforms<Str>,
     #[serde(rename = "DigestMethod")]
-    pub digest_method: AlgorithmNode,
+    pub digest_method: AlgorithmNode<Str>,
     #[serde(rename = "DigestValue")]
-    pub digest_value: String,
+    pub digest_value: Str,
 }
 
-impl SignatureReference {
-    pub fn exclusive(uri: &str) -> Self {
+impl<Str: StringStorage> SignatureReference<Str> {
+    pub fn exclusive<'t>(uri: &'t str) -> Self
+    where
+        Str: FromStrRef<'t>,
+    {
         Self {
-            uri: uri.to_string(),
+            uri: Str::st(uri),
             transforms: SignatureTransforms {
                 transform: vec![AlgorithmNode {
-                    algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                    algorithm: Str::st("http://www.w3.org/2001/10/xml-exc-c14n#"),
                 }],
             },
             digest_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
+                algorithm: Str::st("http://www.w3.org/2001/04/xmlenc#sha256"),
             },
-            digest_value: String::new(),
+            digest_value: Str::st(""),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignedInfo {
+pub struct SignedInfo<Str: StringStorage> {
     #[serde(rename = "CanonicalizationMethod")]
-    pub canonicalization_method: AlgorithmNode,
+    pub canonicalization_method: AlgorithmNode<Str>,
     #[serde(rename = "SignatureMethod")]
-    pub signature_method: AlgorithmNode,
+    pub signature_method: AlgorithmNode<Str>,
     #[serde(rename = "Reference")]
-    pub reference: Vec<SignatureReference>,
+    pub reference: Vec<SignatureReference<Str>>,
 }
 
-impl Default for SignedInfo {
+impl<Str: FromStrRef<'static>> Default for SignedInfo<Str> {
     fn default() -> Self {
         Self {
             canonicalization_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                algorithm: Str::st("http://www.w3.org/2001/10/xml-exc-c14n#"),
             },
             signature_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256".to_string(),
+                algorithm: Str::st("http://www.w3.org/2001/04/xmldsig-more#hmac-sha256"),
             },
             reference: vec![
                 SignatureReference::exclusive("#RST0"),
@@ -128,23 +135,23 @@ impl Default for SignedInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Signature {
+pub struct Signature<Str: StringStorage> {
     #[serde(rename = "@xmlns")]
-    pub xmlns: String,
+    pub xmlns: Str,
     #[serde(rename = "SignedInfo")]
-    pub signed_info: SignedInfo,
+    pub signed_info: SignedInfo<Str>,
     #[serde(rename = "SignatureValue")]
-    pub signature_value: String,
+    pub signature_value: Str,
     #[serde(rename = "KeyInfo", skip_serializing_if = "Option::is_none")]
     pub key_info: Option<SignatureKeyInfo>,
 }
 
-impl Signature {
+impl<Str: FromStrRef<'static>> Signature<Str> {
     pub fn empty_hmac() -> Self {
         Self {
-            xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
+            xmlns: Str::st("http://www.w3.org/2000/09/xmldsig#"),
             signed_info: SignedInfo::default(),
-            signature_value: String::new(),
+            signature_value: Str::st(""),
             key_info: Some(SignatureKeyInfo::sign_key()),
         }
     }
@@ -228,13 +235,13 @@ impl NamedKeyInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct EncryptedData {
+pub struct EncryptedData<Str: StringStorage> {
     #[serde(rename = "@Id")]
-    pub id: String,
+    pub id: Str,
     #[serde(rename = "@xmlns")]
-    pub xmlns: String,
+    pub xmlns: Str,
     #[serde(rename = "@Type")]
-    pub el_type: String,
+    pub el_type: Str,
 
     pub encryption_method: EncryptionMethod,
     #[serde(rename = "ds:KeyInfo", alias = "KeyInfo")]
@@ -242,23 +249,29 @@ pub struct EncryptedData {
     pub cipher_data: CipherData,
 }
 
-impl EncryptedData {
-    pub fn devicesoftware(key: String) -> Self {
+impl<Str: StringStorage> EncryptedData<Str> {
+    pub fn devicesoftware<'t>(key: &'t str) -> Self
+    where
+        Str: FromStrRef<'t>,
+    {
         Self {
-            id: "devicesoftware".to_string(),
-            xmlns: "http://www.w3.org/2001/04/xmlenc#".to_string(),
-            el_type: "http://www.w3.org/2001/04/xmlenc#Element".to_string(),
+            id: Str::st("devicesoftware"),
+            xmlns: Str::st("http://www.w3.org/2001/04/xmlenc#"),
+            el_type: Str::st("http://www.w3.org/2001/04/xmlenc#Element"),
             encryption_method: EncryptionMethod::default(),
             key_info: KeyInfoWrap::sts(),
             cipher_data: CipherData::new(key),
         }
     }
 
-    pub fn binary_da_token(key: String) -> Self {
+    pub fn binary_da_token<'t>(key: &'t str) -> Self
+    where
+        Str: FromStrRef<'t>,
+    {
         Self {
-            id: "BinaryDAToken0".to_string(),
-            xmlns: "http://www.w3.org/2001/04/xmlenc#".to_string(),
-            el_type: "http://www.w3.org/2001/04/xmlenc#Element".to_string(),
+            id: Str::st("BinaryDAToken0"),
+            xmlns: Str::st("http://www.w3.org/2001/04/xmlenc#"),
+            el_type: Str::st("http://www.w3.org/2001/04/xmlenc#Element"),
             encryption_method: EncryptionMethod::default(),
             key_info: KeyInfoWrap::sts(),
             cipher_data: CipherData::new(key),
@@ -268,8 +281,8 @@ impl EncryptedData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct EncryptedPP {
-    pub encrypted_data: EncryptedData,
+pub struct EncryptedPP<Str: StringStorage> {
+    pub encrypted_data: EncryptedData<Str>,
 }
 
 #[cfg(test)]
