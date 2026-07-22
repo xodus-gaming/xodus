@@ -7,8 +7,8 @@ use crate::models::devicecredential::{DeviceAddRequest, DeviceAddResponse};
 use crate::models::live::ExchangeUserTokenOutcome;
 use crate::models::soap::{
     self, AlgorithmNode, AppliesTo, BinarySecurityTokenReq, DerivedKeyToken, EncryptedData,
-    EndpointReference, ReferenceUri, RequestMultipleSecurityTokens, SecurityTokenReference,
-    SignatureReference, SignatureTransforms, SignedInfo, UsernameToken,
+    EndpointReference, FromStrRef, Header, ReferenceUri, RequestMultipleSecurityTokens,
+    SecurityTokenReference, SignatureReference, SignatureTransforms, SignedInfo, UsernameToken,
 };
 
 mod utils;
@@ -34,63 +34,69 @@ pub async fn login_device_credential(
     Ok(resp)
 }
 
+const XML_ENC_SHA256: &str = "http://www.w3.org/2001/04/xmlenc#sha256";
+const XML_EXC_C14N: &str = "http://www.w3.org/2001/10/xml-exc-c14n#";
+const XMLDSIG_HMAC_SHA256: &str = "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256";
+const XMLDSIG_RSA_SHA256: &str = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
+
+fn default_signature_references<'t, Str>(multiple_policies: bool) -> Vec<SignatureReference<Str>>
+where
+    Str: FromStrRef<'t>,
+{
+    let refs: &[&str; 3] = &[
+        if multiple_policies { "#RSTS" } else { "#RST0" },
+        "#Timestamp",
+        "#PPAuthInfo",
+    ];
+    generate_signature_references(XML_ENC_SHA256, XML_EXC_C14N, refs)
+}
+
+fn generate_signature_references<'t, Str>(
+    hash_alg: &'t str,
+    canon_alg: &'t str,
+    refs: &[&'t str],
+) -> Vec<SignatureReference<Str>>
+where
+    Str: FromStrRef<'t>,
+{
+    let mut ret = Vec::with_capacity(refs.len());
+    for item in refs {
+        ret.push(SignatureReference {
+            uri: Str::st(item),
+            digest_method: AlgorithmNode {
+                algorithm: Str::st(hash_alg),
+            },
+            digest_value: Str::st(""),
+            transforms: SignatureTransforms {
+                transform: vec![AlgorithmNode {
+                    algorithm: Str::st(canon_alg),
+                }],
+            },
+        });
+    }
+    ret
+}
+
 pub async fn authenticate_device(
     client: &reqwest::Client,
     username: String,
     private_key: rsa::RsaPrivateKey,
-) -> reqwest::Result<soap::Envelope> {
-    let mut header = soap::Header::new();
+) -> reqwest::Result<soap::Envelope<String>> {
+    let mut header: Header<&str> = soap::Header::new();
     let public_key = rsa::RsaPublicKey::from(&private_key);
     header.security.username_token = Some(UsernameToken::devicetoken(username));
     header.security.signature = Some(soap::Signature {
-        xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
+        xmlns: "http://www.w3.org/2000/09/xmldsig#",
         signed_info: SignedInfo {
             canonicalization_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                algorithm: XML_EXC_C14N,
             },
-            reference: vec![
-                SignatureReference {
-                    uri: "#RST0".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#Timestamp".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#PPAuthInfo".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-            ],
+            reference: default_signature_references(false),
             signature_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256".to_string(),
+                algorithm: XMLDSIG_RSA_SHA256,
             },
         },
-        signature_value: "".to_string(),
+        signature_value: "",
         key_info: None,
     });
     let body = soap::Body {
@@ -140,7 +146,8 @@ pub async fn authenticate_device(
         .await?;
 
     let text = response.text().await?;
-    let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
+    let res_envelope: soap::Envelope<String> =
+        quick_xml::de::from_str(&text).expect("Failed to de xml");
 
     Ok(res_envelope)
 }
@@ -152,8 +159,8 @@ pub async fn exchange_device_token(
     hosting_app: String,
     scope: String,
     policy: Option<soap::PolicyReference>,
-) -> reqwest::Result<soap::RequestSecurityTokenResponse> {
-    let mut header = soap::Header::new();
+) -> reqwest::Result<soap::RequestSecurityTokenResponse<String>> {
+    let mut header: Header<&str> = soap::Header::new();
     if let Some(i) = header.auth_info.as_mut() {
         i.hosting_app = hosting_app;
         i.sso_flags = "SsoRestr".to_string();
@@ -182,54 +189,17 @@ pub async fn exchange_device_token(
         requested_token_reference: Some(soap::RequestedTokenReference { key_identifier: soap::KeyIdentifier { value_type: "http://docs.oasis-open.org/wss/2004/XX/oasis-2004XX-wss-saml-token-profile-1.0#SAMLAssertionID".to_string(), value: None }, reference: soap::ReferenceUri { uri: "".to_string() } })
     }];
     header.security.signature = Some(soap::Signature {
-        xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
+        xmlns: "http://www.w3.org/2000/09/xmldsig#",
         signed_info: SignedInfo {
             canonicalization_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                algorithm: XML_EXC_C14N,
             },
-            reference: vec![
-                SignatureReference {
-                    uri: "#RST0".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#Timestamp".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#PPAuthInfo".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-            ],
+            reference: default_signature_references(false),
             signature_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256".to_string(),
+                algorithm: XMLDSIG_HMAC_SHA256,
             },
         },
-        signature_value: "".to_string(),
+        signature_value: "",
         key_info: Some(soap::SignatureKeyInfo {
             security_token_reference: SecurityTokenReference {
                 reference: ReferenceUri {
@@ -279,7 +249,8 @@ pub async fn exchange_device_token(
 
     let text = response.text().await?;
 
-    let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
+    let res_envelope: soap::Envelope<String> =
+        quick_xml::de::from_str(&text).expect("Failed to de xml");
     let mut nonce = None;
     for token in &res_envelope.header.security.derived_key_tokens {
         if token.id == "SignKey" {
@@ -329,8 +300,8 @@ pub async fn exchange_user_token(
     inline_ux: Option<String>,
     hosting_app: String,
     scope_policies: &[(String, Option<soap::PolicyReference>)],
-) -> reqwest::Result<ExchangeUserTokenOutcome> {
-    let mut header = soap::Header::new();
+) -> reqwest::Result<ExchangeUserTokenOutcome<String>> {
+    let mut header: Header<&str> = soap::Header::new();
     if let Some(i) = header.auth_info.as_mut() {
         i.hosting_app = hosting_app;
         i.sso_flags = "SsoRestr".to_string();
@@ -339,8 +310,15 @@ pub async fn exchange_user_token(
         i.inline_ft = inline_token
     }
     header.security.username_token = Some(soap::UsernameToken::user_hint(username));
-    let data: EncryptedData = quick_xml::de::from_str(&user_token).unwrap();
-    header.security.encrypted_data = Some(data);
+    let data: EncryptedData<String> = quick_xml::de::from_str(&user_token).unwrap();
+    header.security.encrypted_data = Some(EncryptedData {
+        cipher_data: data.cipher_data,
+        el_type: &data.el_type,
+        encryption_method: data.encryption_method,
+        id: &data.id,
+        key_info: data.key_info,
+        xmlns: &data.xmlns,
+    });
 
     header.security.binary_security_token = vec![BinarySecurityTokenReq {
         id: "DeviceDAToken".to_string(),
@@ -371,54 +349,17 @@ pub async fn exchange_user_token(
     }];
     let multiple_policies = scope_policies.len() > 1;
     header.security.signature = Some(soap::Signature {
-        xmlns: "http://www.w3.org/2000/09/xmldsig#".to_string(),
+        xmlns: "http://www.w3.org/2000/09/xmldsig#",
         signed_info: SignedInfo {
             canonicalization_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
+                algorithm: XML_EXC_C14N.into(),
             },
-            reference: vec![
-                SignatureReference {
-                    uri: if multiple_policies { "#RSTS" } else { "#RST0" }.to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#Timestamp".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-                SignatureReference {
-                    uri: "#PPAuthInfo".to_string(),
-                    digest_method: AlgorithmNode {
-                        algorithm: "http://www.w3.org/2001/04/xmlenc#sha256".to_string(),
-                    },
-                    digest_value: "".to_string(),
-                    transforms: SignatureTransforms {
-                        transform: vec![AlgorithmNode {
-                            algorithm: "http://www.w3.org/2001/10/xml-exc-c14n#".to_string(),
-                        }],
-                    },
-                },
-            ],
+            reference: default_signature_references(multiple_policies),
             signature_method: AlgorithmNode {
-                algorithm: "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256".to_string(),
+                algorithm: XMLDSIG_HMAC_SHA256.into(),
             },
         },
-        signature_value: "".to_string(),
+        signature_value: "",
         key_info: Some(soap::SignatureKeyInfo {
             security_token_reference: SecurityTokenReference {
                 reference: ReferenceUri {
@@ -495,7 +436,8 @@ pub async fn exchange_user_token(
 
     let text = response.text().await?;
 
-    let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
+    let res_envelope: soap::Envelope<String> =
+        quick_xml::de::from_str(&text).expect("Failed to de xml");
     let mut nonce = None;
     for token in &res_envelope.header.security.derived_key_tokens {
         if token.id == "SignKey" {

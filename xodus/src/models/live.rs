@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::soap;
+use crate::models::soap::{self, StringStorage};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DAProperty {
@@ -47,7 +47,7 @@ impl HostBridgeMessage {
 }
 
 #[derive(Debug)]
-pub enum ExchangeUserTokenOutcome {
-    Issued(soap::BodyContent),
+pub enum ExchangeUserTokenOutcome<Str: StringStorage> {
+    Issued(soap::BodyContent<Str>),
     Fault(Option<soap::PP>),
 }

@@ -1,15 +1,10 @@
 use crate::{
-    hardware,
-    licensing::{
+    hardware, licensing::{
         splicense::SPLicense,
         utils::{generate_string, parse_bcrypt_rsa_private},
-    },
-    models::{
-        devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo},
-        secrets::Device,
-        soap::BodyContent,
-    },
-    tokens::manager::TokenManager,
+    }, models::{
+        devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo}, secrets::Device, soap::{BodyContent, StringStorage},
+    }, tokens::manager::TokenManager,
 };
 
 /// Provisions a device (if none is stored yet) or re-authenticates an existing one
@@ -83,9 +78,9 @@ async fn reauthenticate_device(client: &reqwest::Client, tokens: &TokenManager, 
     }
 }
 
-fn save_device_sts_token(
+fn save_device_sts_token<Str: StringStorage>(
     tokens: &TokenManager,
-    resp: crate::models::soap::RequestSecurityTokenResponse,
+    resp: crate::models::soap::RequestSecurityTokenResponse<Str>,
 ) {
     let key_name = resp
         .requested_security_token

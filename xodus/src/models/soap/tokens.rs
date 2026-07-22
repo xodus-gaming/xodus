@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::soap::StringStorage;
+
 use super::base::{AppliesTo, PolicyReference, Timestamp};
 use super::crypto::EncryptedData;
 
@@ -20,7 +22,7 @@ pub struct RequestSecurityToken {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestSecurityTokenResponse {
+pub struct RequestSecurityTokenResponse<Str: StringStorage> {
     #[serde(rename = "wst:TokenType", alias = "TokenType")]
     pub token_type: String,
     #[serde(rename = "wsp:AppliesTo", alias = "AppliesTo")]
@@ -31,16 +33,16 @@ pub struct RequestSecurityTokenResponse {
         rename = "wst:RequestedSecurityToken",
         alias = "RequestedSecurityToken"
     )]
-    pub requested_security_token: RequestedSecurityToken,
+    pub requested_security_token: RequestedSecurityToken<Str>,
     #[serde(rename = "wst:RequestedProofToken", alias = "RequestedProofToken")]
     pub requested_proof_token: Option<RequestedProofToken>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct RequestedSecurityToken {
+pub struct RequestedSecurityToken<Str: StringStorage> {
     #[serde(rename = "EncryptedData")]
-    pub encrypted_data: Option<EncryptedData>,
+    pub encrypted_data: Option<EncryptedData<Str>>,
     #[serde(rename = "wsse:BinarySecurityToken", alias = "BinarySecurityToken")]
     pub binary_security_token: Option<BinarySecurityTokenRes>,
 }
@@ -84,10 +86,10 @@ pub struct RequestMultipleSecurityTokens {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestSecurityTokenResponseCollection {
+pub struct RequestSecurityTokenResponseCollection<Str: StringStorage> {
     #[serde(
         rename = "wst:RequestSecurityTokenResponse",
         alias = "RequestSecurityTokenResponse"
     )]
-    pub security_tokens: Vec<RequestSecurityTokenResponse>,
+    pub security_tokens: Vec<RequestSecurityTokenResponse<Str>>,
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::soap::{self, Timestamp};
+use crate::models::soap::{self, StringStorage, Timestamp};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Device {
@@ -27,8 +27,8 @@ pub enum Token {
     Compact(String),
 }
 
-impl From<soap::RequestSecurityTokenResponse> for Token {
-    fn from(value: soap::RequestSecurityTokenResponse) -> Self {
+impl<Str: StringStorage> From<soap::RequestSecurityTokenResponse<Str>> for Token {
+    fn from(value: soap::RequestSecurityTokenResponse<Str>) -> Self {
         match value.token_type.as_str() {
             "urn:passport:legacy" => {
                 let encrypted_data = value.requested_security_token.encrypted_data.unwrap();
