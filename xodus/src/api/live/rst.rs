@@ -1,7 +1,7 @@
 use crate::{
     api::live::utils,
     models::{
-        secrets::Token,
+        secrets::{LegacyToken, Token},
         soap::{
             self, XML_SIGNATURE_DIGEST_SHA256, XML_SIGNATURE_METHOD_HMAC, XML_SIGNATURE_METHOD_RSA,
             XML_SIGNATURE_TRANSFORM_EXCLUSIVE,
@@ -99,7 +99,7 @@ pub struct RSTRequestBuilder<'a> {
     header: soap::Header,
     signature: Option<RSTSignature<'a>>,
     scope_policies: Vec<(&'a str, Option<soap::PolicyReference>)>,
-    device_token: Option<Token>,
+    device_token: Option<LegacyToken>,
     user_token: Option<Token>,
     nonce: [u8; 32],
 }
@@ -121,7 +121,7 @@ impl<'a> RSTRequestBuilder<'a> {
         self
     }
 
-    pub fn device_token(mut self, token: Token) -> Self {
+    pub fn device_token(mut self, token: LegacyToken) -> Self {
         self.device_token = Some(token);
         self
     }
@@ -150,6 +150,14 @@ impl<'a> RSTRequestBuilder<'a> {
         self
     }
 
+    pub fn sso_flags(mut self, sso_flags: &'a str) -> Self {
+        self.header
+            .auth_info
+            .as_mut()
+            .map(|a| a.sso_flags = sso_flags.to_string());
+        self
+    }
+
     #[must_use]
     pub fn scope_policy(
         mut self,
@@ -174,6 +182,25 @@ impl<'a> RSTRequestBuilder<'a> {
     pub fn build(mut self) -> (String, RSTRequest<'a>) {
         let mut security_tokens = self.build_request_security_tokens();
         let signature_template = self.build_request_signature_template();
+
+        match (self.device_token, self.user_token) {
+            (Some(dev_token), Some(Token::Legacy(user_token))) => {
+                let encrypted_data = quick_xml::de::from_str(&user_token.token).unwrap();
+                self.header.security.binary_security_token = vec![soap::BinarySecurityTokenReq {
+                    id: "DeviceDAToken".to_string(),
+                    value_type: "urn:liveid:device".to_owned(),
+                    value: dev_token.token,
+                }];
+
+                self.header.security.encrypted_data = Some(encrypted_data);
+            }
+            (Some(dev_token), None) => {
+                let encrypted_data = quick_xml::de::from_str(&dev_token.token).unwrap();
+                self.header.security.encrypted_data = Some(encrypted_data);
+            }
+            (None, None) => (),
+            _ => unimplemented!("Unsupported token variants, error handling is still a TODO"),
+        }
 
         self.header.security.signature = signature_template;
 
