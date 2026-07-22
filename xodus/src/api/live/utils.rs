@@ -90,7 +90,7 @@ pub fn decrypt_response(
             }
         }
         let enc_nonce = enc_nonce.unwrap();
-        let enc_nonce = BASE64_STANDARD.decode(enc_nonce).unwrap();
+        let enc_nonce = BASE64_STANDARD.decode(enc_nonce)?;
 
         let enc_key = generate_shared_key(
             32,
@@ -98,19 +98,17 @@ pub fn decrypt_response(
             "WS-SecureConversationWS-SecureConversation",
             &enc_nonce,
         );
-        let value = BASE64_STANDARD
-            .decode(enc_pp.encrypted_data.cipher_data.cipher_value)
-            .unwrap();
+        let value = BASE64_STANDARD.decode(enc_pp.encrypted_data.cipher_data.cipher_value)?;
         let (iv, encrypted) = value.split_at(16);
-        let iv: &[u8; 16] = iv.try_into().unwrap();
+        let iv: &[u8; 16] = iv.try_into()?;
         let decryptor = Aes256CbcDec::new(&enc_key.into(), iv.into());
         let mut block = [0; 8192];
 
         decryptor
             .decrypt_padded_b2b::<Pkcs7>(encrypted, &mut block)
             .expect("Failed");
-        let result = std::str::from_utf8(&block).unwrap();
-        let new_pp = quick_xml::de::from_str::<soap::PP>(result).unwrap();
+        let result = std::str::from_utf8(&block)?;
+        let new_pp = quick_xml::de::from_str::<soap::PP>(result)?;
         pp = Some(new_pp);
     }
 
@@ -125,7 +123,7 @@ pub fn decrypt_response(
             }
         }
         let enc_nonce = enc_nonce.unwrap();
-        let enc_nonce = BASE64_STANDARD.decode(enc_nonce).unwrap();
+        let enc_nonce = BASE64_STANDARD.decode(enc_nonce)?;
 
         let enc_key = generate_shared_key(
             32,
@@ -134,21 +132,17 @@ pub fn decrypt_response(
             &enc_nonce,
         );
 
-        let value = BASE64_STANDARD
-            .decode(data.cipher_data.cipher_value)
-            .unwrap();
+        let value = BASE64_STANDARD.decode(data.cipher_data.cipher_value)?;
         let (iv, encrypted) = value.split_at(16);
-        let iv: &[u8; 16] = iv.try_into().unwrap();
+        let iv: &[u8; 16] = iv.try_into()?;
 
         let decryptor = Aes256CbcDec::new(&enc_key.into(), iv.into());
         let mut block = [0; 8192];
 
-        decryptor
-            .decrypt_padded_b2b::<Pkcs7>(encrypted, &mut block)
-            .expect("Failed");
-        let result = std::str::from_utf8(&block).unwrap();
+        decryptor.decrypt_padded_b2b::<Pkcs7>(encrypted, &mut block)?;
+        let result = std::str::from_utf8(&block)?;
         // println!("{result}"); // Useful debugging technique
-        let security_token_res: soap::BodyContent = quick_xml::de::from_str(result).unwrap();
+        let security_token_res: soap::BodyContent = quick_xml::de::from_str(result)?;
 
         return Ok((security_token_res, pp));
     }
