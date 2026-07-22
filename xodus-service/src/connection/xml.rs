@@ -85,7 +85,7 @@ pub async fn parse_message(
                 device_token.binary_secret.clone().unwrap(),
                 None,
                 Some("Silent".to_string()),
-                "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
+                req.client_id.to_string(),
                 &[
                     (
                         format!("scope={scope}&api-version=2.0&clientid={}", req.client_id),

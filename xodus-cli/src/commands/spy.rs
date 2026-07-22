@@ -94,7 +94,19 @@ pub(crate) async fn run(files: Vec<String>) {
             }
 
             let proof_token = if let Some(d) = req.header.security.encrypted_data {
-                let Some(sec) = secs.get(&d.cipher_data.cipher_value) else {
+                let Some(sec) = secs.get(&d.cipher_data.cipher_value).or(req
+                    .header
+                    .security
+                    .binary_security_token
+                    .iter()
+                    .find(|p| p.value_type == "urn:liveid:device")
+                    .map(|p| {
+                        let data: EncryptedData<String> =
+                            quick_xml::de::from_str(&p.value).unwrap();
+                        secs.get(&data.cipher_data.cipher_value)
+                    })
+                    .unwrap_or(None))
+                else {
                     println!("MISSING SECRET {}", &d.cipher_data.cipher_value);
                     return;
                 };
@@ -148,9 +160,12 @@ pub(crate) async fn run(files: Vec<String>) {
                 bergshamra::VerifyResult::Valid { .. } => {
                     println!("signature valid");
 
-                    let res = match utils::decrypt_response(res_envelope, &*secret)
-                        .expect("Failed to decrypt")
-                    {
+                    let dec = utils::decrypt_response(res_envelope, &*secret);
+                    if dec.is_err() {
+                        println!("decryption failed");
+                        return;
+                    }
+                    let res = match dec.unwrap() {
                         (soap::BodyContent::RequestSecurityTokenResponse(res), _) => Some(res),
                         (
                             soap::BodyContent::RequestSecurityTokenResponseCollection(

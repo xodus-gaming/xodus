@@ -143,13 +143,10 @@ pub fn decrypt_response(
         let decryptor = Aes256CbcDec::new(&enc_key.into(), iv.into());
         let mut block = [0; 8192];
 
-        decryptor
-            .decrypt_padded_b2b::<Pkcs7>(encrypted, &mut block)
-            .expect("Failed");
+        decryptor.decrypt_padded_b2b::<Pkcs7>(encrypted, &mut block)?;
         let result = std::str::from_utf8(&block).unwrap();
         println!("{result}"); // Useful debugging technique
-        let security_token_res: soap::BodyContent<String> =
-            quick_xml::de::from_str(result).unwrap();
+        let security_token_res: soap::BodyContent<String> = quick_xml::de::from_str(result)?;
 
         return Ok((security_token_res, pp));
     }
