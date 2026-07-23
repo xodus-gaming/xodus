@@ -71,6 +71,10 @@ impl<'t> HttpRead<'t> {
         self.len
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     fn begin_open_stream(&mut self, start: u64) {
         let client = self.client.clone();
         let url = self.url.clone();
@@ -263,6 +267,10 @@ where
 
     pub fn len(&self) -> u64 {
         self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     pub fn cached_len(&self) -> u64 {

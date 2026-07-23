@@ -65,6 +65,10 @@ impl<R> SyncSubstream<R> {
         self.len
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     pub fn into_inner(self) -> R {
         self.inner
     }
@@ -880,10 +884,10 @@ impl XvdFile {
             if page_in_section >= page_start + page_count || remaining == 0 {
                 break;
             }
-            let next = if stream.is_none() {
-                Ok(None)
+            let next = if let Some(s) = stream.as_mut() {
+                timeout(stall_timeout, s.next()).await
             } else {
-                timeout(stall_timeout, stream.as_mut().unwrap().next()).await
+                Ok(None)
             };
             let data: Bytes;
             if let Ok(Some(Ok(b))) = next {
