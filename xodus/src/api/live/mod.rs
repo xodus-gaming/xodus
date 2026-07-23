@@ -38,7 +38,7 @@ pub async fn authenticate_device(
 ) -> Result<soap::Envelope, rst::RSTError> {
     let request = rst::RSTRequestBuilder::new()
         .username(soap::UsernameToken::devicetoken(username))
-        .signature(rst::RSTSignature::RSA(private_key))
+        .signature(rst::RSTSignature::Rsa(Box::new(private_key)))
         .scope_policy("http://Passport.NET/tb", None)
         .build()?;
 
@@ -61,17 +61,17 @@ pub async fn exchange_device_token(
         .sso_flags("SsoRestr")
         .hosting_app(&hosting_app)
         .device_token(token)
-        .signature(rst::RSTSignature::HMAC {
+        .signature(rst::RSTSignature::Hmac {
             clep_secret: &*hmac_secret,
             tpm_secret: &[],
         })
         .scope_policy(&scope, policy)
         .build()?;
 
-    let envelope = request.request(&client).await?;
+    let envelope = request.request(client).await?;
 
     match envelope.body.body {
-        soap::BodyContent::RequestSecurityTokenResponse(res) => Ok(res),
+        soap::BodyContent::RequestSecurityTokenResponse(res) => Ok(*res),
         soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection) => {
             let token = collection.security_tokens.remove(0);
             Ok(token)
@@ -80,6 +80,9 @@ pub async fn exchange_device_token(
     }
 }
 
+// Each parameter maps directly to a distinct SOAP request field; grouping them
+// into a params struct would just move the sprawl rather than reduce it.
+#[allow(clippy::too_many_arguments)]
 pub async fn exchange_user_token(
     client: &reqwest::Client,
     user_token: LegacyToken,
@@ -102,7 +105,7 @@ pub async fn exchange_user_token(
         .hosting_app(&hosting_app)
         .sso_flags("SsoRestr")
         .license_signature_key_version(None)
-        .signature(rst::RSTSignature::HMAC {
+        .signature(rst::RSTSignature::Hmac {
             clep_secret: &*hmac_secret,
             tpm_secret: &[],
         });

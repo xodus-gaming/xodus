@@ -95,7 +95,7 @@ pub fn sign_xml(
 }
 
 pub fn decrypt_soap_encrypted_data<T: serde::de::DeserializeOwned>(
-    encrypted_data: soap::EncryptedData,
+    encrypted_data: Box<soap::EncryptedData>,
     signature: &rst::RSTSignature,
     nonces: &HashMap<String, String>,
 ) -> Result<T, rst::RSTError> {

@@ -71,7 +71,11 @@ fn verify_and_decrypt_envelope<'a>(
         && let Some(enc_pp) = envelope.header.encrypted_pp.take()
     {
         log::trace!("Decrypting soap::PP");
-        let pp = utils::decrypt_soap_encrypted_data(enc_pp.encrypted_data, &signature, &nonces)?;
+        let pp = utils::decrypt_soap_encrypted_data(
+            Box::new(enc_pp.encrypted_data),
+            &signature,
+            &nonces,
+        )?;
         envelope.header.pp = pp;
     }
 

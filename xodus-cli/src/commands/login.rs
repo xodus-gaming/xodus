@@ -21,7 +21,7 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) {
         Some(soap::BodyContent::RequestSecurityTokenResponseCollection(collection)) => {
             collection.security_tokens
         }
-        Some(soap::BodyContent::RequestSecurityTokenResponse(token)) => vec![token],
+        Some(soap::BodyContent::RequestSecurityTokenResponse(token)) => vec![*token],
         None => {
             eprintln!("Didn't log in");
             vec![]

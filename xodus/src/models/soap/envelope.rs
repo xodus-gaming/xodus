@@ -84,6 +84,12 @@ pub struct Header {
     pub pp: Option<PP>,
 }
 
+impl Default for Header {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Header {
     pub fn new() -> Self {
         let now = chrono::Utc::now();
@@ -131,7 +137,7 @@ pub enum BodyContent {
     RequestMultipleSecurityTokens(RequestMultipleSecurityTokens),
 
     RequestSecurityTokenResponseCollection(RequestSecurityTokenResponseCollection),
-    RequestSecurityTokenResponse(RequestSecurityTokenResponse),
-    EncryptedData(EncryptedData),
+    RequestSecurityTokenResponse(Box<RequestSecurityTokenResponse>),
+    EncryptedData(Box<EncryptedData>),
     Fault(Fault),
 }

@@ -45,7 +45,7 @@ pub struct AuthInfo {
 impl Default for AuthInfo {
     fn default() -> Self {
         Self {
-            sso_flags: "".to_string(),
+            sso_flags: String::new(),
             ps: "http://schemas.microsoft.com/Passport/SoapServices/PPCRL".to_owned(),
             id: "PPAuthInfo".to_owned(),
             hosting_app: "{DF60E2DF-88AD-4526-AE21-83D130EF0F68}".to_owned(),

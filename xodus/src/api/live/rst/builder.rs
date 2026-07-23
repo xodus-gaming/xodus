@@ -41,46 +41,40 @@ impl<'a> RSTRequestBuilder<'a> {
     }
 
     pub fn inline_ux(mut self, inline_ux: &'a str) -> Self {
-        self.header
-            .auth_info
-            .as_mut()
-            .map(|a| a.inline_ux = inline_ux.to_string());
+        if let Some(a) = self.header.auth_info.as_mut() {
+            a.inline_ux = inline_ux.to_string();
+        }
         self
     }
 
     pub fn inline_ft(mut self, inline_ft: &'a str) -> Self {
-        self.header
-            .auth_info
-            .as_mut()
-            .map(|a| a.inline_ft = Some(inline_ft.to_string()));
+        if let Some(a) = self.header.auth_info.as_mut() {
+            a.inline_ft = Some(inline_ft.to_string());
+        }
         self
     }
 
     pub fn license_signature_key_version(mut self, version: Option<&'a str>) -> Self {
-        self.header
-            .auth_info
-            .as_mut()
-            .map(|a| a.license_signature_key_version = version.map(str::to_string));
+        if let Some(a) = self.header.auth_info.as_mut() {
+            a.license_signature_key_version = version.map(str::to_string);
+        }
         self
     }
 
     pub fn hosting_app(mut self, hosting_app: &'a str) -> Self {
-        self.header
-            .auth_info
-            .as_mut()
-            .map(|a| a.hosting_app = hosting_app.to_string());
+        if let Some(a) = self.header.auth_info.as_mut() {
+            a.hosting_app = hosting_app.to_string();
+        }
         self
     }
 
     pub fn sso_flags(mut self, sso_flags: &'a str) -> Self {
-        self.header
-            .auth_info
-            .as_mut()
-            .map(|a| a.sso_flags = sso_flags.to_string());
+        if let Some(a) = self.header.auth_info.as_mut() {
+            a.sso_flags = sso_flags.to_string();
+        }
         self
     }
 
-    #[must_use]
     pub fn scope_policy(
         mut self,
         scope: &'a str,
@@ -100,7 +94,6 @@ impl<'a> RSTRequestBuilder<'a> {
         self
     }
 
-    #[must_use]
     pub fn build(mut self) -> Result<RSTRequest<'a>, RSTBuilderError> {
         let mut security_tokens = self.build_request_security_tokens();
 
@@ -186,7 +179,7 @@ impl<'a> RSTRequestBuilder<'a> {
                 digest_method: soap::AlgorithmNode {
                     algorithm: XML_SIGNATURE_DIGEST_SHA256.to_string(),
                 },
-                digest_value: "".to_string(),
+                digest_value: String::new(),
                 transforms: soap::SignatureTransforms {
                     transform: vec![soap::AlgorithmNode {
                         algorithm: XML_SIGNATURE_TRANSFORM_EXCLUSIVE.to_string(),
@@ -222,7 +215,7 @@ impl<'a> RSTRequestBuilder<'a> {
         Some(soap::Signature {
             xmlns: soap::XML_SIGNATURE_NS.to_string(),
             signed_info,
-            key_info: key_info,
+            key_info,
             signature_value: String::default(),
         })
     }

@@ -175,7 +175,7 @@ fn decrypt_cbc_zero_iv<const N: usize>(key_schedule: [u32; 58], data: &[u8; N]) 
     let mut prev: u128 = 0;
     let data_chunks = data.as_chunks::<16>().0;
     let output_chunks = out.as_chunks_mut::<16>().0;
-    for (chunk_in, chunk_out) in data_chunks.into_iter().zip(output_chunks) {
+    for (chunk_in, chunk_out) in data_chunks.iter().zip(output_chunks) {
         let block: [u8; 16] = *chunk_in;
         let next = u128::from_le_bytes(block);
 

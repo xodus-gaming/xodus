@@ -74,7 +74,7 @@ async fn reauthenticate_device(client: &reqwest::Client, tokens: &TokenManager, 
 
 fn save_device_sts_token(
     tokens: &TokenManager,
-    resp: crate::models::soap::RequestSecurityTokenResponse,
+    resp: Box<crate::models::soap::RequestSecurityTokenResponse>,
 ) {
     let key_name = resp
         .requested_security_token
@@ -86,7 +86,7 @@ fn save_device_sts_token(
         .as_ref()
         .unwrap()
         .clone();
-    let token = resp.into();
+    let token = (*resp).into();
     tokens
         .save_device_token(key_name, token)
         .expect("Failed to save device token");

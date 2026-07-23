@@ -47,6 +47,7 @@ pub struct SignatureKeyInfo {
 }
 
 impl SignatureKeyInfo {
+    #[must_use]
     pub fn sign_key() -> Self {
         Self {
             security_token_reference: SecurityTokenReference {

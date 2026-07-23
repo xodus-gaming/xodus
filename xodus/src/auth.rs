@@ -111,7 +111,7 @@ pub async fn do_sisu(
     };
 
     let user_token = crate::api::live::exchange_user_token(
-        &client,
+        client,
         token,
         "USERNAME".to_string(),
         device_token,
@@ -120,7 +120,7 @@ pub async fn do_sisu(
         client_id.to_string(),
         &[
             (
-                format!("scope={scope}&api-version=2.0&clientid={}", client_id),
+                format!("scope={scope}&api-version=2.0&clientid={client_id}"),
                 Some(soap::PolicyReference::token_broker()),
             ),
             ("http://Passport.NET/tb".to_string(), None),
@@ -162,7 +162,7 @@ pub async fn do_sisu(
     let mut auth = XalAuthenticator::new(
         XalAppParameters {
             client_id: client_id.to_owned(),
-            title_id: Some(format!("{}", title_id)),
+            title_id: Some(title_id.to_string()),
             auth_scopes: vec![],
             redirect_uri: None,
             client_secret: None,
@@ -171,7 +171,7 @@ pub async fn do_sisu(
             user_agent: "XAL GRTS 2025.11.20251105.000".to_string(),
             device_type: DeviceType::WIN32,
             client_version: "10.0.22621".to_string(),
-            query_display: "".to_string(),
+            query_display: String::new(),
         },
         "RETAIL".to_owned(),
     );

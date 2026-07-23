@@ -63,7 +63,7 @@ pub async fn get_license(
         }
         ExchangeUserTokenOutcome::Issued(soap::BodyContent::RequestSecurityTokenResponse(
             token,
-        )) => token.into(),
+        )) => (*token).into(),
         _ => unreachable!("Only responses are handled"),
     };
     let Token::Compact(user_token) = user_token else {

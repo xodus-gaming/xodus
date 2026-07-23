@@ -5,8 +5,8 @@ use crate::{
 use base64::prelude::*;
 
 pub enum RSTSignature<'a> {
-    RSA(rsa::RsaPrivateKey),
-    HMAC {
+    Rsa(Box<rsa::RsaPrivateKey>),
+    Hmac {
         clep_secret: &'a [u8],
         /// Used only if TPMInfo public key was sent.
         /// Right now it's not needed, but the builder is capable of signing with it
@@ -17,21 +17,21 @@ pub enum RSTSignature<'a> {
 impl<'a> RSTSignature<'a> {
     pub fn method(&self) -> &'static str {
         match self {
-            RSTSignature::HMAC { .. } => XML_SIGNATURE_METHOD_HMAC,
-            RSTSignature::RSA(_) => XML_SIGNATURE_METHOD_RSA,
+            RSTSignature::Hmac { .. } => XML_SIGNATURE_METHOD_HMAC,
+            RSTSignature::Rsa(_) => XML_SIGNATURE_METHOD_RSA,
         }
     }
 
     pub fn key_info(&self) -> Option<soap::SignatureKeyInfo> {
         match self {
-            RSTSignature::HMAC { .. } => Some(soap::SignatureKeyInfo {
+            RSTSignature::Hmac { .. } => Some(soap::SignatureKeyInfo {
                 security_token_reference: soap::SecurityTokenReference {
                     reference: soap::ReferenceUri {
                         uri: "#SignKey".to_string(),
                     },
                 },
             }),
-            RSTSignature::RSA(_) => None,
+            RSTSignature::Rsa(_) => None,
         }
     }
 
@@ -41,7 +41,7 @@ impl<'a> RSTSignature<'a> {
         reference_uri: &str,
     ) -> Option<soap::DerivedKeyToken> {
         match self {
-            RSTSignature::HMAC { .. } => Some(soap::DerivedKeyToken {
+            RSTSignature::Hmac { .. } => Some(soap::DerivedKeyToken {
                 nonce: BASE64_STANDARD.encode(nonce),
                 id: "SignKey".to_string(),
                 algorithm: "urn:liveid:SP800108_CTR_HMAC_SHA256_DOUBLEDERIVED".to_string(),
@@ -54,12 +54,12 @@ impl<'a> RSTSignature<'a> {
                     reference: soap::ReferenceUri { uri: reference_uri.to_string() },
                 }),
             }),
-            RSTSignature::RSA(_) => None,
+            RSTSignature::Rsa(_) => None,
         }
     }
 
     pub fn hmac_key(&self, nonce: &[u8]) -> Option<[u8; 32]> {
-        if let Self::HMAC {
+        if let Self::Hmac {
             clep_secret,
             tpm_secret,
         } = self
@@ -79,7 +79,7 @@ impl<'a> RSTSignature<'a> {
 
     pub fn signing_key(&self, nonce: &[u8]) -> bergshamra::KeyData {
         match self {
-            RSTSignature::HMAC {
+            RSTSignature::Hmac {
                 clep_secret,
                 tpm_secret,
             } => {
@@ -93,10 +93,10 @@ impl<'a> RSTSignature<'a> {
 
                 bergshamra::KeyData::Hmac(hmac_key.to_vec())
             }
-            RSTSignature::RSA(private_key) => {
-                let public_key = rsa::RsaPublicKey::from(private_key);
+            RSTSignature::Rsa(private_key) => {
+                let public_key = rsa::RsaPublicKey::from(private_key.as_ref());
                 bergshamra::KeyData::Rsa {
-                    private: Some(private_key.clone()),
+                    private: Some(private_key.as_ref().clone()),
                     public: public_key,
                 }
             }
