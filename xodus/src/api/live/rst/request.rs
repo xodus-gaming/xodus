@@ -77,7 +77,7 @@ fn verify_and_decrypt_envelope<'a>(
 
     if let soap::BodyContent::EncryptedData(enc_data) = envelope.body.body {
         log::trace!("Decrypting soap::Body");
-        envelope.body = utils::decrypt_soap_encrypted_data(enc_data, &signature, &nonces)?;
+        envelope.body.body = utils::decrypt_soap_encrypted_data(enc_data, &signature, &nonces)?;
     }
 
     Ok(envelope)

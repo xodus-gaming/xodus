@@ -56,6 +56,14 @@ impl<'a> RSTRequestBuilder<'a> {
         self
     }
 
+    pub fn license_signature_key_version(mut self, version: Option<&'a str>) -> Self {
+        self.header
+            .auth_info
+            .as_mut()
+            .map(|a| a.license_signature_key_version = version.map(str::to_string));
+        self
+    }
+
     pub fn hosting_app(mut self, hosting_app: &'a str) -> Self {
         self.header
             .auth_info
@@ -95,9 +103,8 @@ impl<'a> RSTRequestBuilder<'a> {
     #[must_use]
     pub fn build(mut self) -> Result<RSTRequest<'a>, RSTBuilderError> {
         let mut security_tokens = self.build_request_security_tokens();
-        let signature_template = self.build_request_signature_template();
 
-        match (self.device_token, self.user_token) {
+        match (self.device_token.take(), self.user_token.take()) {
             (Some(dev_token), Some(Token::Legacy(user_token))) => {
                 let encrypted_data = quick_xml::de::from_str(&user_token.token)?;
                 self.header.security.binary_security_token = vec![soap::BinarySecurityTokenReq {
@@ -116,6 +123,7 @@ impl<'a> RSTRequestBuilder<'a> {
             _ => return Err(RSTBuilderError::UnsupportedTokenCombination),
         }
 
+        let signature_template = self.build_request_signature_template();
         self.header.security.signature = signature_template;
 
         let body = soap::Body {
@@ -189,7 +197,15 @@ impl<'a> RSTRequestBuilder<'a> {
 
         let key_info = signature.key_info();
 
-        if let Some(derived_key_token) = signature.derived_key_token(&self.nonce) {
+        let reference_uri = self
+            .header
+            .security
+            .binary_security_token
+            .first()
+            .map(|token| format!("#{}", token.id))
+            .unwrap_or_default();
+
+        if let Some(derived_key_token) = signature.derived_key_token(&self.nonce, &reference_uri) {
             self.header.security.derived_key_tokens = vec![derived_key_token];
         }
 

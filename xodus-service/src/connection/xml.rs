@@ -78,10 +78,9 @@ pub async fn parse_message(
 
             let user_token = xodus::api::live::exchange_user_token(
                 &context.client,
-                token.token,
+                token,
                 "USERNAME".to_string(),
-                device_token.token.clone(),
-                device_token.binary_secret.clone().unwrap(),
+                device_token.clone(),
                 None,
                 Some("Silent".to_string()),
                 req.client_id.clone(),

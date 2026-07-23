@@ -35,7 +35,11 @@ impl<'a> RSTSignature<'a> {
         }
     }
 
-    pub fn derived_key_token(&self, nonce: &[u8]) -> Option<soap::DerivedKeyToken> {
+    pub fn derived_key_token(
+        &self,
+        nonce: &[u8],
+        reference_uri: &str,
+    ) -> Option<soap::DerivedKeyToken> {
         match self {
             RSTSignature::HMAC { .. } => Some(soap::DerivedKeyToken {
                 nonce: BASE64_STANDARD.encode(nonce),
@@ -47,7 +51,7 @@ impl<'a> RSTSignature<'a> {
                         value_type: "http://docs.oasis-open.org/wss/2004/XX/oasis-2004XX-wss-saml-token-profile-1.0#SAMLAssertionID".to_string(),
                         value: None,
                     },
-                    reference: soap::ReferenceUri { uri: "".to_string() },
+                    reference: soap::ReferenceUri { uri: reference_uri.to_string() },
                 }),
             }),
             RSTSignature::RSA(_) => None,

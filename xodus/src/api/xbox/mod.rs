@@ -15,14 +15,11 @@ pub async fn run(
     legacy: LegacyToken,
     relying_party: &str,
 ) -> XstsResponse {
-    let secret = dev_token.binary_secret.unwrap();
-
     let user_token = crate::api::live::exchange_user_token(
         client,
-        legacy.token,
+        legacy,
         "USERNAME".to_string(),
-        dev_token.token,
-        secret,
+        dev_token,
         None,
         Some("Silent".to_string()),
         "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
