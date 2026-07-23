@@ -1,7 +1,9 @@
+use std::process::ExitCode;
+
 use base64::prelude::*;
 use xodus::clep::challenge::{clep_deobfuscate, get_license_challange};
 
-pub fn generate(smbios: Option<String>, disk_serial: Option<String>) {
+pub fn generate(smbios: Option<String>, disk_serial: Option<String>) -> ExitCode {
     let mut smbios_buf = [0u8; 256];
     let mut disk_serial_buf = [0u8; 64];
 
@@ -9,31 +11,33 @@ pub fn generate(smbios: Option<String>, disk_serial: Option<String>) {
         && let Err(err) = fill(&mut smbios_buf, &smbios, "smbios")
     {
         eprintln!("{err}");
-        return;
+        return ExitCode::FAILURE;
     }
     if let Some(disk_serial) = disk_serial
         && let Err(err) = fill(&mut disk_serial_buf, &disk_serial, "disk-serial")
     {
         eprintln!("{err}");
-        return;
+        return ExitCode::FAILURE;
     }
 
     let (v2, v4) = get_license_challange(smbios_buf, disk_serial_buf);
     println!("v2: {}", BASE64_STANDARD.encode(v2));
     println!("v4: {}", BASE64_STANDARD.encode(v4));
+
+    ExitCode::SUCCESS
 }
 
-pub fn decrypt(data: String) {
+pub fn decrypt(data: String) -> ExitCode {
     let decoded = match BASE64_STANDARD.decode(&data) {
         Ok(decoded) => decoded,
         Err(err) => {
             eprintln!("invalid base64 input: {err}");
-            return;
+            return ExitCode::FAILURE;
         }
     };
     let Ok(mut buffer) = <[u8; 2048]>::try_from(decoded) else {
         eprintln!("expected 2048 bytes of challenge data, got a different length");
-        return;
+        return ExitCode::FAILURE;
     };
 
     clep_deobfuscate(&mut buffer);
@@ -46,6 +50,8 @@ pub fn decrypt(data: String) {
     println!("smbios: {}", BASE64_STANDARD.encode(smbios));
     println!("disk_serial: {}", BASE64_STANDARD.encode(disk_serial));
     println!("plaintext: {}", BASE64_STANDARD.encode(buffer));
+
+    ExitCode::SUCCESS
 }
 
 fn fill(buf: &mut [u8], base64_data: &str, name: &str) -> Result<(), String> {

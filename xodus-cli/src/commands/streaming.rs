@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path, vec};
+use std::{collections::HashMap, path::Path, process::ExitCode, vec};
 
 use fs2::available_space;
 use futures_util::{StreamExt, stream};
@@ -41,7 +41,7 @@ pub async fn run(
     try_skip_ntfs: bool,
     parallel: Option<usize>,
     market: Option<String>,
-) {
+) -> ExitCode {
     let (tx, rx) = tokio::sync::mpsc::channel::<ProgressEvent>(256);
     if source.starts_with("file://") {
         let fsrc = source.strip_prefix("file://").unwrap_or_default();
@@ -70,10 +70,10 @@ pub async fn run(
                 let Ok(content_id) = content_id_task else {
                     let Err(err) = content_id_task else {
                         eprintln!("Unknown Error");
-                        return;
+                        return ExitCode::FAILURE;
                     };
                     eprintln!("{}", err);
-                    return;
+                    return ExitCode::FAILURE;
                 };
                 content_id
             } else {
@@ -83,10 +83,10 @@ pub async fn run(
             let Ok(package) = package_result else {
                 let Err(err) = package_result else {
                     eprintln!("Unknown Error");
-                    return;
+                    return ExitCode::FAILURE;
                 };
                 eprintln!("{}", err);
-                return;
+                return ExitCode::FAILURE;
             };
             let Some(file) = package
                 .package_files
@@ -94,7 +94,7 @@ pub async fn run(
                 .find(|p| p.file_name.ends_with(".msixvc"))
             else {
                 eprintln!("No .msixvc file found");
-                return;
+                return ExitCode::FAILURE;
             };
             format!(
                 "{}{}",
@@ -138,6 +138,8 @@ pub async fn run(
         )
         .await;
     }
+
+    ExitCode::SUCCESS
 }
 
 async fn run_cli_reader<Reader>(

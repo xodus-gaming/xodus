@@ -1,3 +1,5 @@
+use std::process::ExitCode;
+
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use inquire::{MultiSelect, validator::Validation};
@@ -12,25 +14,25 @@ pub async fn run(
     product: String,
     market: Option<String>,
     dry_run: bool,
-) {
+) -> ExitCode {
     let content_id_task = get_content_id(client, product, market).await;
     let Ok(content_id) = content_id_task else {
         let Err(err) = content_id_task else {
             eprintln!("Unknown Error");
-            return;
+            return ExitCode::FAILURE;
         };
         eprintln!("{}", err);
-        return;
+        return ExitCode::FAILURE;
     };
 
     let package_result = get_packages(client, tokens, content_id.clone()).await;
     let Ok(package) = package_result else {
         let Err(err) = package_result else {
             eprintln!("Unknown Error");
-            return;
+            return ExitCode::FAILURE;
         };
         eprintln!("{}", err);
-        return;
+        return ExitCode::FAILURE;
     };
 
     let Ok(files) = MultiSelect::new("Select files to download", package.package_files)
@@ -47,7 +49,7 @@ pub async fn run(
         .prompt()
     else {
         log::error!("Selection failed");
-        return;
+        return ExitCode::FAILURE;
     };
     println!();
     for file in files {
@@ -58,7 +60,7 @@ pub async fn run(
         );
         if dry_run {
             println!("{}", url);
-            continue;
+            return ExitCode::SUCCESS;
         }
 
         let progress_bar = ProgressBar::new(file.file_size as u64).with_style(
@@ -90,4 +92,6 @@ pub async fn run(
     }
 
     println!("ContentID: {content_id}");
+
+    ExitCode::SUCCESS
 }

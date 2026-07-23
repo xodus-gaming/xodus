@@ -1,3 +1,5 @@
+use std::process::ExitCode;
+
 use crate::license::get_license;
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 use xodus::tokens::TokenManager;
@@ -8,11 +10,11 @@ pub async fn run(
     content_id: String,
     market: String,
     ciks: String,
-) {
+) -> ExitCode {
     let license = get_license(client, tokens, content_id, market).await;
     if let Err(err) = license {
         eprintln!("{}", err);
-        return;
+        return ExitCode::FAILURE;
     }
 
     let (key, game_splicense) = license.unwrap();
@@ -30,4 +32,6 @@ pub async fn run(
         file.write_all(&*unpacked).await.unwrap();
         file.flush().await.unwrap();
     }
+
+    ExitCode::SUCCESS
 }

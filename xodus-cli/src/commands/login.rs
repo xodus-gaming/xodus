@@ -1,3 +1,5 @@
+use std::process::ExitCode;
+
 use crate::webview;
 use xodus::models::live::{DAProperty, ExchangeUserTokenOutcome};
 use xodus::models::{secrets, soap};
@@ -7,11 +9,11 @@ const CLIENT_ID: &str = "000000004424da1f";
 const LOGIN_MARKET: &str = "en-US";
 const USER_AUTH_SCOPE: &str = "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0";
 
-pub async fn run(client: &reqwest::Client, tokens: &TokenManager) {
+pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
     let token = tokens.get_device_sts_token().unwrap();
     let secrets::Token::Legacy(token) = token else {
         eprintln!("Invalid STS token");
-        return;
+        return ExitCode::FAILURE;
     };
     let handler = LoginHandler::new(client.clone(), token, tokens.clone());
     let output = webview::run_sessions(handler)
@@ -39,6 +41,8 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) {
         };
         tokens.save_user_token(address, token).unwrap();
     }
+
+    ExitCode::SUCCESS
 }
 
 struct LoginHandler {

@@ -1,3 +1,5 @@
+use std::process::ExitCode;
+
 use xodus::tokens::TokenManager;
 
 use crate::commands::streaming;
@@ -8,7 +10,7 @@ pub async fn run(
     path: String,
     destination: String,
     market: String,
-) {
+) -> ExitCode {
     streaming::run(
         client,
         tokens,
@@ -18,5 +20,5 @@ pub async fn run(
         None,
         Some(market),
     )
-    .await;
+    .await
 }

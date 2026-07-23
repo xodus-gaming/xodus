@@ -1,3 +1,5 @@
+use std::process::ExitCode;
+
 use clap::{Parser, Subcommand};
 use xodus::tokens::TokenManager;
 
@@ -105,7 +107,7 @@ struct CliArgs {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> ExitCode {
     env_logger::init_from_env("XODUS_LOG");
     let client = reqwest::ClientBuilder::new()
         .user_agent(format!("xodus-cli/{}", env!("CARGO_PKG_VERSION")))
@@ -118,7 +120,7 @@ async fn main() {
     let tokens = TokenManager::with_keychain_and_memory();
     xodus::tokens::device::ensure_device_credentials(&client, &tokens).await;
 
-    match args.command {
+    let code = match args.command {
         SubCommand::Download {
             product,
             market,
@@ -136,11 +138,9 @@ async fn main() {
                 market.unwrap_or("neutral".to_string()),
                 ciks,
             )
-            .await;
+            .await
         }
-        SubCommand::Login => {
-            commands::login::run(&client, &tokens).await;
-        }
+        SubCommand::Login => commands::login::run(&client, &tokens).await,
         SubCommand::Extract {
             path,
             destination,
@@ -153,7 +153,7 @@ async fn main() {
                 destination,
                 market.unwrap_or("neutral".to_string()),
             )
-            .await;
+            .await
         }
         SubCommand::Streaming {
             source,
@@ -171,7 +171,7 @@ async fn main() {
                 parallel,
                 market,
             )
-            .await;
+            .await
         }
         #[cfg(unix)]
         SubCommand::Run {
@@ -179,9 +179,7 @@ async fn main() {
             wine,
             exe,
             market,
-        } => {
-            commands::run::run(&client, &tokens, source, wine, exe, market).await;
-        }
+        } => commands::run::run(&client, &tokens, source, wine, exe, market).await,
         SubCommand::Clep { action } => match action {
             ClepAction::Generate {
                 smbios,
@@ -190,7 +188,9 @@ async fn main() {
             ClepAction::Decrypt { data } => commands::clep::decrypt(data),
         },
         SubCommand::SpLicense { block } => commands::splicense::run(block),
-    }
+    };
 
     xodus::secrets::destroy_secrets();
+
+    code
 }
