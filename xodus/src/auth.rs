@@ -1,4 +1,4 @@
-use reqwest::{Client};
+use reqwest::Client;
 use xal::{
     AuthPromptCallback, Constants, DeviceType, Flows, TokenStore, XalAppParameters,
     XalAuthenticator,
@@ -12,9 +12,7 @@ use xal::{
 };
 
 use crate::{
-    models::{
-        live::ExchangeUserTokenOutcome, secrets::Token, soap,
-    },
+    models::{live::ExchangeUserTokenOutcome, secrets::Token, soap},
     tokens::TokenManager,
 };
 
