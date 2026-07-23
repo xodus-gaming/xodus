@@ -1,26 +1,26 @@
-use aes::cipher::block_padding::Pkcs7;
-use aes::cipher::{BlockModeDecrypt, KeyIvInit};
+use crate::api::live::rst;
+use crate::models::soap;
+use aes::cipher::{BlockModeDecrypt, KeyIvInit, block_padding::Pkcs7};
 use base64::prelude::*;
 use hmac::{Hmac, Mac};
 use rsa::rand_core::{OsRng, RngCore};
 use rsa::sha2::Sha256;
 use std::cmp::min;
+use std::collections::HashMap;
 use zerocopy::IntoBytes;
-
-use crate::models::soap;
 
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
 /// SP800_108 HMAC with counter
 /// - key_usage - KDF_LABEL
-/// - nonce - KDF_CONTEXT
+/// - context - KDF_CONTEXT
 pub fn generate_shared_key(
     key_length: usize,
     in_key: &[u8],
     key_usage: &str,
-    nonce: &[u8],
+    context: &[u8],
 ) -> [u8; 32] {
-    let len: usize = 4 + key_usage.len() + 1 + nonce.len() + 4;
+    let len: usize = 4 + key_usage.len() + 1 + context.len() + 4;
     let mut shared_key_material: Vec<u8> = vec![0; len];
 
     let mut offset = 0;
@@ -31,8 +31,8 @@ pub fn generate_shared_key(
     // Already zerod
     offset += 1;
 
-    shared_key_material[offset..offset + nonce.len()].copy_from_slice(nonce);
-    offset += nonce.len();
+    shared_key_material[offset..offset + context.len()].copy_from_slice(context);
+    offset += context.len();
 
     let key_bit_length = u32::try_from(key_length * 8).unwrap();
     shared_key_material[offset..offset + 4].copy_from_slice(&key_bit_length.to_be_bytes());
@@ -69,83 +69,58 @@ pub fn generate_nonce() -> [u8; 32] {
     nonce
 }
 
-pub fn decrypt_response(
-    envelope: soap::Envelope,
-    secret: &[u8],
-) -> Result<(soap::BodyContent, Option<soap::PP>), Box<dyn std::error::Error>> {
-    let mut pp = envelope.header.pp;
-    if let Some(enc_pp) = envelope.header.encrypted_pp {
-        let id = enc_pp
-            .encrypted_data
-            .key_info
-            .security_token_reference
-            .unwrap()
-            .reference
-            .uri;
-        let mut enc_nonce = None;
-        for token in &envelope.header.security.derived_key_tokens {
-            if format!("#{}", token.id) == id {
-                enc_nonce = Some(token.nonce.clone());
-                continue;
-            }
-        }
-        let enc_nonce = enc_nonce.unwrap();
-        let enc_nonce = BASE64_STANDARD.decode(enc_nonce)?;
+pub fn sign_xml(
+    signature: Option<&super::rst::RSTSignature>,
+    nonce: &[u8],
+    xml_text: String,
+) -> Result<String, rst::RSTBuilderError> {
+    let Some(signature) = signature else {
+        return Ok(xml_text);
+    };
+    let min_xml = bergshamra::c14n::canonicalize(
+        &xml_text,
+        bergshamra_c14n::C14nMode::Exclusive,
+        None,
+        &[] as &[&str],
+    )?;
 
-        let enc_key = generate_shared_key(
-            32,
-            secret,
-            "WS-SecureConversationWS-SecureConversation",
-            &enc_nonce,
-        );
-        let value = BASE64_STANDARD.decode(enc_pp.encrypted_data.cipher_data.cipher_value)?;
-        let (iv, encrypted) = value.split_at(16);
-        let iv: &[u8; 16] = iv.try_into()?;
-        let decryptor = Aes256CbcDec::new(&enc_key.into(), iv.into());
-        let mut block = [0; 8192];
+    let mut kmgr = bergshamra::KeysManager::new();
+    kmgr.add_key(bergshamra::Key::new(
+        signature.signing_key(nonce),
+        bergshamra::KeyUsage::Sign,
+    ));
+    let ctx = bergshamra::DsigContext::new(kmgr).with_strict_verification(false);
+    let signed = bergshamra::sign(&ctx, std::str::from_utf8(&min_xml).unwrap())?;
+    Ok(signed)
+}
 
-        decryptor
-            .decrypt_padded_b2b::<Pkcs7>(encrypted, &mut block)
-            .expect("Failed");
-        let result = std::str::from_utf8(&block)?;
-        let new_pp = quick_xml::de::from_str::<soap::PP>(result)?;
-        pp = Some(new_pp);
-    }
+pub fn decrypt_soap_encrypted_data<T: serde::de::DeserializeOwned>(
+    encrypted_data: soap::EncryptedData,
+    signature: &rst::RSTSignature,
+    nonces: &HashMap<String, String>,
+) -> Result<T, rst::RSTError> {
+    let id = &encrypted_data
+        .key_info
+        .as_signature()
+        .security_token_reference
+        .reference
+        .uri;
 
-    if let soap::BodyContent::EncryptedData(data) = envelope.body.body {
-        let key_info = data.key_info.as_signature();
-        let id = key_info.security_token_reference.reference.uri;
-        let mut enc_nonce = None;
-        for token in envelope.header.security.derived_key_tokens {
-            if format!("#{}", token.id) == id {
-                enc_nonce = Some(token.nonce);
-                continue;
-            }
-        }
-        let enc_nonce = enc_nonce.unwrap();
-        let enc_nonce = BASE64_STANDARD.decode(enc_nonce)?;
+    let nonce = nonces.get(&id[1..]).ok_or(rst::RSTError::MissingNonce)?;
+    let nonce = BASE64_STANDARD.decode(nonce)?;
+    let key = signature.hmac_key(&nonce).ok_or(rst::RSTError::HmacKey)?;
+    let cipher_value = BASE64_STANDARD.decode(encrypted_data.cipher_data.cipher_value)?;
 
-        let enc_key = generate_shared_key(
-            32,
-            secret,
-            "WS-SecureConversationWS-SecureConversation",
-            &enc_nonce,
-        );
+    let (iv, encrypted) = cipher_value.split_at(16);
+    let iv: &[u8; 16] = iv.try_into().unwrap();
+    let decryptor = Aes256CbcDec::new(&key.into(), iv.into());
+    let mut block = [0; 8192];
 
-        let value = BASE64_STANDARD.decode(data.cipher_data.cipher_value)?;
-        let (iv, encrypted) = value.split_at(16);
-        let iv: &[u8; 16] = iv.try_into()?;
+    decryptor
+        .decrypt_padded_b2b::<Pkcs7>(encrypted, &mut block)
+        .expect("Failed");
+    let result = std::str::from_utf8(&block).unwrap();
+    let data = quick_xml::de::from_str::<T>(result)?;
 
-        let decryptor = Aes256CbcDec::new(&enc_key.into(), iv.into());
-        let mut block = [0; 8192];
-
-        decryptor.decrypt_padded_b2b::<Pkcs7>(encrypted, &mut block)?;
-        let result = std::str::from_utf8(&block)?;
-        // println!("{result}"); // Useful debugging technique
-        let security_token_res: soap::BodyContent = quick_xml::de::from_str(result)?;
-
-        return Ok((security_token_res, pp));
-    }
-
-    Ok((envelope.body.body, pp))
+    Ok(data)
 }

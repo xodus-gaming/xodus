@@ -64,11 +64,26 @@ impl LoginHandler {
         }
     }
 
-    fn exchange_user_token(&self, prop: DAProperty) -> reqwest::Result<ExchangeUserTokenOutcome> {
+    fn exchange_user_token(
+        &self,
+        prop: DAProperty,
+    ) -> Result<ExchangeUserTokenOutcome, Box<dyn std::error::Error>> {
         let client = self.client.clone();
-        let device_token = self.device.token.clone();
-        let binary_secret = self.device.binary_secret.clone();
+        let device_token = self.device.clone();
         let client_id = self.client_id.clone();
+        let username = prop.username;
+        let inline_ft = prop.sts_inline_flow_token;
+        let user_token = xodus::models::secrets::LegacyToken {
+            key_name: None,
+            token: prop.da_token,
+            binary_secret: None,
+            tpm_key: None,
+            lifetime: soap::Timestamp {
+                id: None,
+                created: prop.da_start_time,
+                expires: prop.da_expires,
+            },
+        };
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async move {
@@ -83,16 +98,16 @@ impl LoginHandler {
 
                 xodus::api::live::exchange_user_token(
                     &client,
-                    prop.da_token,
-                    prop.username,
+                    user_token,
+                    username,
                     device_token,
-                    binary_secret.unwrap(),
-                    Some(prop.sts_inline_flow_token),
+                    Some(inline_ft),
                     None,
                     client_id,
                     &scopes,
                 )
                 .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
             })
         })
     }
