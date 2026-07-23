@@ -1,4 +1,4 @@
-use reqwest::{Client, Request};
+use reqwest::{Client};
 use xal::{
     AuthPromptCallback, Constants, DeviceType, Flows, TokenStore, XalAppParameters,
     XalAuthenticator,
@@ -13,7 +13,7 @@ use xal::{
 
 use crate::{
     models::{
-        live::ExchangeUserTokenOutcome, secrets::Token, soap, xgameruntime::xuser::MSATokenResponse,
+        live::ExchangeUserTokenOutcome, secrets::Token, soap,
     },
     tokens::TokenManager,
 };
@@ -98,8 +98,7 @@ pub async fn do_sisu(
     let device_token_resp: soap::RequestSecurityTokenResponse =
         crate::api::live::exchange_device_token(
             client,
-            device_token.token.clone(),
-            device_token.binary_secret.clone().unwrap(),
+            device_token.clone(),
             "{28C08266-F973-4AE6-FFE4-409B249F138F}".to_string(),
             "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0".to_owned(),
             Some(soap::PolicyReference::token_broker()),
@@ -115,10 +114,9 @@ pub async fn do_sisu(
 
     let user_token = crate::api::live::exchange_user_token(
         &client,
-        token.token,
+        token,
         "USERNAME".to_string(),
-        device_token.token.clone(),
-        device_token.binary_secret.clone().unwrap(),
+        device_token,
         None,
         Some("Silent".to_string()),
         client_id.to_string(),
