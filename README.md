@@ -1,5 +1,5 @@
 <p align="center"><img width="128" src="assets/Icon/Icon.ico" /></p>
-<h1 align="center">XODUS</h1>
+<h1 align="center">Xodus</h1>
 <p align="center">The great gaming migration to Linux</p>
 <p align="center">
     <a href="https://discord.gg/ZG774FK4tq">
