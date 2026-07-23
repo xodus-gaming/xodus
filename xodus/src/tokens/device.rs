@@ -54,18 +54,7 @@ async fn provision_device(client: &reqwest::Client, tokens: &TokenManager) {
         .save_device_license(&device)
         .expect("Failed to save device license");
 
-    let sp_license = SPLicense::parse_base64(&device.splicense).expect("Failed to parse SPLicense");
-    let clep_sign_state = sp_license.clep_sign_state.expect("Missing clep sign state");
-    let key = clep_sign_state.get_rsa_key();
-    let private_key = parse_bcrypt_rsa_private(&key).unwrap();
-
-    let resp = crate::api::live::authenticate_device(client, username, private_key)
-        .await
-        .expect("Failed to auth device");
-
-    if let BodyContent::RequestSecurityTokenResponse(resp) = resp.body.body {
-        save_device_sts_token(tokens, resp);
-    }
+    reauthenticate_device(client, tokens, device).await;
 }
 
 async fn reauthenticate_device(client: &reqwest::Client, tokens: &TokenManager, license: Device) {

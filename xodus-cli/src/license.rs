@@ -20,12 +20,9 @@ pub async fn get_license(
         return Err("Unspported user token".to_string());
     };
 
-    let secret = dev_token.binary_secret.unwrap();
-
     let ms_device_token = xodus::api::live::exchange_device_token(
         client,
-        dev_token.token.clone(),
-        secret.clone(),
+        dev_token.clone(),
         "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
         "www.microsoft.com".to_owned(),
         Some(soap::PolicyReference::mbi_ssl()),
@@ -35,10 +32,9 @@ pub async fn get_license(
 
     let user_token = xodus::api::live::exchange_user_token(
         client,
-        legacy.token,
+        legacy,
         user.username,
-        dev_token.token,
-        secret,
+        dev_token,
         None,
         Some("Silent".to_string()),
         "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),

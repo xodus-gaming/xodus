@@ -52,17 +52,16 @@ pub async fn parse_message(
                 return Ok(vec![]);
             };
             let scope = if req.msa_full_trust {
-                "service::user.auth.xboxlive.com::MBI_SSL".to_owned()
+                "service::user.auth.xboxlive.com::MBI_SSL"
             } else {
-                "xboxlive.signin".to_owned()
+                "xboxlive.signin"
             };
             let device_token = context.device_token.as_ref().unwrap();
             let device_token_resp = xodus::api::live::exchange_device_token(
                 &context.client,
-                device_token.token.clone(),
-                device_token.binary_secret.clone().unwrap(),
+                device_token.clone(),
                 "{28C08266-F973-4AE6-FFE4-409B249F138F}".to_string(),
-                "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0".to_owned(),
+                "scope=service::user.auth.xboxlive.com::MBI_SSL".to_owned(),
                 Some(soap::PolicyReference::token_broker()),
             )
             .await;
@@ -79,13 +78,12 @@ pub async fn parse_message(
 
             let user_token = xodus::api::live::exchange_user_token(
                 &context.client,
-                token.token,
+                token,
                 "USERNAME".to_string(),
-                device_token.token.clone(),
-                device_token.binary_secret.clone().unwrap(),
+                device_token.clone(),
                 None,
                 Some("Silent".to_string()),
-                req.client_id.to_string(),
+                req.client_id.clone(),
                 &[
                     (
                         format!("scope={scope}&api-version=2.0&clientid={}", req.client_id),

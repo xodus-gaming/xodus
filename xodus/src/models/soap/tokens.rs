@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::soap::{CipherData, EncryptionMethod};
+
 use super::base::{AppliesTo, PolicyReference, Timestamp};
 use super::crypto::EncryptedData;
 
@@ -71,6 +73,15 @@ pub struct BinarySecurityTokenReq {
 pub struct RequestedProofToken {
     #[serde(rename = "wst:BinarySecret", alias = "BinarySecret")]
     pub binary_secret: String,
+    #[serde(rename = "EncryptedKey")]
+    pub encrypted_key: Option<EncryptedKey>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct EncryptedKey {
+    pub encryption_method: EncryptionMethod,
+    pub cipher_data: CipherData,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
