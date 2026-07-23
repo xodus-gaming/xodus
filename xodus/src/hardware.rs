@@ -19,7 +19,7 @@ pub fn probe_provision_components() -> Vec<Component> {
     let mut drive_buf = [0; 64];
 
     let smbios = load_raw_smbios().ok();
-    let parsed_smbios = load_smbios_fields().ok();
+    let parsed_smbios = load_smbios_fields(smbios.as_deref()).ok();
 
     drive_buf
         .iter_mut()
@@ -75,13 +75,14 @@ pub fn probe_provision_components() -> Vec<Component> {
 }
 
 #[cfg(target_os = "linux")]
-fn load_smbios_fields() -> io::Result<(Vec<u8>, Vec<u8>, [u8; 16])> {
-    let smbios = load_raw_smbios()?;
-    Ok(parse_smbios(&smbios))
+fn load_smbios_fields(raw: Option<&[u8]>) -> io::Result<(Vec<u8>, Vec<u8>, [u8; 16])> {
+    let smbios =
+        raw.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "missing raw SMBIOS data"))?;
+    Ok(parse_smbios(smbios))
 }
 
 #[cfg(not(target_os = "linux"))]
-fn load_smbios_fields() -> io::Result<(Vec<u8>, Vec<u8>, [u8; 16])> {
+fn load_smbios_fields(_raw: Option<&[u8]>) -> io::Result<(Vec<u8>, Vec<u8>, [u8; 16])> {
     let data = table_load_from_device()?;
     let system_info = data
         .first::<SMBiosSystemInformation>()
