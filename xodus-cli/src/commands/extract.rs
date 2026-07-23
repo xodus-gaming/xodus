@@ -26,6 +26,8 @@ pub async fn run(
     }
     if let Some((_, content_key)) = game_splicense.content_keys.into_iter().next() {
         let unpacked = content_key.unpack(&key).expect("failed to unpack");
-        unpack_file(xvd, path.to_string(), destination.to_string(), *unpacked).expect("unpack ok");
+        unpack_file(xvd, path.to_string(), destination.to_string(), *unpacked)
+            .await
+            .expect("unpack ok");
     }
 }

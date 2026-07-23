@@ -970,52 +970,27 @@ impl XvdFile {
     }
 }
 
-pub fn unpack_file(
+pub async fn unpack_file(
     xvd: XvdFile,
     path: String,
     destination: String,
     full_key: [u8; 32],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let sfile = std::fs::File::open(path)?;
-    let block_size = 4096; //xvd.header.block_size;
-    let gp = gpt::GptConfig::new()
-        .writable(false)
-        .logical_block_size(if block_size == 512 {
-            gpt::disk::LogicalBlockSize::Lb512
-        } else if block_size == 4096 {
-            gpt::disk::LogicalBlockSize::Lb4096
-        } else {
-            todo!("unsupported block_size: {}", block_size)
-        })
-        .open_from_device(XvdStream {
-            inner: sfile.try_clone().unwrap(),
-            offset: xvd.drive_data_offset,
-            end_offset: xvd.drive_data_offset + xvd.header.drive_size,
-            encryption_info: None,
-        })
-        .unwrap();
+    use tokio::io::AsyncSeekExt;
 
-    let mut ntfs_partition = None;
-    for (index, part) in gp.partitions() {
-        if !part.is_used() {
-            continue;
-        }
+    let mut file = tokio::fs::File::open(path).await?;
+    file.seek(std::io::SeekFrom::Start(xvd.drive_data_offset))
+        .await?;
 
-        let part_start = part.bytes_start(*gp.logical_block_size()).unwrap();
-        let part_len = part.bytes_len(*gp.logical_block_size()).unwrap();
+    let data_part =
+        crate::gpt::goto_windows_basic_data_partition(&mut file, xvd.header.volume_flags).await?;
 
-        if ntfs_partition.is_none() {
-            ntfs_partition = Some((index, part.name.clone(), part_start, part_len));
-        }
-    }
-
-    let (_, _, part_start, part_len) = ntfs_partition.expect("no used GPT partition found");
-    let partition_offset = xvd.drive_data_offset + part_start;
+    println!("{data_part:?}");
 
     let mut fs = XvdStream {
-        inner: sfile.try_clone().unwrap(),
-        offset: partition_offset,
-        end_offset: partition_offset + part_len,
+        inner: file.into_std().await,
+        offset: xvd.drive_data_offset + data_part.start,
+        end_offset: xvd.drive_data_offset + data_part.end,
         encryption_info: Some(XvdEncryptionInfo {
             full_key,
             encrypted_sections: xvd.encrypted_section_infos,
