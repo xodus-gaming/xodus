@@ -75,7 +75,13 @@ pub async fn do_sisu(
     manager: &TokenManager,
     client_id: &str,
     title_id: i64,
-) -> Result<xal::response::SisuRPSAuthorizationResponse, Box<dyn std::error::Error>> {
+) -> Result<
+    (
+        XalAuthenticator,
+        xal::response::SisuRPSAuthorizationResponse,
+    ),
+    Box<dyn std::error::Error>,
+> {
     let Token::Legacy(token) = manager.get_user_sts_token()? else {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::BrokenPipe,
@@ -181,7 +187,7 @@ pub async fn do_sisu(
         .sisu_authorize_rps(&user_token, &data.token, None)
         .await
         .expect("ok");
-    Ok(resp)
+    Ok((auth, resp))
 }
 
 #[ignore]
@@ -191,7 +197,7 @@ async fn test_minecraft_win_auth() {
     crate::secrets::init_secrets().expect("Unable to initialize credentials");
     let tokens = TokenManager::with_keychain_and_memory();
 
-    let resp = do_sisu(&client, &tokens, "0000000040159362", 896928775)
+    let (_, resp) = do_sisu(&client, &tokens, "0000000040159362", 896928775)
         .await
         .expect("ok");
 
