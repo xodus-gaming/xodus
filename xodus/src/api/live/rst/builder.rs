@@ -1,99 +1,13 @@
+use super::RSTRequest;
+use super::error::RSTBuilderError;
+use super::signature::RSTSignature;
 use crate::{
     api::live::utils,
     models::{
         secrets::{LegacyToken, Token},
-        soap::{
-            self, XML_SIGNATURE_DIGEST_SHA256, XML_SIGNATURE_METHOD_HMAC, XML_SIGNATURE_METHOD_RSA,
-            XML_SIGNATURE_TRANSFORM_EXCLUSIVE,
-        },
+        soap::{self, XML_SIGNATURE_DIGEST_SHA256, XML_SIGNATURE_TRANSFORM_EXCLUSIVE},
     },
 };
-use base64::prelude::*;
-
-pub enum RSTSignature<'a> {
-    RSA(rsa::RsaPrivateKey),
-    HMAC {
-        clep_secret: &'a [u8],
-        tpm_secret: &'a [u8],
-    },
-}
-
-impl<'a> RSTSignature<'a> {
-    fn method(&self) -> &'static str {
-        match self {
-            RSTSignature::HMAC { .. } => XML_SIGNATURE_METHOD_HMAC,
-            RSTSignature::RSA(_) => XML_SIGNATURE_METHOD_RSA,
-        }
-    }
-
-    fn key_info(&self) -> Option<soap::SignatureKeyInfo> {
-        match self {
-            RSTSignature::HMAC { .. } => Some(soap::SignatureKeyInfo {
-                security_token_reference: soap::SecurityTokenReference {
-                    reference: soap::ReferenceUri {
-                        uri: "#SignKey".to_string(),
-                    },
-                },
-            }),
-            RSTSignature::RSA(_) => None,
-        }
-    }
-
-    fn derived_key_token(&self, nonce: &[u8]) -> Option<soap::DerivedKeyToken> {
-        match self {
-            RSTSignature::HMAC { .. } => Some(soap::DerivedKeyToken {
-                nonce: BASE64_STANDARD.encode(nonce),
-                id: "SignKey".to_string(),
-                algorithm: "urn:liveid:SP800108_CTR_HMAC_SHA256_DOUBLEDERIVED".to_string(),
-                token_reference: None,
-                requested_token_reference: Some(soap::RequestedTokenReference {
-                    key_identifier: soap::KeyIdentifier {
-                        value_type: "http://docs.oasis-open.org/wss/2004/XX/oasis-2004XX-wss-saml-token-profile-1.0#SAMLAssertionID".to_string(),
-                        value: None,
-                    },
-                    reference: soap::ReferenceUri { uri: "".to_string() },
-                }),
-            }),
-            RSTSignature::RSA(_) => None,
-        }
-    }
-
-    fn signing_key(&self, nonce: &[u8]) -> bergshamra::Key {
-        match self {
-            RSTSignature::HMAC {
-                clep_secret,
-                tpm_secret,
-            } => {
-                let clep_key =
-                    utils::generate_shared_key(32, clep_secret, soap::HMAC_KEY_USAGE, nonce);
-                let hmac_key = if !tpm_secret.is_empty() {
-                    utils::generate_shared_key(32, tpm_secret, soap::HMAC_KEY_USAGE, &clep_key)
-                } else {
-                    clep_key
-                };
-
-                bergshamra::Key::new(
-                    bergshamra::KeyData::Hmac(hmac_key.to_vec()),
-                    bergshamra::KeyUsage::Sign,
-                )
-            }
-            RSTSignature::RSA(private_key) => {
-                let public_key = rsa::RsaPublicKey::from(private_key);
-                bergshamra::Key::new(
-                    bergshamra::KeyData::Rsa {
-                        private: Some(private_key.clone()),
-                        public: public_key,
-                    },
-                    bergshamra::KeyUsage::Sign,
-                )
-            }
-        }
-    }
-}
-
-pub struct RSTRequest<'a> {
-    pub signature: Option<RSTSignature<'a>>,
-}
 
 pub struct RSTRequestBuilder<'a> {
     header: soap::Header,
@@ -179,13 +93,13 @@ impl<'a> RSTRequestBuilder<'a> {
     }
 
     #[must_use]
-    pub fn build(mut self) -> (String, RSTRequest<'a>) {
+    pub fn build(mut self) -> Result<RSTRequest<'a>, RSTBuilderError> {
         let mut security_tokens = self.build_request_security_tokens();
         let signature_template = self.build_request_signature_template();
 
         match (self.device_token, self.user_token) {
             (Some(dev_token), Some(Token::Legacy(user_token))) => {
-                let encrypted_data = quick_xml::de::from_str(&user_token.token).unwrap();
+                let encrypted_data = quick_xml::de::from_str(&user_token.token)?;
                 self.header.security.binary_security_token = vec![soap::BinarySecurityTokenReq {
                     id: "DeviceDAToken".to_string(),
                     value_type: "urn:liveid:device".to_owned(),
@@ -195,11 +109,11 @@ impl<'a> RSTRequestBuilder<'a> {
                 self.header.security.encrypted_data = Some(encrypted_data);
             }
             (Some(dev_token), None) => {
-                let encrypted_data = quick_xml::de::from_str(&dev_token.token).unwrap();
+                let encrypted_data = quick_xml::de::from_str(&dev_token.token)?;
                 self.header.security.encrypted_data = Some(encrypted_data);
             }
             (None, None) => (),
-            _ => unimplemented!("Unsupported token variants, error handling is still a TODO"),
+            _ => return Err(RSTBuilderError::UnsupportedTokenCombination),
         }
 
         self.header.security.signature = signature_template;
@@ -219,15 +133,13 @@ impl<'a> RSTRequestBuilder<'a> {
         };
 
         let envelope = soap::Envelope::new(self.header, body);
-        let xml = quick_xml::se::to_string(&envelope).unwrap();
-        let signed_xml = sign_xml(self.signature.as_ref(), &self.nonce, xml);
+        let xml = quick_xml::se::to_string(&envelope)?;
+        let signed_xml = utils::sign_xml(self.signature.as_ref(), &self.nonce, xml)?;
 
-        (
+        Ok(RSTRequest {
             signed_xml,
-            RSTRequest {
-                signature: self.signature,
-            },
-        )
+            signature: self.signature,
+        })
     }
 
     fn build_request_security_tokens(&self) -> Vec<soap::RequestSecurityToken> {
@@ -298,22 +210,4 @@ impl<'a> RSTRequestBuilder<'a> {
             signature_value: String::default(),
         })
     }
-}
-
-fn sign_xml(signature: Option<&RSTSignature>, nonce: &[u8], xml_text: String) -> String {
-    let Some(signature) = signature else {
-        return xml_text;
-    };
-    let min_xml = bergshamra::c14n::canonicalize(
-        &xml_text,
-        bergshamra_c14n::C14nMode::Exclusive,
-        None,
-        &[] as &[&str],
-    )
-    .unwrap();
-
-    let mut kmgr = bergshamra::KeysManager::new();
-    kmgr.add_key(signature.signing_key(nonce));
-    let ctx = bergshamra::DsigContext::new(kmgr).with_strict_verification(false);
-    bergshamra::sign(&ctx, std::str::from_utf8(&min_xml).unwrap()).unwrap()
 }

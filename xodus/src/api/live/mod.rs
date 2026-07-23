@@ -40,26 +40,14 @@ pub async fn authenticate_device(
     client: &reqwest::Client,
     username: String,
     private_key: rsa::RsaPrivateKey,
-) -> reqwest::Result<soap::Envelope> {
-    let (signed_xml, _request) = rst::RSTRequestBuilder::new()
+) -> Result<soap::Envelope, rst::RSTError> {
+    let request = rst::RSTRequestBuilder::new()
         .username(UsernameToken::devicetoken(username))
         .signature(rst::RSTSignature::RSA(private_key))
         .scope_policy("http://Passport.NET/tb", None)
-        .build();
+        .build()?;
 
-    let response = client
-        .post("https://login.live.com/RST2.srf")
-        .header("User-Agent", "MSAWindows/55 (OS 10.0.26100.0.0 ge_release; IDK 10.0.26100.5074 ge_release; Cfg 16.000.29325.00; Test 0)")
-        .header("Content-Type", "application/soap+xml")
-        .header("Host", "login.live.com")
-        .body(signed_xml)
-        .send()
-        .await?;
-
-    let text = response.text().await?;
-    let res_envelope: soap::Envelope = quick_xml::de::from_str(&text).expect("Failed to de xml");
-
-    Ok(res_envelope)
+    request.request(client).await
 }
 
 pub async fn exchange_device_token(
@@ -68,15 +56,13 @@ pub async fn exchange_device_token(
     hosting_app: String,
     scope: String,
     policy: Option<soap::PolicyReference>,
-) -> reqwest::Result<soap::RequestSecurityTokenResponse> {
-    let secret = BASE64_STANDARD
-        .decode(token.binary_secret.as_ref().unwrap())
-        .unwrap();
+) -> Result<soap::RequestSecurityTokenResponse, rst::RSTError> {
+    let secret = BASE64_STANDARD.decode(token.binary_secret.as_ref().unwrap())?;
     let secret: [u8; 4096] = secret.try_into().unwrap();
     let secret: ClepHmacState = transmute!(secret);
     let hmac_secret = secret.get_hmac_state();
 
-    let (signed_xml, _request) = rst::RSTRequestBuilder::new()
+    let request = rst::RSTRequestBuilder::new()
         .sso_flags("SsoRestr")
         .hosting_app(&hosting_app)
         .device_token(token)
@@ -85,20 +71,18 @@ pub async fn exchange_device_token(
             tpm_secret: &[],
         })
         .scope_policy(&scope, policy)
-        .build();
+        .build()?;
 
-    let response = client
-        .post("https://login.live.com/RST2.srf")
-        .header("User-Agent", "MSAWindows/55 (OS 10.0.26100.0.0 ge_release; IDK 10.0.26100.5074 ge_release; Cfg 16.000.29325.00; Test 0)")
-        .header("Content-Type", "application/soap+xml")
-        .header("Host", "login.live.com")
-        .body(signed_xml)
-        .send()
-        .await?;
+    let envelope = request.request(&client).await?;
 
-    let text = response.text().await?;
-
-    todo!("New response decryption isnt complete");
+    match envelope.body.body {
+        soap::BodyContent::RequestSecurityTokenResponse(res) => Ok(res),
+        soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection) => {
+            let token = collection.security_tokens.remove(0);
+            Ok(token)
+        }
+        b => unimplemented!("Exchange token supports only singular token right now {b:?}"),
+    }
 }
 
 pub async fn exchange_user_token(
@@ -306,13 +290,12 @@ pub async fn exchange_user_token(
             println!("signature valid");
         }
     }
+    todo!("User exchange is not implemented");
 
-    let (body, pp) = utils::decrypt_response(res_envelope, &*secret).expect("Failed to decrypt");
-
-    match body {
-        soap::BodyContent::Fault(_) => Ok(ExchangeUserTokenOutcome::Fault(pp)),
-        body => Ok(ExchangeUserTokenOutcome::Issued(body)),
-    }
+    // match body {
+    //     soap::BodyContent::Fault(_) => Ok(ExchangeUserTokenOutcome::Fault(pp)),
+    //     body => Ok(ExchangeUserTokenOutcome::Issued(body)),
+    // }
 }
 
 #[cfg(test)]
