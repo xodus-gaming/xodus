@@ -178,6 +178,7 @@ pub enum LicenseType {
     User,
     Full,
     KeyHolder,
+    Trial,
 }
 
 #[derive(Deserialize, Debug)]
