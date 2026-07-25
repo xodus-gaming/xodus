@@ -20,7 +20,7 @@ These parts are still quite scattered arround.
 - [x] User login
 - [x] XBOX authorization
 - [x] MSIXVC download
-- [ ] On-demand .exe decryption [#50](https://github.com/xodus-gaming/xodus/issues/50)
+- [x] On-demand .exe decryption [#50](https://github.com/xodus-gaming/xodus/issues/50)
 - [ ] MSIXVC2 support [#53](https://github.com/xodus-gaming/xodus/issues/53)
 
 ## FAQ
