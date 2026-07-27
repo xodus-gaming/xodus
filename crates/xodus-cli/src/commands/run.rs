@@ -9,7 +9,6 @@ use msixvc::{
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 use rustix::io::{FdFlags, fcntl_getfd, fcntl_setfd};
-use tempfile::tempdir;
 use tokio::fs::{File, OpenOptions};
 use tokio::process::Command;
 use xodus::tokens::TokenManager;
@@ -19,10 +18,10 @@ use crate::license::get_license;
 #[cfg(target_os = "linux")]
 use rustix::fs::{MemfdFlags, memfd_create};
 #[cfg(not(target_os = "linux"))]
-use tempfile::{tempfile, tempfile_in};
+use tempfile::{tempdir, tempfile, tempfile_in};
 
 #[cfg(target_os = "linux")]
-fn make_temp_file(folder: &str) -> std::io::Result<std::fs::File> {
+fn make_temp_file(_folder: &str) -> std::io::Result<std::fs::File> {
     let fd = memfd_create("xodus", MemfdFlags::CLOEXEC).map_err(std::io::Error::from)?;
     Ok(std::fs::File::from(fd))
 }
@@ -111,7 +110,7 @@ async fn prepare(lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(), 
 }
 
 #[cfg(not(target_os = "macos"))]
-async fn prepare(lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(), String) {
+async fn prepare(_lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(), String) {
     (async || {}, "".to_owned())
 }
 
