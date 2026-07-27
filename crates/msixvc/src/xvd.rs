@@ -958,7 +958,7 @@ impl XvdFile {
                 PAGE_SIZE,
                 sfile.length as usize
                     - min(
-                        (page_in_section - page_start) as usize * 4096 as usize,
+                        (page_in_section - page_start) as usize * 4096_usize,
                         sfile.length as usize,
                     ),
             ) as usize;

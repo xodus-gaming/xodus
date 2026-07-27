@@ -63,7 +63,7 @@ async fn prepare(lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(), 
     let fmt = Command::new("/sbin/newfs_hfs")
         .arg("-v")
         .arg(vol)
-        .arg(&device)
+        .arg(device)
         .status()
         .await
         .unwrap();
@@ -78,7 +78,7 @@ async fn prepare(lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(), 
         .arg("-o")
         .arg("nobrowse")
         .arg("-v")
-        .arg(&device)
+        .arg(device)
         .arg(mount_dir)
         .status()
         .await
@@ -197,7 +197,7 @@ pub async fn run(
 
         let mut i = File::open(&source_path).await.unwrap();
 
-        xvd.mount_mem_fd(&mut i, &mut game_exe, &file.1, *full_key, |_, _| {})
+        xvd.mount_mem_fd(&mut i, &mut game_exe, file.1, *full_key, |_, _| {})
             .await
             .unwrap();
 

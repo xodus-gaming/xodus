@@ -160,7 +160,7 @@ where
 {
     tokio::spawn(async move {
         let multi_progress = MultiProgress::new();
-        let total_progess = multi_progress.add(ProgressBar::new(l as u64).with_style(
+        let total_progess = multi_progress.add(ProgressBar::new(l).with_style(
             ProgressStyle::with_template("{msg:30!} {bytes:>12}/{total_bytes:>12} {bytes_per_sec:>12} [{bar:40.cyan/blue}] {percent:>3}%").unwrap()
             .progress_chars("#>-")
         ));
