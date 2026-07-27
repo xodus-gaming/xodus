@@ -39,4 +39,7 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Run check
-        run: cargo check --workspace
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --workspace --message-format=json | python3 scripts/cargo-annotate.py "${{ matrix.target }}"
