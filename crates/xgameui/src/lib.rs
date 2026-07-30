@@ -8,22 +8,42 @@ use serde::{Deserialize, Serialize};
 #[derive(Default)]
 pub struct PlayerPicker {
     users: HashMap<String, ProfileUser>,
+    submit: String,
 }
 
 impl PlayerPicker {
     pub fn new(cc: &CreationContext<'_>, users: HashMap<String, ProfileUser>) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
 
-        Self { users }
+        let mut s = Self { users, submit: String::new() };
+
+        s.submit = s.get_submit_text();
+
+        s
+    }
+}
+
+impl PlayerPicker {
+    fn get_submit_text(&self) -> String {
+        format!("Selected {} Player", self.users.iter().filter(|f| f.1.selected).count())
     }
 }
 
 impl eframe::App for PlayerPicker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::bottom("bottom_bar").show(ui, |ui| {
+            ui.centered_and_justified(|ui| {
+                if ui.button(&self.submit).clicked() {
+                    
+                }
+            });
+        });
+
         egui::CentralPanel::default().show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
+                    let mut changed = false;
                     for user in self.users.values_mut() {
                         ui.horizontal(|ui| {
                             let (_, rect) = ui.allocate_space(egui::vec2(50.0, 50.0));
@@ -34,6 +54,7 @@ impl eframe::App for PlayerPicker {
                                 ui.interact(r2, Id::new(user.id.clone()), Sense::click());
                             if response.clicked() {
                                 user.selected = !user.selected;
+                                changed = true;
                             }
                             let painter = ui.painter();
                             painter.rect_filled(
@@ -52,6 +73,9 @@ impl eframe::App for PlayerPicker {
                             }
                             ui.label(&user.description);
                         });
+                    }
+                    if changed {
+                        self.submit = self.get_submit_text();
                     }
                 });
         });

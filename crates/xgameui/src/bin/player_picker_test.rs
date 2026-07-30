@@ -21,7 +21,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1180.0, 760.0])
-            .with_min_inner_size([860.0, 560.0])
             .with_title("Player Picker"),
         ..Default::default()
     };
