@@ -276,6 +276,7 @@ pub async fn fetch_user_profiles(
         })
         .send()
         .await?
+        .error_for_status()?
         .json::<UserProfileBatchResponse>()
         .await?;
 
@@ -309,13 +310,10 @@ pub async fn fetch_friends(
         .header("Authorization", token)
         .header("Accept-Language", "en-US")// Required for no http 400
         .send()
-        .await?;
-
-    println!("Friends response: {} {:?}", r.status(), r.content_length());
+        .await?
+        .error_for_status()?;
 
     let t: PeopleHubResponse = r.json().await?;
-
-    println!("Friends response text: {:?}", t);
 
     let mut out = HashMap::new();
     for entry in t.people {
@@ -352,6 +350,7 @@ pub async fn fetch_gt(
         .header("Authorization", token)
         .send()
         .await?
+        .error_for_status()?
         .json::<UserProfileBatchResponse>()
         .await?;
 
