@@ -9075,6 +9075,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "xodus-gui"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "egui_extras",
+]
+
+[[package]]
 name = "xodus-service"
 version = "0.1.0"
 dependencies = [

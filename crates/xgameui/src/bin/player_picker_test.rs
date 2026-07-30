@@ -1,25 +1,28 @@
 use xgameui::{PlayerPicker, fetch_user_profiles};
 use xodus::{auth::do_sisu, secrets::init_secrets, tokens::TokenManager};
 
-fn main() -> Result<(), Box<dyn std::error::Error>>
-{
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runtime = tokio::runtime::Runtime::new()?;
     let users = runtime.block_on(async {
         let client = reqwest::Client::new();
         init_secrets()?;
         let tokens = TokenManager::with_keychain_and_memory();
 
-        let (_, resp) = do_sisu(&client, &tokens, "0000000040159362", 896928775)
-            .await?;
+        let (_, resp) = do_sisu(&client, &tokens, "0000000040159362", 896928775).await?;
 
         let xid = resp
-        .authorization_token
-        .display_claims
-        .as_ref()
-        .map(|d| d.xui[0]["xid"].clone())
-        .unwrap();
+            .authorization_token
+            .display_claims
+            .as_ref()
+            .map(|d| d.xui[0]["xid"].clone())
+            .unwrap();
 
-        let users = fetch_user_profiles(&client, &resp.authorization_token.authorization_header_value(), &[&xid]).await?;
+        let users = fetch_user_profiles(
+            &client,
+            &resp.authorization_token.authorization_header_value(),
+            &[&xid],
+        )
+        .await?;
         Ok::<_, Box<dyn std::error::Error>>(users)
     })?;
 
@@ -37,7 +40,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
         Box::new(|cc| Ok(Box::new(PlayerPicker::new(cc, users)))),
     )
     .expect("Faield to run native app");
-
 
     Ok(())
 }
