@@ -15,7 +15,10 @@ impl PlayerPicker {
     pub fn new(cc: &CreationContext<'_>, users: HashMap<String, ProfileUser>) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
 
-        let mut s = Self { users, submit: String::new() };
+        let mut s = Self {
+            users,
+            submit: String::new(),
+        };
 
         s.submit = s.get_submit_text();
 
@@ -25,18 +28,17 @@ impl PlayerPicker {
 
 impl PlayerPicker {
     fn get_submit_text(&self) -> String {
-        format!("Selected {} Player", self.users.iter().filter(|f| f.1.selected).count())
+        format!(
+            "Selected {} Player",
+            self.users.iter().filter(|f| f.1.selected).count()
+        )
     }
 }
 
 impl eframe::App for PlayerPicker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::Panel::bottom("bottom_bar").show(ui, |ui| {
-            ui.centered_and_justified(|ui| {
-                if ui.button(&self.submit).clicked() {
-                    
-                }
-            });
+            ui.centered_and_justified(|ui| if ui.button(&self.submit).clicked() {});
         });
 
         egui::CentralPanel::default().show(ui, |ui| {
