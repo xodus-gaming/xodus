@@ -178,13 +178,11 @@ struct PeopleHubResponse {
 pub async fn fetch_friends(
     client: &Client,
     token: &str,
-    xuid: &str,
 ) -> Result<HashMap<String, ProfileUser>, Box<dyn std::error::Error>> {
     let r = client
-        .get(&format!(
-            "https://peoplehub.xboxlive.com/users/xuid({})/people/friends/decoration/presenceDetail,preferredcolor",
-            xuid
-        ))
+        .get(
+            "https://peoplehub.xboxlive.com/users/me/people/friends/decoration/presenceDetail,preferredcolor",
+        )
         .header("x-xbl-contract-version", "7")
         .header("Authorization", token)
         .header("Accept-Language", "en-US")// Required for no http 400

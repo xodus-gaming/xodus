@@ -10,17 +10,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let (_, resp) = do_sisu(&client, &tokens, "0000000040159362", 896928775).await?;
 
-        let xid = resp
-            .authorization_token
-            .display_claims
-            .as_ref()
-            .map(|d| d.xui[0]["xid"].clone())
-            .unwrap();
-
         let users = fetch_friends(
             &client,
             &resp.authorization_token.authorization_header_value(),
-            &xid,
         )
         .await?;
         Ok::<_, Box<dyn std::error::Error>>(users)
