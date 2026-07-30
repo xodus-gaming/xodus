@@ -148,7 +148,8 @@ pub fn decrypt_response(
             .expect("Failed");
         let result = std::str::from_utf8(&block).unwrap();
         println!("{result}"); // Useful debugging technique
-        let security_token_res: soap::BodyContent<String> = quick_xml::de::from_str(result).unwrap();
+        let security_token_res: soap::BodyContent<String> =
+            quick_xml::de::from_str(result).unwrap();
 
         return Ok((security_token_res, pp));
     }
