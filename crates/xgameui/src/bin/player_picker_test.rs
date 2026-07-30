@@ -1,4 +1,4 @@
-use xgameui::{PlayerPicker, fetch_user_profiles};
+use xgameui::{PlayerPicker, fetch_friends};
 use xodus::{auth::do_sisu, secrets::init_secrets, tokens::TokenManager};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -17,10 +17,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(|d| d.xui[0]["xid"].clone())
             .unwrap();
 
-        let users = fetch_user_profiles(
+        let users = fetch_friends(
             &client,
             &resp.authorization_token.authorization_header_value(),
-            &[&xid],
+            &xid,
         )
         .await?;
         Ok::<_, Box<dyn std::error::Error>>(users)
