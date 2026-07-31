@@ -188,10 +188,7 @@ pub struct ShowAchievments {
 }
 
 impl ShowAchievments {
-    pub fn new(
-        cc: &CreationContext<'_>,
-        achievements: Vec<AchievementEntry>,
-    ) -> Self {
+    pub fn new(cc: &CreationContext<'_>, achievements: Vec<AchievementEntry>) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         let s = Self {
             achievements,
@@ -216,10 +213,26 @@ impl eframe::App for ShowAchievments {
                             egui::ComboBox::from_label("Status")
                                 .selected_text(&self.status_filter)
                                 .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut self.status_filter, "All".to_string(), "All");
-                                    ui.selectable_value(&mut self.status_filter, "Achieved".to_string(), "Achieved");
-                                    ui.selectable_value(&mut self.status_filter, "NotStarted".to_string(), "NotStarted");
-                                    ui.selectable_value(&mut self.status_filter, "InProgress".to_string(), "InProgress");
+                                    ui.selectable_value(
+                                        &mut self.status_filter,
+                                        "All".to_string(),
+                                        "All",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.status_filter,
+                                        "Achieved".to_string(),
+                                        "Achieved",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.status_filter,
+                                        "NotStarted".to_string(),
+                                        "NotStarted",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.status_filter,
+                                        "InProgress".to_string(),
+                                        "InProgress",
+                                    );
                                 })
                         });
                     });
@@ -232,10 +245,24 @@ impl eframe::App for ShowAchievments {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     for achievement in &self.achievements {
-                        if !self.search.is_empty() && achievement.name.to_lowercase().contains(&self.search.to_lowercase()) == false && achievement.description.to_lowercase().contains(&self.search.to_lowercase()) == false {
+                        if !self.search.is_empty()
+                            && achievement
+                                .name
+                                .to_lowercase()
+                                .contains(&self.search.to_lowercase())
+                                == false
+                            && achievement
+                                .description
+                                .to_lowercase()
+                                .contains(&self.search.to_lowercase())
+                                == false
+                        {
                             continue;
                         }
-                        if !self.status_filter.is_empty() && self.status_filter != "All" && achievement.progress_state != self.status_filter {
+                        if !self.status_filter.is_empty()
+                            && self.status_filter != "All"
+                            && achievement.progress_state != self.status_filter
+                        {
                             continue;
                         }
                         ui.horizontal(|ui| {
@@ -253,20 +280,41 @@ impl eframe::App for ShowAchievments {
                                     egui::Color32::LIGHT_GRAY
                                 },
                             );
-                            if let Some(base_url) = achievement.media_assets.get(0).map(|f| &f.url) {
+                            if let Some(base_url) = achievement.media_assets.get(0).map(|f| &f.url)
+                            {
                                 egui::Image::from_uri(base_url)
                                     .fit_to_exact_size(rect.shrink(5.0).size())
                                     .paint_at(ui, rect.shrink(5.0));
                             }
                             // TODO new struct for holding the string without realloc
-                            ui.label(format!("{}\nStatus {}\nReward {}G\n{}", achievement.name, achievement.progress_state, achievement.rewards.iter().find(|p|p.type_ == "Gamerscore").map(|p|p.value.clone()).unwrap_or_else(||"".to_string()), achievement.description));
+                            ui.label(format!(
+                                "{}\nStatus {}\nReward {}G\n{}",
+                                achievement.name,
+                                achievement.progress_state,
+                                achievement
+                                    .rewards
+                                    .iter()
+                                    .find(|p| p.type_ == "Gamerscore")
+                                    .map(|p| p.value.clone())
+                                    .unwrap_or_else(|| "".to_string()),
+                                achievement.description
+                            ));
                             let mut i = 0 as f32;
                             let size = achievement.rewards.len() as f32;
                             for rew in &achievement.rewards {
                                 if let Some(media) = &rew.media_asset {
                                     let draw = egui::Rect {
-                                        min: Pos2 { x: r2.right() - (size - i) * (r2.bottom() - r2.top()) * 3.0 / 2.0, y: r2.top() },
-                                        max: Pos2 { x: r2.right() - (size - i - 1.0) * (r2.bottom() - r2.top()) * 3.0 / 2.0, y: r2.bottom() },
+                                        min: Pos2 {
+                                            x: r2.right()
+                                                - (size - i) * (r2.bottom() - r2.top()) * 3.0 / 2.0,
+                                            y: r2.top(),
+                                        },
+                                        max: Pos2 {
+                                            x: r2.right()
+                                                - (size - i - 1.0) * (r2.bottom() - r2.top()) * 3.0
+                                                    / 2.0,
+                                            y: r2.bottom(),
+                                        },
                                     };
                                     ui.horizontal(|ui| {
                                         egui::Image::from_uri(&media.url)
@@ -274,7 +322,7 @@ impl eframe::App for ShowAchievments {
                                             .paint_at(ui, draw.shrink(5.0));
                                     });
                                 }
-                                i+=1.0;
+                                i += 1.0;
                                 // ui.label(format!("Reward {}: {} ({})", rew.type_, rew.value, rew.value_type));
                             }
                             // achievement.progression.requirements.iter().for_each(|p| {
@@ -498,7 +546,6 @@ struct AchievementMediaAsset {
     type_: String,
 }
 
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Progression {
@@ -565,12 +612,20 @@ pub async fn fetch_achivements(
             ProfileUser {
                 id: entry.id,
                 selected: false,
-                description: format!("{}\nStatus {}\nReward {}G\n{}", entry.name, entry.progress_state, entry.rewards.iter().find(|p|p.type_ == "Gamerscore").map(|p|p.value.clone()).unwrap_or_else(||"".to_string()), entry.description),
+                description: format!(
+                    "{}\nStatus {}\nReward {}G\n{}",
+                    entry.name,
+                    entry.progress_state,
+                    entry
+                        .rewards
+                        .iter()
+                        .find(|p| p.type_ == "Gamerscore")
+                        .map(|p| p.value.clone())
+                        .unwrap_or_else(|| "".to_string()),
+                    entry.description
+                ),
                 presense: String::new(),
-                picture: entry
-                    .media_assets
-                    .get(0)
-                    .map(|f| format!("{}", f.url)),
+                picture: entry.media_assets.get(0).map(|f| format!("{}", f.url)),
                 gamer_tag: String::new(),
                 settings: HashMap::new(),
             },
@@ -598,7 +653,11 @@ pub async fn fetch_achivements_2(
 
     let t: AchievementsResponse = r.json::<AchievementsResponse>().await?;
 
-    println!("Fetched {} achievements of {}", t.achievements.len(), t.paging_info.total_records);
+    println!(
+        "Fetched {} achievements of {}",
+        t.achievements.len(),
+        t.paging_info.total_records
+    );
 
     Ok(t.achievements)
 }
