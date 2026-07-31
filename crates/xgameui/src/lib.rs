@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Sub};
 
 use eframe::{CreationContext, egui};
-use egui::{Id, Pos2, Sense};
+use egui::{Area, Id, Pos2, Sense};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -185,6 +185,8 @@ pub struct ShowAchievments {
     achievements: Vec<AchievementEntry>,
     search: String,
     status_filter: String,
+    index: u64,
+    opend: bool,
 }
 
 impl ShowAchievments {
@@ -194,6 +196,8 @@ impl ShowAchievments {
             achievements,
             search: String::new(),
             status_filter: "All".to_string(),
+            index: 0,
+            opend: false,
         };
         s
     }
@@ -201,6 +205,29 @@ impl ShowAchievments {
 
 impl eframe::App for ShowAchievments {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let modal_view = egui::Id::new("detailsview");
+        if self.opend {
+            let available = ui.available_size();
+            egui::Modal::new(modal_view).show(ui, |ui| {
+                ui.label("Details");
+                // ui.centered_and_justified(|ui| {
+                if let Some(achievement) = self.achievements.get(self.index as usize) {
+                    if let Some(base_url) = achievement.media_assets.get(0).map(|f| &f.url) {
+                        // ui.image(format!("{}&h={}", base_url, 1080));
+                        ui.add(
+                            egui::Image::new(format!("{}&h={}", base_url, 1080))
+                                .maintain_aspect_ratio(true)
+                                .corner_radius(10)
+                                .fit_to_exact_size(available * 0.8),
+                        );
+                    }
+                }
+                // });
+                if ui.button("Close").clicked() {
+                    self.opend = false;
+                }
+            });
+        }
         egui::Panel::top("top_bar")
             .min_size(60.0)
             .max_size(100.0)
@@ -270,6 +297,17 @@ impl eframe::App for ShowAchievments {
                             let mut r2 = rect;
                             r2.max.x += ui.available_width();
 
+                            let response =
+                                ui.interact(r2, Id::new(achievement.id.clone()), Sense::click());
+                            if response.clicked() {
+                                self.index =
+                                    self.achievements
+                                        .iter()
+                                        .position(|a| a.id == achievement.id)
+                                        .unwrap_or(0) as u64;
+                                self.opend = true;
+                            }
+
                             let painter = ui.painter();
                             painter.rect_filled(
                                 r2,
@@ -280,15 +318,20 @@ impl eframe::App for ShowAchievments {
                                     egui::Color32::LIGHT_GRAY
                                 },
                             );
+                            let media_assert_type = achievement
+                                .media_assets
+                                .get(0)
+                                .map(|f| &f.type_ as &str)
+                                .unwrap_or("None");
                             if let Some(base_url) = achievement.media_assets.get(0).map(|f| &f.url)
                             {
-                                egui::Image::from_uri(base_url)
+                                egui::Image::from_uri(format!("{}&h={}", base_url, 1080 / 8))
                                     .fit_to_exact_size(rect.shrink(5.0).size())
                                     .paint_at(ui, rect.shrink(5.0));
                             }
                             // TODO new struct for holding the string without realloc
                             ui.label(format!(
-                                "{}\nStatus {}\nReward {}G\n{}",
+                                "{}\nStatus {}\nReward {}G\n{}\n{media_assert_type}",
                                 achievement.name,
                                 achievement.progress_state,
                                 achievement
@@ -348,13 +391,14 @@ impl eframe::App for ShowAchievments {
                                     let draw = egui::Rect {
                                         min: Pos2 {
                                             x: r2.left(),
-                                            y: r2.bottom() - 10.0,
+                                            y: r2.bottom() - 20.0,
                                         },
                                         max: Pos2 {
                                             x: r2.left() + (r2.right() - r2.left()) * progress,
                                             y: r2.bottom(),
                                         },
-                                    };
+                                    }
+                                    .shrink(8.0);
                                     ui.horizontal(|ui| {
                                         let painter = ui.painter();
                                         painter.rect_filled(
