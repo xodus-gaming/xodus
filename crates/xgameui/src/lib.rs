@@ -293,7 +293,7 @@ impl eframe::App for ShowAchievments {
                             continue;
                         }
                         ui.horizontal(|ui| {
-                            let (_, rect) = ui.allocate_space(egui::vec2(200.0, 150.0));
+                            let (_, rect) = ui.allocate_space(egui::vec2(100.0, 75.0));
                             let mut r2 = rect;
                             r2.max.x += ui.available_width();
 
