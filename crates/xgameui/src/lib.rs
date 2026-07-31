@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use eframe::{CreationContext, egui};
-use egui::{Id, Sense};
+use egui::{Id, Pos2, Sense};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -125,7 +125,7 @@ impl eframe::App for PlayerPicker {
                     let it = it_org.unwrap_or(default).values_mut();
                     for user in it {
                         ui.horizontal(|ui| {
-                            let (_, rect) = ui.allocate_space(egui::vec2(50.0, 50.0));
+                            let (_, rect) = ui.allocate_space(egui::vec2(200.0, 150.0));
                             let mut r2 = rect;
                             r2.max.x += ui.available_width();
 
@@ -174,6 +174,113 @@ impl eframe::App for PlayerPicker {
                             }
                             self.search.as_mut().unwrap().search_results.clear();
                         }
+                    }
+                });
+        });
+    }
+}
+
+#[derive(Default)]
+pub struct ShowAchievments {
+    achievements: Vec<AchievementEntry>,
+    search: String,
+    status_filter: String,
+}
+
+impl ShowAchievments {
+    pub fn new(
+        cc: &CreationContext<'_>,
+        achievements: Vec<AchievementEntry>,
+    ) -> Self {
+        egui_extras::install_image_loaders(&cc.egui_ctx);
+        let s = Self {
+            achievements,
+            search: String::new(),
+            status_filter: "All".to_string(),
+        };
+        s
+    }
+}
+
+impl eframe::App for ShowAchievments {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::top("top_bar")
+            .min_size(60.0)
+            .max_size(100.0)
+            .show(ui, |ui| {
+                egui::Panel::right("my_filter_panel")
+                    .show_separator_line(false)
+                    .min_size(100.0)
+                    .show(ui, |ui| {
+                        ui.centered_and_justified(|ui| {
+                            egui::ComboBox::from_label("Status")
+                                .selected_text(&self.status_filter)
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut self.status_filter, "All".to_string(), "All");
+                                    ui.selectable_value(&mut self.status_filter, "Achieved".to_string(), "Achieved");
+                                    ui.selectable_value(&mut self.status_filter, "NotStarted".to_string(), "NotStarted");
+                                    ui.selectable_value(&mut self.status_filter, "InProgress".to_string(), "InProgress");
+                                })
+                        });
+                    });
+                ui.centered_and_justified(|ui| {
+                    ui.text_edit_singleline(&mut self.search);
+                });
+            });
+        egui::CentralPanel::default().show(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for achievement in &self.achievements {
+                        if !self.search.is_empty() && achievement.name.to_lowercase().contains(&self.search.to_lowercase()) == false && achievement.description.to_lowercase().contains(&self.search.to_lowercase()) == false {
+                            continue;
+                        }
+                        if !self.status_filter.is_empty() && self.status_filter != "All" && achievement.progress_state != self.status_filter {
+                            continue;
+                        }
+                        ui.horizontal(|ui| {
+                            let (_, rect) = ui.allocate_space(egui::vec2(200.0, 150.0));
+                            let mut r2 = rect;
+                            r2.max.x += ui.available_width();
+
+                            let painter = ui.painter();
+                            painter.rect_filled(
+                                r2,
+                                5.0,
+                                if achievement.progress_state == "Achieved" {
+                                    egui::Color32::LIGHT_GREEN
+                                } else {
+                                    egui::Color32::LIGHT_GRAY
+                                },
+                            );
+                            if let Some(base_url) = achievement.media_assets.get(0).map(|f| &f.url) {
+                                egui::Image::from_uri(base_url)
+                                    .fit_to_exact_size(rect.shrink(5.0).size())
+                                    .paint_at(ui, rect.shrink(5.0));
+                            }
+                            // TODO new struct for holding the string without realloc
+                            ui.label(format!("{}\nStatus {}\nReward {}G\n{}", achievement.name, achievement.progress_state, achievement.rewards.iter().find(|p|p.type_ == "Gamerscore").map(|p|p.value.clone()).unwrap_or_else(||"".to_string()), achievement.description));
+                            let mut i = 0 as f32;
+                            let size = achievement.rewards.len() as f32;
+                            for rew in &achievement.rewards {
+                                if let Some(media) = &rew.media_asset {
+                                    let draw = egui::Rect {
+                                        min: Pos2 { x: r2.right() - (size - i) * (r2.bottom() - r2.top()) * 3.0 / 2.0, y: r2.top() },
+                                        max: Pos2 { x: r2.right() - (size - i - 1.0) * (r2.bottom() - r2.top()) * 3.0 / 2.0, y: r2.bottom() },
+                                    };
+                                    ui.horizontal(|ui| {
+                                        egui::Image::from_uri(&media.url)
+                                            .fit_to_exact_size(draw.shrink(5.0).size())
+                                            .paint_at(ui, draw.shrink(5.0));
+                                    });
+                                }
+                                i+=1.0;
+                                // ui.label(format!("Reward {}: {} ({})", rew.type_, rew.value, rew.value_type));
+                            }
+                            // achievement.progression.requirements.iter().for_each(|p| {
+                            //     ui.label(format!("Requirement {}: {}/{}", p.id, p.current.as_ref().map(|f| f.to_string()).unwrap_or_else(||"0".to_string()), p.target));
+                            // });
+                        });
                     }
                 });
         });
@@ -369,4 +476,129 @@ pub async fn fetch_gt_tokio(
             None
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AchievementReward {
+    value: String,
+    #[serde(rename = "type")]
+    type_: String,
+    value_type: String,
+    media_asset: Option<AchievementMediaAsset>,
+    name: Option<String>,
+    description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AchievementMediaAsset {
+    url: String,
+    #[serde(rename = "type")]
+    type_: String,
+}
+
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Progression {
+    requirements: Vec<ProgressionRequirement>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgressionRequirement {
+    id: String,
+    current: Option<String>,
+    target: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AchievementEntry {
+    id: String,
+    name: String,
+    progress_state: String,
+    progression: Progression,
+    media_assets: Vec<AchievementMediaAsset>,
+    description: String,
+    rewards: Vec<AchievementReward>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PagingInfo {
+    continuation_token: Option<String>,
+    total_records: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AchievementsResponse {
+    achievements: Vec<AchievementEntry>,
+    paging_info: PagingInfo
+}
+
+pub async fn fetch_achivements(
+    client: &Client,
+    token: &str,
+    xuid: &str,
+    title_id: i64,
+) -> Result<HashMap<String, ProfileUser>, Box<dyn std::error::Error>> {
+    let r = client
+        .get(
+            format!("https://achievements.xboxlive.com/users/xuid({xuid})/achievements?titleId={title_id}&maxItems=1000&includeHidden=true"),
+        )
+        .header("x-xbl-contract-version", "2")
+        .header("Authorization", token)
+        .header("Accept-Language", "de-DE")// Required for no http 400
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let t = r.json::<AchievementsResponse>().await?;
+
+    let mut out = HashMap::new();
+    for entry in t.achievements {
+        out.insert(
+            entry.id.clone(),
+            ProfileUser {
+                id: entry.id,
+                selected: false,
+                description: format!("{}\nStatus {}\nReward {}G\n{}", entry.name, entry.progress_state, entry.rewards.iter().find(|p|p.type_ == "Gamerscore").map(|p|p.value.clone()).unwrap_or_else(||"".to_string()), entry.description),
+                presense: String::new(),
+                picture: entry
+                    .media_assets
+                    .get(0)
+                    .map(|f| format!("{}", f.url)),
+                gamer_tag: String::new(),
+                settings: HashMap::new(),
+            },
+        );
+    }
+    Ok(out)
+}
+
+pub async fn fetch_achivements_2(
+    client: &Client,
+    token: &str,
+    xuid: &str,
+    title_id: i64,
+) -> Result<Vec<AchievementEntry>, Box<dyn std::error::Error>> {
+    let r = client
+        .get(
+            format!("https://achievements.xboxlive.com/users/xuid({xuid})/achievements?titleId={title_id}&maxItems=1000&includeHidden=true"),
+        )
+        .header("x-xbl-contract-version", "2")
+        .header("Authorization", token)
+        .header("Accept-Language", "en-US")// Required for no http 400
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let t: AchievementsResponse = r.json::<AchievementsResponse>().await?;
+
+    println!("Fetched {} achievements of {}", t.achievements.len(), t.paging_info.total_records);
+
+    Ok(t.achievements)
 }
