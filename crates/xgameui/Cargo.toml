@@ -19,3 +19,8 @@ tests = ["dep:xodus"]
 name = "player_picker_test"
 path = "src/bin/player_picker_test.rs"
 required-features = ["tests"]
+
+[[bin]]
+name = "achievements_picker_test"
+path = "src/bin/achievements_picker_test.rs"
+required-features = ["tests"]
