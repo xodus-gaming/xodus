@@ -617,7 +617,7 @@ struct PagingInfo {
 #[serde(rename_all = "camelCase")]
 struct AchievementsResponse {
     achievements: Vec<AchievementEntry>,
-    paging_info: PagingInfo
+    paging_info: PagingInfo,
 }
 
 pub async fn fetch_achivements(
