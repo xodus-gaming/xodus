@@ -325,40 +325,49 @@ impl eframe::App for ShowAchievments {
                                 i += 1.0;
                                 // ui.label(format!("Reward {}: {} ({})", rew.type_, rew.value, rew.value_type));
                             }
-                            achievement.progression.requirements.iter().map(|f|{
-                                if let Some(c) = &f.current {
-                                    if c == &f.target {
-                                        return 1.0;
+                            achievement
+                                .progression
+                                .requirements
+                                .iter()
+                                .map(|f| {
+                                    if let Some(c) = &f.current {
+                                        if c == &f.target {
+                                            return 1.0;
+                                        }
+                                        return (c.parse::<f32>().unwrap_or(0.0)
+                                            / f.target.parse::<f32>().unwrap_or(1.0))
+                                        .min(1.0);
                                     }
-                                    return (c.parse::<f32>().unwrap_or(0.0) / f.target.parse::<f32>().unwrap_or(1.0)).min(1.0);
-                                }
-                                0.0
-                            }).map(|f|(f,1.0)).reduce(|l,r|(l.0+r.0,l.1+r.1)).map(|f| {
-                                println!("{}: {} {}", f.0, f.1, f.0/f.1);
-                                let progress = f.0 / f.1;
-                                let draw = egui::Rect {
-                                    min: Pos2 {
-                                        x: r2.left(),
-                                        y: r2.bottom() - 10.0,
-                                    },
-                                    max: Pos2 {
-                                        x: r2.left() + (r2.right() - r2.left()) * progress,
-                                        y: r2.bottom(),
-                                    },
-                                };
-                                ui.horizontal(|ui| {
-                                    let painter = ui.painter();
-                                    painter.rect_filled(
-                                        draw,
-                                        5.0,
-                                        if progress >= 1.0 {
-                                            egui::Color32::DARK_GREEN
-                                        } else {
-                                            egui::Color32::DARK_GRAY
+                                    0.0
+                                })
+                                .map(|f| (f, 1.0))
+                                .reduce(|l, r| (l.0 + r.0, l.1 + r.1))
+                                .map(|f| {
+                                    println!("{}: {} {}", f.0, f.1, f.0 / f.1);
+                                    let progress = f.0 / f.1;
+                                    let draw = egui::Rect {
+                                        min: Pos2 {
+                                            x: r2.left(),
+                                            y: r2.bottom() - 10.0,
                                         },
-                                    );
+                                        max: Pos2 {
+                                            x: r2.left() + (r2.right() - r2.left()) * progress,
+                                            y: r2.bottom(),
+                                        },
+                                    };
+                                    ui.horizontal(|ui| {
+                                        let painter = ui.painter();
+                                        painter.rect_filled(
+                                            draw,
+                                            5.0,
+                                            if progress >= 1.0 {
+                                                egui::Color32::DARK_GREEN
+                                            } else {
+                                                egui::Color32::DARK_GRAY
+                                            },
+                                        );
+                                    });
                                 });
-                            });
                             // achievement.progression.requirements.iter().for_each(|p| {
                             //     ui.label(format!("Requirement {}: {}/{}", p.id, p.current.as_ref().map(|f| f.to_string()).unwrap_or_else(||"0".to_string()), p.target));
                             // });
