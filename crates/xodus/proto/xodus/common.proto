@@ -8,4 +8,10 @@ enum XodusMessageType {
     PONG = 2;
     MSA_TOKEN_REQUEST=3;
     MSA_TOKEN_RESPONSE=4;
+    // An XSTS token for a specific relying party, minted from a SISU
+    // bundle so it carries the TITLE claim. The title claim is what
+    // gameservices.fm.forzamotorsport.net requires; without it the Logon
+    // is refused with a blank 403.
+    XSTS_TOKEN_REQUEST=5;
+    XSTS_TOKEN_RESPONSE=6;
 }
