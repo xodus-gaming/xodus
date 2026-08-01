@@ -4,7 +4,9 @@ use xodus::{
         live::ExchangeUserTokenOutcome,
         secrets::Token,
         soap,
-        xgameruntime::xuser::{MSATokenRequest, MSATokenResponse},
+        xgameruntime::xuser::{
+            MSATokenRequest, MSATokenResponse, XstsTokenRequest, XstsTokenResponse,
+        },
     },
     proto::xodus::XodusMessageType,
 };
@@ -43,6 +45,61 @@ pub async fn parse_message(
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     match message_type {
         XodusMessageType::Ping => Ok(buffer),
+        // An XSTS carrying the TITLE claim, for one relying party.
+        //
+        // This is minted here rather than by the caller because the three tokens
+        // involved must all describe ONE device: the device token, the SISU title
+        // token bound to it, and the user token. Pairing a title token with a
+        // device token minted separately is rejected by xsts.auth with
+        // `401 XSTS error="title_usage_by_device_exceeded"`, and only this side
+        // holds the device identity, so only this side can keep them consistent.
+        XodusMessageType::XstsTokenRequest => {
+            let req = quick_xml::de::from_str::<XstsTokenRequest>(std::str::from_utf8(&buffer)?)?;
+            let title_id: i64 = req.title_id.parse().unwrap_or(0);
+            log::debug!(
+                "XSTS request: rp={} client={} title={}",
+                req.relying_party,
+                req.client_id,
+                title_id
+            );
+
+            // do_sisu returns the device token it was authorized with - use THAT.
+            let (mut auth, sisu, device) =
+                xodus::auth::do_sisu(&context.client, context.tokens(), &req.client_id, title_id)
+                    .await
+                    // do_sisu's error is a bare Box<dyn Error>; this handler must
+                    // return one that is Send + Sync, so carry the text across.
+                    .map_err(|e| std::io::Error::other(format!("sisu failed: {e}")))?;
+            let xsts = auth
+                .get_xsts_token(
+                    Some(&device),
+                    Some(&sisu.title_token),
+                    Some(&sisu.user_token),
+                    &req.relying_party,
+                )
+                .await?;
+            let expiry = xsts.not_after.timestamp();
+            log::debug!(
+                "XSTS issued for {}: uhs {} ({} chars)",
+                req.relying_party,
+                xsts.userhash(),
+                xsts.token.len()
+            );
+            let xuid = xsts
+                .display_claims
+                .as_ref()
+                .and_then(|c| c.xui.first())
+                .and_then(|x| x.get("xid"))
+                .cloned()
+                .unwrap_or_default();
+            let payload = XstsTokenResponse {
+                user_hash: xsts.userhash(),
+                xuid,
+                token: xsts.token,
+                expiry,
+            };
+            Ok(quick_xml::se::to_string(&payload)?.as_bytes().to_vec())
+        }
         XodusMessageType::MsaTokenRequest => {
             log::debug!("Raw buffer: {buffer:?}");
             let string_buf = std::str::from_utf8(&buffer)?;
