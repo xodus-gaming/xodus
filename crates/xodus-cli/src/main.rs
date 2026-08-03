@@ -39,6 +39,7 @@ enum SubCommand {
         market: Option<String>,
     },
     Login,
+    Logout,
     #[command(about = "Download and extract the game through streaming algorithm")]
     Streaming {
         source: String,
@@ -141,6 +142,7 @@ async fn main() -> ExitCode {
             .await
         }
         SubCommand::Login => commands::login::run(&client, &tokens).await,
+        SubCommand::Logout => commands::logout::run(&tokens).await,
         SubCommand::Extract {
             path,
             destination,

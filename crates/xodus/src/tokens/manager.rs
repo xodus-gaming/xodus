@@ -59,6 +59,13 @@ impl TokenManager {
         )
     }
 
+    pub fn remove_persistent(&self) -> Result<(), TokenStoreError> {
+        self.persistent.remove(keys::DEV_LICENSE)?;
+        self.persistent.remove(keys::DEVICE_TOKENS)?;
+        self.persistent.remove(keys::USER_TOKENS)?;
+        self.persistent.remove(keys::USER_INFO)
+    }
+
     // ---- Device identity / license -----------------------------------------
 
     pub fn get_device_license(&self) -> Result<Device, TokenStoreError> {
