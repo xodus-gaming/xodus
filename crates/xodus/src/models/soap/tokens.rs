@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::soap::{CipherData, EncryptionMethod};
-
 use super::base::{AppliesTo, PolicyReference, Timestamp};
 use super::crypto::EncryptedData;
+use crate::models::soap::{CipherData, EncryptionMethod};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestSecurityToken {

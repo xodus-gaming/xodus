@@ -1,13 +1,9 @@
 use inquire::Select;
-use xodus::{
-    XBOX_LIVE_PACKAGES_PC,
-    api::displaycatalog::find_products_by_id,
-    models::{
-        packagespc::{PackageDetails, PackageResponse},
-        secrets::Token,
-    },
-    tokens::TokenManager,
-};
+use xodus::XBOX_LIVE_PACKAGES_PC;
+use xodus::api::displaycatalog::find_products_by_id;
+use xodus::models::packagespc::{PackageDetails, PackageResponse};
+use xodus::models::secrets::Token;
+use xodus::tokens::TokenManager;
 
 pub async fn get_content_id(
     client: &reqwest::Client,

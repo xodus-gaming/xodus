@@ -1,37 +1,33 @@
+use std::cmp::min;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
+
 use aes::Aes128;
 use aes::cipher::KeyInit;
 use bytes::Bytes;
 use futures_util::StreamExt;
 use reqwest::header::RANGE;
-use std::cmp::min;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
-use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::fs::OpenOptions;
+use tokio::io::{
+    AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt, BufReader,
+};
 use tokio::task::block_in_place;
 use tokio::time::{sleep, timeout};
-use tokio::{
-    fs::OpenOptions,
-    io::{AsyncReadExt, AsyncSeekExt},
-};
 use tokio_util::io::SyncIoBridge;
 use zerocopy::IntoBytes;
-
-use crate::models::xvd::{
-    PAGE_SIZE, PAGES_PER_BLOCK, XvdSegmentMetadataHeader, XvdSegmentMetadataSegment,
-    XvdSegmentMetadataSegmentFlags, XvdUserDataHeader, XvdUserDataPackageFileEntry,
-    XvdUserDataPackageFilesHeader,
-};
-use crate::streaming_ntfs::collect_ntfs_stream_layouts;
 
 use crate::crypt::{Tweak, decrypt_page_xts};
 use crate::math::{
     bytes_to_pages, calculate_hash_block_num_and_run_for_block_num, offset_to_page_number,
+    page_number_to_offset,
 };
-use crate::{
-    math::page_number_to_offset,
-    models::xvd::{XvcInfo, XvcRegionHeader, XvcRegionId, XvdHashEntry, XvdHeader},
+use crate::models::xvd::{
+    PAGE_SIZE, PAGES_PER_BLOCK, XvcInfo, XvcRegionHeader, XvcRegionId, XvdHashEntry, XvdHeader,
+    XvdSegmentMetadataHeader, XvdSegmentMetadataSegment, XvdSegmentMetadataSegmentFlags,
+    XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,
 };
+use crate::streaming_ntfs::collect_ntfs_stream_layouts;
 
 pub struct SyncSubstream<R> {
     inner: R,

@@ -1,15 +1,11 @@
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Instant;
 
-use crate::{
-    models::{
-        secrets::{Device, Token, TokenStore, User},
-        xbox::XstsResponse,
-    },
-    tokens::{
-        backend::{KeychainBackend, MemoryBackend},
-        store::{ExpiringTokenBackend, TokenBackend, TokenStoreError},
-    },
-};
+use crate::models::secrets::{Device, Token, TokenStore, User};
+use crate::models::xbox::XstsResponse;
+use crate::tokens::backend::{KeychainBackend, MemoryBackend};
+use crate::tokens::store::{ExpiringTokenBackend, TokenBackend, TokenStoreError};
 
 mod keys {
     pub const DEV_LICENSE: &str = "dev_license";

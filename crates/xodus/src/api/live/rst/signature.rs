@@ -1,8 +1,7 @@
-use crate::{
-    api::live::utils,
-    models::soap::{self, XML_SIGNATURE_METHOD_HMAC, XML_SIGNATURE_METHOD_RSA},
-};
 use base64::prelude::*;
+
+use crate::api::live::utils;
+use crate::models::soap::{self, XML_SIGNATURE_METHOD_HMAC, XML_SIGNATURE_METHOD_RSA};
 
 pub enum RSTSignature<'a> {
     Rsa(Box<rsa::RsaPrivateKey>),

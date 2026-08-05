@@ -1,24 +1,22 @@
+use std::collections::HashMap;
 use std::os::fd::{AsFd, IntoRawFd};
+use std::path::Path;
 use std::process::ExitCode;
-use std::{collections::HashMap, path::Path};
 
-use msixvc::{
-    models::xvd::PAGE_SIZE,
-    xvd::{SegmentFile, XvdFile},
-};
+use msixvc::models::xvd::PAGE_SIZE;
+use msixvc::xvd::{SegmentFile, XvdFile};
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
+#[cfg(target_os = "linux")]
+use rustix::fs::{MemfdFlags, memfd_create};
 use rustix::io::{FdFlags, fcntl_getfd, fcntl_setfd};
+#[cfg(not(target_os = "linux"))]
+use tempfile::{tempdir, tempfile, tempfile_in};
 use tokio::fs::{File, OpenOptions};
 use tokio::process::Command;
 use xodus::tokens::TokenManager;
 
 use crate::license::get_license;
-
-#[cfg(target_os = "linux")]
-use rustix::fs::{MemfdFlags, memfd_create};
-#[cfg(not(target_os = "linux"))]
-use tempfile::{tempdir, tempfile, tempfile_in};
 
 #[cfg(target_os = "linux")]
 fn make_temp_file(_folder: &str) -> std::io::Result<std::fs::File> {

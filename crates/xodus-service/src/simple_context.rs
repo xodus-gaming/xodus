@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use xodus::{models::secrets::LegacyToken, tokens::TokenManager};
+use xodus::models::secrets::LegacyToken;
+use xodus::tokens::TokenManager;
 
 pub struct SimpleContext {
     pub client: reqwest::Client,

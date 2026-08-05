@@ -649,15 +649,17 @@ fn http_err(err: reqwest::Error) -> std::io::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{HttpRead, PrefixCacheFile};
     use std::io;
     use std::io::SeekFrom;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
+
     use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
+
+    use super::{HttpRead, PrefixCacheFile};
 
     #[derive(Clone, Debug)]
     struct RequestRecord {

@@ -1,9 +1,10 @@
 use std::process::ExitCode;
 
-use crate::webview;
 use xodus::models::live::{DAProperty, ExchangeUserTokenOutcome};
 use xodus::models::{secrets, soap};
 use xodus::tokens::TokenManager;
+
+use crate::webview;
 
 const CLIENT_ID: &str = "000000004424da1f";
 const LOGIN_MARKET: &str = "en-US";

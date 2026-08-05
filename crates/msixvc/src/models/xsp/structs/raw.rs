@@ -1,4 +1,5 @@
-use zerocopy::{FromBytes, little_endian::*};
+use zerocopy::FromBytes;
+use zerocopy::little_endian::*;
 
 #[derive(FromBytes, Debug)]
 #[repr(C, packed)]

@@ -1,13 +1,9 @@
 use super::RSTRequest;
 use super::error::RSTBuilderError;
 use super::signature::RSTSignature;
-use crate::{
-    api::live::utils,
-    models::{
-        secrets::{LegacyToken, Token},
-        soap::{self, XML_SIGNATURE_DIGEST_SHA256, XML_SIGNATURE_TRANSFORM_EXCLUSIVE},
-    },
-};
+use crate::api::live::utils;
+use crate::models::secrets::{LegacyToken, Token};
+use crate::models::soap::{self, XML_SIGNATURE_DIGEST_SHA256, XML_SIGNATURE_TRANSFORM_EXCLUSIVE};
 
 pub struct RSTRequestBuilder<'a> {
     header: soap::Header,

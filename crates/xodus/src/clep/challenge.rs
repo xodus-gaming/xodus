@@ -1,6 +1,6 @@
-use crate::models::clep::*;
-
 use zerocopy::{FromZeros, transmute, transmute_mut};
+
+use crate::models::clep::*;
 
 pub fn get_license_challange(smbios: [u8; 256], disk_serial: [u8; 64]) -> ([u8; 2048], [u8; 2048]) {
     let mut clepv2 = ClepV2::new_zeroed();
@@ -266,8 +266,9 @@ pub fn clep_deobfuscate(buffer: &mut [u8; 2048]) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use base64::prelude::*;
+
+    use super::*;
 
     #[test]
     fn test_obfuscation() {

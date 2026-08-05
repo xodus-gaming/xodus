@@ -1,6 +1,9 @@
-use crate::{api::live::utils, models::soap};
-use base64::prelude::*;
 use std::collections::HashMap;
+
+use base64::prelude::*;
+
+use crate::api::live::utils;
+use crate::models::soap;
 
 pub struct RSTRequest<'a> {
     pub signed_xml: String,

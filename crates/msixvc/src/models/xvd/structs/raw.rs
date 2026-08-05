@@ -1,4 +1,5 @@
-use zerocopy::{FromBytes, little_endian::*};
+use zerocopy::FromBytes;
+use zerocopy::little_endian::*;
 
 // All multi-byte integers must use zerocopy's endian-aware types.
 

@@ -1,15 +1,13 @@
-use base64::prelude::*;
 use std::collections::HashMap;
-use xal::{cvlib::CorrelationVector, extensions::CorrelationVectorReqwestBuilder};
 
-use crate::{
-    licensing::utils,
-    models::{
-        devicecredential::License,
-        licensing::{
-            DeviceContext, LicenseContentRequest, LicenseContentResponse, LicenseUserIdentity,
-        },
-    },
+use base64::prelude::*;
+use xal::cvlib::CorrelationVector;
+use xal::extensions::CorrelationVectorReqwestBuilder;
+
+use crate::licensing::utils;
+use crate::models::devicecredential::License;
+use crate::models::licensing::{
+    DeviceContext, LicenseContentRequest, LicenseContentResponse, LicenseUserIdentity,
 };
 
 pub async fn get_license_content(

@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize, ser::Error};
+use serde::ser::Error;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "PascalCase")]

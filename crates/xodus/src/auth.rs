@@ -1,20 +1,19 @@
 use reqwest::Client;
+use xal::client_params::CLIENT_WINDOWS;
+use xal::oauth2::basic::BasicTokenType;
+use xal::oauth2::{EmptyExtraTokenFields, RedirectUrl, Scope, StandardTokenResponse};
+use xal::response::{
+    XADDisplayClaims, XATDisplayClaims, XAUDisplayClaims, XSTSDisplayClaims, XTokenResponse,
+};
 use xal::{
     AuthPromptCallback, Constants, DeviceType, Flows, TokenStore, XalAppParameters,
     XalAuthenticator,
-    client_params::CLIENT_WINDOWS,
-    oauth2::{
-        EmptyExtraTokenFields, RedirectUrl, Scope, StandardTokenResponse, basic::BasicTokenType,
-    },
-    response::{
-        XADDisplayClaims, XATDisplayClaims, XAUDisplayClaims, XSTSDisplayClaims, XTokenResponse,
-    },
 };
 
-use crate::{
-    models::{live::ExchangeUserTokenOutcome, secrets::Token, soap},
-    tokens::TokenManager,
-};
+use crate::models::live::ExchangeUserTokenOutcome;
+use crate::models::secrets::Token;
+use crate::models::soap;
+use crate::tokens::TokenManager;
 
 fn get_app_params() -> XalAppParameters {
     XalAppParameters {
