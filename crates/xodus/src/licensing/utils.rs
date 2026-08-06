@@ -1,4 +1,4 @@
-use num_bigint_dig::{ModInverse};
+use num_bigint_dig::ModInverse;
 use num_integer::Integer;
 use rand::distr::{Alphanumeric, SampleString};
 use rsa::{BigUint, RsaPrivateKey};
@@ -59,11 +59,13 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Rs
             let p1 = &p_nb - &one;
             let p2 = &q_nb - &one;
             let lambda = p1.lcm(&p2);
-            let d_nb = e_nb
-                .clone()
-                .mod_inverse(&lambda)
-                .expect("e not invertible");
-            let d_rsa = BigUint::from_bytes_be(&d_nb.to_biguint().expect("inverse should be positive").to_bytes_be());
+            let d_nb = e_nb.clone().mod_inverse(&lambda).expect("e not invertible");
+            let d_rsa = BigUint::from_bytes_be(
+                &d_nb
+                    .to_biguint()
+                    .expect("inverse should be positive")
+                    .to_bytes_be(),
+            );
             // convert nb BigUints back to rsa::BigUint for API using original bytes
             let n_rsa = BigUint::from_bytes_be(&n_bytes);
             let e_rsa = BigUint::from_bytes_be(&e_bytes);

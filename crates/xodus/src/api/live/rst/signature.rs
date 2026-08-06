@@ -82,24 +82,15 @@ impl<'a> RSTSignature<'a> {
                 clep_secret,
                 tpm_secret,
             } => {
-                let clep =
-                    utils::generate_shared_key(32, clep_secret, soap::HMAC_KEY_USAGE, nonce);
+                let clep = utils::generate_shared_key(32, clep_secret, soap::HMAC_KEY_USAGE, nonce);
 
                 let hmac = if tpm_secret.is_empty() {
                     clep
                 } else {
-                    utils::generate_shared_key(
-                        32,
-                        tpm_secret,
-                        soap::HMAC_KEY_USAGE,
-                        &clep,
-                    )
+                    utils::generate_shared_key(32, tpm_secret, soap::HMAC_KEY_USAGE, &clep)
                 };
 
-                bergshamra::KeyData::from_symmetric_bytes(
-                    kryptering::KeyAlgorithm::Hmac,
-                    &hmac,
-                )
+                bergshamra::KeyData::from_symmetric_bytes(kryptering::KeyAlgorithm::Hmac, &hmac)
             }
             RSTSignature::Rsa(private_key) => {
                 use rsa::pkcs8::EncodePrivateKey;
@@ -108,10 +99,7 @@ impl<'a> RSTSignature<'a> {
                     .to_pkcs8_der()
                     .map_err(|e| bergshamra::Error::Key(e.to_string()))?;
 
-                bergshamra::KeyData::from_pkcs8_der(
-                    kryptering::KeyAlgorithm::Rsa,
-                    der.as_bytes(),
-                )
+                bergshamra::KeyData::from_pkcs8_der(kryptering::KeyAlgorithm::Rsa, der.as_bytes())
             }
         }
     }

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use aes::cipher::block_padding::Pkcs7;
 use aes::cipher::{BlockModeDecrypt, KeyIvInit};
 use base64::prelude::*;
-use hmac::{Hmac, Mac, KeyInit};
+use hmac::{Hmac, KeyInit, Mac};
 use rsa::rand_core::{OsRng, RngCore};
 use sha2::Sha256;
 use zerocopy::IntoBytes;
@@ -90,10 +90,7 @@ pub fn sign_xml(
     let mut kmgr = bergshamra::KeysManager::new();
     let key = signature.signing_key(nonce)?;
 
-    kmgr.add_key(bergshamra::Key::new(
-        key,
-        bergshamra::KeyUsage::Sign,
-    ));
+    kmgr.add_key(bergshamra::Key::new(key, bergshamra::KeyUsage::Sign));
     let ctx = bergshamra::DsigContext::new(kmgr).with_strict_verification(false);
     let signed = bergshamra::sign(&ctx, std::str::from_utf8(&min_xml).unwrap())?;
     Ok(signed)

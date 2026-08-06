@@ -10,7 +10,7 @@ use crate::models::licensing::{
     DeviceContext, LicenseContentRequest, LicenseContentResponse, LicenseUserIdentity,
 };
 
-// we might need a bump in xal-rs concerning reqwest, 
+// we might need a bump in xal-rs concerning reqwest,
 // that might block us from using the correlationvector extension
 pub async fn get_license_content(
     client: &reqwest::Client,
