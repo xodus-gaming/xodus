@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use aes::cipher::block_padding::Pkcs7;
 use aes::cipher::{BlockModeDecrypt, KeyIvInit};
 use base64::prelude::*;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, Mac, KeyInit};
 use rsa::rand_core::{OsRng, RngCore};
-use rsa::sha2::Sha256;
+use sha2::Sha256;
 use zerocopy::IntoBytes;
 
 use crate::api::live::rst;
@@ -88,8 +88,10 @@ pub fn sign_xml(
     )?;
 
     let mut kmgr = bergshamra::KeysManager::new();
+    let key = signature.signing_key(nonce)?;
+
     kmgr.add_key(bergshamra::Key::new(
-        signature.signing_key(nonce),
+        key,
         bergshamra::KeyUsage::Sign,
     ));
     let ctx = bergshamra::DsigContext::new(kmgr).with_strict_verification(false);
