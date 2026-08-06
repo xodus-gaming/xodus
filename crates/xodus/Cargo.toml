@@ -50,3 +50,6 @@ ed25519-dalek = "3.0.0"
 
 [build-dependencies]
 prost-build = "0.14.4"
+
+[features]
+key-chain-file = []

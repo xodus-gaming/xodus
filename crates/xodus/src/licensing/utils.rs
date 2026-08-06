@@ -1,7 +1,7 @@
-use num_bigint_dig::ModInverse;
+use num_bigint_dig::{BigUint as NbBigUint, ModInverse};
 use num_integer::Integer;
 use rand::distr::{Alphanumeric, SampleString};
-use rsa::{BigUint, RsaPrivateKey};
+use rsa::{BigUint as RsaBigUint, RsaPrivateKey};
 
 use crate::licensing::splicense::BCryptRsaBlock;
 
@@ -30,7 +30,7 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Rs
     let mut take = |n: usize| {
         let s = &blob[off..off + n];
         off += n;
-        (num_bigint_dig::BigUint::from_bytes_be(s), s.to_vec())
+        (NbBigUint::from_bytes_be(s), s.to_vec())
     };
 
     // use nb_* names for internal arithmetic BigUints and store raw bytes for conversion back
@@ -39,38 +39,35 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Rs
     let (p_nb, p_bytes) = take(cb_p1);
     let (q_nb, q_bytes) = take(cb_p2);
 
+    // convert nb BigUints back to rsa::BigUint for API using original bytes
+    let n_rsa = RsaBigUint::from_bytes_be(&n_bytes);
+    let e_rsa = RsaBigUint::from_bytes_be(&e_bytes);
+    let p_rsa = RsaBigUint::from_bytes_be(&p_bytes);
+    let q_rsa = RsaBigUint::from_bytes_be(&q_bytes);
+
     match magic {
         RSAFULLPRIVATE_MAGIC => {
             log::trace!("Got RSA Full Private");
             // read d after p and q
             let (_d_nb, d_bytes) = take(cb_mod);
-            // convert nb BigUints back to rsa::BigUint for API using original bytes
-            let n_rsa = BigUint::from_bytes_be(&n_bytes);
-            let e_rsa = BigUint::from_bytes_be(&e_bytes);
-            let d_rsa = BigUint::from_bytes_be(&d_bytes);
-            let p_rsa = BigUint::from_bytes_be(&p_bytes);
-            let q_rsa = BigUint::from_bytes_be(&q_bytes);
+            let d_rsa = RsaBigUint::from_bytes_be(&d_bytes);
+
             RsaPrivateKey::from_components(n_rsa, e_rsa, d_rsa, vec![p_rsa, q_rsa])
         }
         RSAPRIVATE_MAGIC => {
             log::trace!("Got RSA Private");
             // No d in the blob — recompute it.
-            let one = num_bigint_dig::BigUint::from(1u32);
+            let one = NbBigUint::from(1u32);
             let p1 = &p_nb - &one;
             let p2 = &q_nb - &one;
             let lambda = p1.lcm(&p2);
             let d_nb = e_nb.clone().mod_inverse(&lambda).expect("e not invertible");
-            let d_rsa = BigUint::from_bytes_be(
+            let d_rsa = RsaBigUint::from_bytes_be(
                 &d_nb
                     .to_biguint()
                     .expect("inverse should be positive")
                     .to_bytes_be(),
             );
-            // convert nb BigUints back to rsa::BigUint for API using original bytes
-            let n_rsa = BigUint::from_bytes_be(&n_bytes);
-            let e_rsa = BigUint::from_bytes_be(&e_bytes);
-            let p_rsa = BigUint::from_bytes_be(&p_bytes);
-            let q_rsa = BigUint::from_bytes_be(&q_bytes);
             RsaPrivateKey::from_components(n_rsa, e_rsa, d_rsa, vec![p_rsa, q_rsa])
         }
         _ => panic!("not an RSA private blob"),

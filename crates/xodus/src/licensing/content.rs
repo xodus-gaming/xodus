@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use base64::prelude::*;
 use xal::cvlib::CorrelationVector;
-use xal::extensions::CorrelationVectorReqwestBuilder;
+//use xal::extensions::CorrelationVectorReqwestBuilder;
 
 use crate::licensing::utils;
 use crate::models::devicecredential::License;
