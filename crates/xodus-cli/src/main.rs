@@ -39,7 +39,14 @@ enum SubCommand {
         market: Option<String>,
     },
     Login,
-    Logout,
+    Logout {
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Remove device license"
+        )]
+        device: bool,
+    },
     #[command(about = "Download and extract the game through streaming algorithm")]
     Streaming {
         source: String,
@@ -142,7 +149,9 @@ async fn main() -> ExitCode {
             .await
         }
         SubCommand::Login => commands::login::run(&client, &tokens).await,
-        SubCommand::Logout => commands::logout::run(&tokens).await,
+        SubCommand::Logout {
+            device,
+        } => commands::logout::run(&tokens, device).await,
         SubCommand::Extract {
             path,
             destination,
