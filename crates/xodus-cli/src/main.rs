@@ -40,11 +40,7 @@ enum SubCommand {
     },
     Login,
     Logout {
-        #[arg(
-            long,
-            default_value_t = false,
-            help = "Remove device license"
-        )]
+        #[arg(long, default_value_t = false, help = "Remove device license")]
         device: bool,
     },
     #[command(about = "Download and extract the game through streaming algorithm")]
@@ -149,9 +145,7 @@ async fn main() -> ExitCode {
             .await
         }
         SubCommand::Login => commands::login::run(&client, &tokens).await,
-        SubCommand::Logout {
-            device,
-        } => commands::logout::run(&tokens, device).await,
+        SubCommand::Logout { device } => commands::logout::run(&tokens, device).await,
         SubCommand::Extract {
             path,
             destination,
