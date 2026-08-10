@@ -1,8 +1,8 @@
-use xodus::{
-    licensing::splicense::{DeviceKey, SPLicense},
-    models::{live::ExchangeUserTokenOutcome, secrets::Token, soap},
-    tokens::TokenManager,
-};
+use xodus::licensing::splicense::{DeviceKey, SPLicense};
+use xodus::models::live::ExchangeUserTokenOutcome;
+use xodus::models::secrets::Token;
+use xodus::models::soap;
+use xodus::tokens::TokenManager;
 
 pub async fn get_license(
     client: &reqwest::Client,

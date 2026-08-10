@@ -1,16 +1,17 @@
 // Hardware probing utilities
 
-use crate::{clep, models::devicecredential::Component};
-use base64::prelude::*;
-#[cfg(not(target_os = "linux"))]
-use smbioslib::{SMBiosSystemInformation, SystemUuidData, table_load_from_device};
 use std::io;
-
-#[cfg(any(target_os = "macos", target_os = "ios", target_family = "windows"))]
-use smbioslib::raw_smbios_from_device;
-
 #[cfg(target_os = "linux")]
 use std::process::{Command, Stdio};
+
+use base64::prelude::*;
+#[cfg(any(target_os = "macos", target_os = "ios", target_family = "windows"))]
+use smbioslib::raw_smbios_from_device;
+#[cfg(not(target_os = "linux"))]
+use smbioslib::{SMBiosSystemInformation, SystemUuidData, table_load_from_device};
+
+use crate::clep;
+use crate::models::devicecredential::Component;
 
 pub fn probe_provision_components() -> Vec<Component> {
     let mut components = Vec::with_capacity(16);

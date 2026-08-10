@@ -1,16 +1,10 @@
-use crate::{
-    hardware,
-    licensing::{
-        splicense::SPLicense,
-        utils::{generate_string, parse_bcrypt_rsa_private},
-    },
-    models::{
-        devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo},
-        secrets::Device,
-        soap::BodyContent,
-    },
-    tokens::manager::TokenManager,
-};
+use crate::hardware;
+use crate::licensing::splicense::SPLicense;
+use crate::licensing::utils::{generate_string, parse_bcrypt_rsa_private};
+use crate::models::devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo};
+use crate::models::secrets::Device;
+use crate::models::soap::BodyContent;
+use crate::tokens::manager::TokenManager;
 
 /// Provisions a device (if none is stored yet) or re-authenticates an existing one
 /// (if its STS token is missing/expired), persisting the result through `tokens`.

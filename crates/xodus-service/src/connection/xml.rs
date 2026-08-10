@@ -1,15 +1,12 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use xodus::{
-    models::{
-        live::ExchangeUserTokenOutcome,
-        secrets::Token,
-        soap,
-        xgameruntime::xuser::{MSATokenRequest, MSATokenResponse},
-    },
-    proto::xodus::XodusMessageType,
-};
+use xodus::models::live::ExchangeUserTokenOutcome;
+use xodus::models::secrets::Token;
+use xodus::models::soap;
+use xodus::models::xgameruntime::xuser::{MSATokenRequest, MSATokenResponse};
+use xodus::proto::xodus::XodusMessageType;
 
-use crate::{XML_MAGIC, simple_context::SimpleContext};
+use crate::XML_MAGIC;
+use crate::simple_context::SimpleContext;
 
 pub async fn handle(
     socket: &mut tokio::net::UnixStream,

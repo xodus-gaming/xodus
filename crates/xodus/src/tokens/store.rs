@@ -3,6 +3,7 @@ use std::time::Instant;
 pub trait TokenBackend: Send + Sync {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>, TokenStoreError>;
     fn set(&self, key: &str, value: &[u8]) -> Result<(), TokenStoreError>;
+    fn remove(&self, key: &str) -> Result<(), TokenStoreError>;
 }
 
 pub trait ExpiringTokenBackend: TokenBackend {

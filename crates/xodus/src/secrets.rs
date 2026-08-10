@@ -4,13 +4,7 @@ use std::path::PathBuf;
 pub static SERVICE_NAME: &str = "Xodus Service";
 
 pub fn init_secrets() -> Result<(), keyring_core::Error> {
-    #[cfg(target_os = "linux")]
-    {
-        keyring_core::set_default_store(dbus_secret_service_keyring_store::Store::new()?);
-        return Ok(());
-    }
-
-    #[cfg(target_os = "macos")]
+    #[cfg(feature = "key-chain-file")]
     {
         let store = keyring_core::sample::Store::new_with_backing(
             secrets_backing_file()
@@ -21,14 +15,28 @@ pub fn init_secrets() -> Result<(), keyring_core::Error> {
         return Ok(());
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(not(feature = "key-chain-file"))]
     {
-        let store = keyring_core::sample::Store::new_with_configuration(
-            &std::collections::HashMap::from([("persist", "true")]),
-        )?;
-        keyring_core::set_default_store(store);
-        return Ok(());
+        #[cfg(target_os = "linux")]
+        {
+            keyring_core::set_default_store(dbus_secret_service_keyring_store::Store::new()?);
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            keyring_core::set_default_store(apple_native_keyring_store::keychain::Store::new()?);
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let store = keyring_core::sample::Store::new_with_configuration(
+                &std::collections::HashMap::from([("persist", "true")]),
+            )?;
+            keyring_core::set_default_store(store);
+        }
     }
+
+    Ok(())
 }
 
 pub fn get_entry(user: &str) -> Result<Entry, keyring_core::Error> {
@@ -39,10 +47,11 @@ pub fn destroy_secrets() {
     keyring_core::unset_default_store();
 }
 
-#[cfg(target_os = "macos")]
-fn secrets_backing_file() -> PathBuf {
+#[cfg(feature = "key-chain-file")]
+fn secrets_backing_file() -> std::path::PathBuf {
     std::env::var_os("HOME")
-        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(std::env::temp_dir)
         .join(".xodus-keyring.ron")
 }

@@ -1,10 +1,8 @@
-use tao::{
-    dpi::{LogicalSize, Size},
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopWindowTarget},
-    platform::run_return::EventLoopExtRunReturn,
-    window::{Window, WindowBuilder},
-};
+use tao::dpi::{LogicalSize, Size};
+use tao::event::{Event, WindowEvent};
+use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopWindowTarget};
+use tao::platform::run_return::EventLoopExtRunReturn;
+use tao::window::{Window, WindowBuilder};
 use wry::http::{HeaderMap, HeaderValue};
 use wry::{PageLoadEvent, WebView, WebViewBuilder};
 use xodus::models::live::{DAProperty, HostBridgeMessage};

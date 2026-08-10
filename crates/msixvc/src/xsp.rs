@@ -1,6 +1,6 @@
+use tokio::io::{AsyncRead, AsyncSeek, AsyncSeekExt, BufReader};
+
 use crate::models::xsp::{XspHeader, XspPatchRecord};
-use tokio::io::{AsyncRead, AsyncSeek};
-use tokio::io::{AsyncSeekExt, BufReader};
 
 pub struct XspFile {
     pub header: XspHeader,

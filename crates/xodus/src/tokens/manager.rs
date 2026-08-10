@@ -1,15 +1,11 @@
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Instant;
 
-use crate::{
-    models::{
-        secrets::{Device, Token, TokenStore, User},
-        xbox::XstsResponse,
-    },
-    tokens::{
-        backend::{KeychainBackend, MemoryBackend},
-        store::{ExpiringTokenBackend, TokenBackend, TokenStoreError},
-    },
-};
+use crate::models::secrets::{Device, Token, TokenStore, User};
+use crate::models::xbox::XstsResponse;
+use crate::tokens::backend::{KeychainBackend, MemoryBackend};
+use crate::tokens::store::{ExpiringTokenBackend, TokenBackend, TokenStoreError};
 
 mod keys {
     pub const DEV_LICENSE: &str = "dev_license";
@@ -59,6 +55,12 @@ impl TokenManager {
         )
     }
 
+    pub fn remove_persistent(&self) -> Result<(), TokenStoreError> {
+        self.persistent.remove(keys::DEVICE_TOKENS)?;
+        self.persistent.remove(keys::USER_TOKENS)?;
+        self.persistent.remove(keys::USER_INFO)
+    }
+
     // ---- Device identity / license -----------------------------------------
 
     pub fn get_device_license(&self) -> Result<Device, TokenStoreError> {
@@ -72,6 +74,10 @@ impl TokenManager {
     pub fn save_device_license(&self, device: &Device) -> Result<(), TokenStoreError> {
         self.persistent
             .set(keys::DEV_LICENSE, &serde_json::to_vec(device)?)
+    }
+
+    pub fn remove_device_license(&self) -> Result<(), TokenStoreError> {
+        self.persistent.remove(keys::DEV_LICENSE)
     }
 
     // ---- Device STS tokens (keyed by SOAP "applies_to" address) -----------

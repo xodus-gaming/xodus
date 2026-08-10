@@ -1,4 +1,6 @@
-use std::{collections::HashMap, sync::Mutex, time::Instant};
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::time::Instant;
 
 use crate::tokens::store::{ExpiringTokenBackend, TokenBackend, TokenStoreError};
 
@@ -34,6 +36,11 @@ impl TokenBackend for MemoryBackend {
                 expires_at: None,
             },
         );
+        Ok(())
+    }
+
+    fn remove(&self, key: &str) -> Result<(), TokenStoreError> {
+        self.inner.lock().unwrap().remove(key);
         Ok(())
     }
 }

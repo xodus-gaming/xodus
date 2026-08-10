@@ -1,8 +1,10 @@
 use std::process::ExitCode;
 
-use crate::license::get_license;
-use tokio::{fs::OpenOptions, io::AsyncWriteExt};
+use tokio::fs::OpenOptions;
+use tokio::io::AsyncWriteExt;
 use xodus::tokens::TokenManager;
+
+use crate::license::get_license;
 
 pub async fn run(
     client: &reqwest::Client,

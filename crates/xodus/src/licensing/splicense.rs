@@ -21,7 +21,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::{collections::HashMap, io, io::Read, ops::Deref};
+use std::collections::HashMap;
+use std::io;
+use std::io::Read;
+use std::ops::Deref;
 
 use aes::cipher::{BlockCipherDecrypt, KeyInit};
 use base64::prelude::*;

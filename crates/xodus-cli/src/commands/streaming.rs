@@ -1,24 +1,21 @@
-use std::{collections::HashMap, path::Path, process::ExitCode, vec};
+use std::collections::HashMap;
+use std::path::Path;
+use std::process::ExitCode;
+use std::vec;
 
 use fs2::available_space;
 use futures_util::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use msixvc::{
-    streaming,
-    xvd::{SegmentFile, XvdFile},
-};
-use tokio::{
-    fs::{File, OpenOptions},
-    io::AsyncRead,
-    sync::mpsc::{Receiver, Sender},
-};
+use msixvc::streaming;
+use msixvc::xvd::{SegmentFile, XvdFile};
+use tokio::fs::{File, OpenOptions};
+use tokio::io::AsyncRead;
+use tokio::sync::mpsc::{Receiver, Sender};
 use uuid::Uuid;
 use xodus::tokens::TokenManager;
 
-use crate::{
-    license::get_license,
-    package::{get_content_id, get_packages},
-};
+use crate::license::get_license;
+use crate::package::{get_content_id, get_packages};
 
 struct Job {
     name: String,

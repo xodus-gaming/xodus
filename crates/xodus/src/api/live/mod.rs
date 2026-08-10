@@ -131,11 +131,11 @@ pub async fn exchange_user_token(
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        api::live::exchange_device_token,
-        models::{secrets::Token, soap},
-        tokens::{TokenManager, device::ensure_device_credentials},
-    };
+    use crate::api::live::exchange_device_token;
+    use crate::models::secrets::Token;
+    use crate::models::soap;
+    use crate::tokens::TokenManager;
+    use crate::tokens::device::ensure_device_credentials;
 
     #[tokio::test]
     async fn test_get_xbox_live_dev_token() {

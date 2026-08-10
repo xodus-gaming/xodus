@@ -1,9 +1,7 @@
-use crate::models::{
-    live::ExchangeUserTokenOutcome,
-    secrets::{LegacyToken, Token},
-    soap,
-    xbox::XstsResponse,
-};
+use crate::models::live::ExchangeUserTokenOutcome;
+use crate::models::secrets::{LegacyToken, Token};
+use crate::models::soap;
+use crate::models::xbox::XstsResponse;
 
 pub mod auth;
 pub mod title;

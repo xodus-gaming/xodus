@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
-use xodus::{models::secrets::LegacyToken, tokens::TokenManager};
+use xodus::models::secrets::LegacyToken;
+use xodus::tokens::TokenManager;
 
 use crate::simple_context::SimpleContext;
 

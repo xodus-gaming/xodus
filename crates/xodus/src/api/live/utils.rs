@@ -1,13 +1,16 @@
-use crate::api::live::rst;
-use crate::models::soap;
-use aes::cipher::{BlockModeDecrypt, KeyIvInit, block_padding::Pkcs7};
-use base64::prelude::*;
-use hmac::{Hmac, Mac};
-use rsa::rand_core::{OsRng, RngCore};
-use rsa::sha2::Sha256;
 use std::cmp::min;
 use std::collections::HashMap;
+
+use aes::cipher::block_padding::Pkcs7;
+use aes::cipher::{BlockModeDecrypt, KeyIvInit};
+use base64::prelude::*;
+use hmac::{Hmac, KeyInit, Mac};
+use rsa::rand_core::{OsRng, RngCore};
+use sha2::Sha256;
 use zerocopy::IntoBytes;
+
+use crate::api::live::rst;
+use crate::models::soap;
 
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
@@ -85,10 +88,9 @@ pub fn sign_xml(
     )?;
 
     let mut kmgr = bergshamra::KeysManager::new();
-    kmgr.add_key(bergshamra::Key::new(
-        signature.signing_key(nonce),
-        bergshamra::KeyUsage::Sign,
-    ));
+    let key = signature.signing_key(nonce)?;
+
+    kmgr.add_key(bergshamra::Key::new(key, bergshamra::KeyUsage::Sign));
     let ctx = bergshamra::DsigContext::new(kmgr).with_strict_verification(false);
     let signed = bergshamra::sign(&ctx, std::str::from_utf8(&min_xml).unwrap())?;
     Ok(signed)

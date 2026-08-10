@@ -1,20 +1,19 @@
 use reqwest::Client;
+use xal::client_params::CLIENT_WINDOWS;
+use xal::oauth2::basic::BasicTokenType;
+use xal::oauth2::{EmptyExtraTokenFields, RedirectUrl, Scope, StandardTokenResponse};
+use xal::response::{
+    XADDisplayClaims, XATDisplayClaims, XAUDisplayClaims, XSTSDisplayClaims, XTokenResponse,
+};
 use xal::{
     AuthPromptCallback, Constants, DeviceType, Flows, TokenStore, XalAppParameters,
     XalAuthenticator,
-    client_params::CLIENT_WINDOWS,
-    oauth2::{
-        EmptyExtraTokenFields, RedirectUrl, Scope, StandardTokenResponse, basic::BasicTokenType,
-    },
-    response::{
-        XADDisplayClaims, XATDisplayClaims, XAUDisplayClaims, XSTSDisplayClaims, XTokenResponse,
-    },
 };
 
-use crate::{
-    models::{live::ExchangeUserTokenOutcome, secrets::Token, soap},
-    tokens::TokenManager,
-};
+use crate::models::live::ExchangeUserTokenOutcome;
+use crate::models::secrets::Token;
+use crate::models::soap;
+use crate::tokens::TokenManager;
 
 fn get_app_params() -> XalAppParameters {
     XalAppParameters {
@@ -77,6 +76,7 @@ pub async fn do_sisu(
     (
         XalAuthenticator,
         xal::response::SisuRPSAuthorizationResponse,
+        xal::response::DeviceToken,
     ),
     Box<dyn std::error::Error>,
 > {
@@ -183,7 +183,7 @@ pub async fn do_sisu(
         .sisu_authorize_rps(&user_token, &data.token, None)
         .await
         .expect("ok");
-    Ok((auth, resp))
+    Ok((auth, resp, data))
 }
 
 #[ignore]
@@ -193,7 +193,7 @@ async fn test_minecraft_win_auth() {
     crate::secrets::init_secrets().expect("Unable to initialize credentials");
     let tokens = TokenManager::with_keychain_and_memory();
 
-    let (_, resp) = do_sisu(&client, &tokens, "0000000040159362", 896928775)
+    let (_, resp, _) = do_sisu(&client, &tokens, "0000000040159362", 896928775)
         .await
         .expect("ok");
 

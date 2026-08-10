@@ -1,3 +1,10 @@
+use std::collections::HashMap;
+use std::fmt::Debug;
+
+use chrono::DateTime;
+use num_enum::TryFromPrimitiveError;
+use uuid::Uuid;
+
 use super::raw;
 use crate::common::microsoft_filetime;
 use crate::math::{bytes_to_pages, calculate_number_of_hash_pages, page_number_to_offset};
@@ -10,13 +17,6 @@ use crate::models::xvd::flags::{
     WriteablePolicyFlags, XvcInfoFlags, XvcRegionFlags, XvcRegionPresenceInfoFlags,
     XvdSegmentMetadataSegmentFlags, XvdVolumeFlags,
 };
-
-use std::collections::HashMap;
-use std::fmt::Debug;
-
-use chrono::DateTime;
-use num_enum::TryFromPrimitiveError;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XvdHeader {
