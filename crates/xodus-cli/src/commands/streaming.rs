@@ -332,8 +332,7 @@ where
         .reduce(|old, c| old + c)
         .map_or(0, |x| x);
 
-    let remaining_cache_size = l.saturating_sub(remote_file.cached_len());
-    let required_free_space = remaining_cache_size.saturating_add(total_size);
+    let required_free_space = total_size;
     let available_free_space = match available_space(out) {
         Ok(space) => space,
         Err(err) => {
@@ -348,11 +347,10 @@ where
 
     if available_free_space < required_free_space {
         eprintln!(
-            "not enough free disk space on {}: need {} bytes, have {} bytes (remaining cache: {}, files: {})",
+            "not enough free disk space on {}: need {} bytes, have {} bytes (files: {})",
             out.display(),
             required_free_space,
             available_free_space,
-            remaining_cache_size,
             total_size
         );
         return;
