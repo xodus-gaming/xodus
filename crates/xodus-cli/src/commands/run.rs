@@ -1,6 +1,5 @@
-use std::os::fd::{AsFd, AsRawFd, IntoRawFd};
 use std::collections::HashMap;
-use std::os::fd::{AsFd, IntoRawFd};
+use std::os::fd::{AsFd, AsRawFd, IntoRawFd};
 use std::path::Path;
 use std::process::ExitCode;
 
