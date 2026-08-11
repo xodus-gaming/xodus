@@ -62,7 +62,7 @@ pub async fn run(
         );
         if dry_run {
             println!("{}", url);
-            return ExitCode::SUCCESS;
+            continue;
         }
 
         let progress_bar = ProgressBar::new(file.file_size as u64).with_style(
