@@ -55,6 +55,13 @@ impl XstsResponse {
             .first()
             .map(|claim| claim.uhs.as_str())
     }
+
+    pub fn xid(&self) -> Option<&str> {
+        self.display_claims
+            .xui
+            .first()
+            .and_then(|claim| claim.xid.as_deref())
+    }
 }
 
 #[derive(Debug, Serialize)]

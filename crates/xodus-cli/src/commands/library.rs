@@ -1,0 +1,175 @@
+use std::process::ExitCode;
+
+use serde::Deserialize;
+use xodus::models::secrets::Token;
+use xodus::tokens::TokenManager;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TitleHistoryResponse {
+    titles: Vec<TitleEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TitleEntry {
+    title_id: String,
+    name: String,
+    pfn: Option<String>,
+    #[serde(default)]
+    devices: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogLookupResponse {
+    #[serde(rename = "BigIds", default)]
+    big_ids: Vec<String>,
+}
+
+/// Lists titles from the account's real Xbox Live title history (recently
+/// played), resolving each one's Microsoft Store product id where possible.
+/// Meant to answer "what product id do I even pass to `download`/`streaming`"
+/// without guessing store ids from search engines - only titles this account
+/// has actually played show up here.
+pub async fn run(
+    client: &reqwest::Client,
+    tokens: &TokenManager,
+    market: Option<String>,
+    max_items: usize,
+) -> ExitCode {
+    let dev_token = tokens.get_device_sts_token().unwrap();
+    let Token::Legacy(dev_token) = dev_token else {
+        eprintln!("Invalid device STS token");
+        return ExitCode::FAILURE;
+    };
+    let user_token = tokens.get_user_sts_token().unwrap();
+    let Token::Legacy(legacy) = user_token else {
+        eprintln!("Invalid user STS token");
+        return ExitCode::FAILURE;
+    };
+
+    let xsts = xodus::api::xbox::run(client, dev_token, legacy, "http://xboxlive.com").await;
+    let Some(xid) = xsts.xid().map(|xid| xid.to_string()) else {
+        eprintln!("Could not determine xuid from token");
+        return ExitCode::FAILURE;
+    };
+    let auth = xodus::api::xbox::get_xsts_auth_header(xsts);
+
+    let response = client
+        .get(format!(
+            "https://titlehub.xboxlive.com/users/xuid({xid})/titles/titlehistory/decoration/scid?maxItems={max_items}"
+        ))
+        .header("Authorization", auth)
+        .header("x-xbl-contract-version", "2")
+        .header("Accept-Language", "en-US")
+        .send()
+        .await;
+
+    let response = match response {
+        Ok(response) => response,
+        Err(err) => {
+            eprintln!("titlehub request failed: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    if !response.status().is_success() {
+        eprintln!("titlehub request failed: HTTP {}", response.status());
+        return ExitCode::FAILURE;
+    }
+
+    let history: TitleHistoryResponse = match response.json().await {
+        Ok(history) => history,
+        Err(err) => {
+            eprintln!("failed to parse titlehub response: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let market = market.unwrap_or_else(|| "US".to_string());
+
+    println!(
+        "{:<45} {:<25} {:<12} {}",
+        "NAME", "DEVICES", "TITLE ID", "STORE ID"
+    );
+    for title in &history.titles {
+        let store_id = match &title.pfn {
+            Some(pfn) => lookup_store_id(client, pfn, &market)
+                .await
+                .unwrap_or_else(|| "?".to_string()),
+            None => "?".to_string(),
+        };
+        println!(
+            "{:<45} {:<25} {:<12} {}",
+            truncate(&title.name, 45),
+            title.devices.join(","),
+            title.title_id,
+            store_id
+        );
+    }
+
+    ExitCode::SUCCESS
+}
+
+async fn lookup_store_id(client: &reqwest::Client, pfn: &str, market: &str) -> Option<String> {
+    let response = client
+        .get(format!(
+            "https://displaycatalog.mp.microsoft.com/v7.0/products/lookup?alternateId=PackageFamilyName&value={pfn}&market={market}&languages=en-US"
+        ))
+        .send()
+        .await
+        .ok()?;
+    let data: CatalogLookupResponse = response.json().await.ok()?;
+    data.big_ids.into_iter().next()
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        s.chars().take(max.saturating_sub(1)).collect::<String>() + "…"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_keeps_short_strings_unchanged() {
+        assert_eq!(truncate("Balatro", 45), "Balatro");
+    }
+
+    #[test]
+    fn truncate_shortens_long_strings_with_ellipsis() {
+        let truncated = truncate("A very long title that exceeds the column width", 20);
+        assert_eq!(truncated.chars().count(), 20);
+        assert!(truncated.ends_with('…'));
+    }
+
+    #[test]
+    fn parses_real_titlehub_response_shape() {
+        // Trimmed from a real titlehub.xboxlive.com titlehistory response.
+        let json = r#"{"xuid":"2535425365223098","titles":[
+            {"titleId":"1792830437","pfn":"PlayStack.Balatro_3wcqaesafpzfy","name":"Balatro","type":"Game","devices":["PC","XboxOne","XboxSeries"]},
+            {"titleId":"1414793202","pfn":null,"name":"GTA IV","type":"Game","devices":["Xbox360","XboxOne","XboxSeries"]}
+        ]}"#;
+
+        let history: TitleHistoryResponse = serde_json::from_str(json).expect("should parse");
+        assert_eq!(history.titles.len(), 2);
+        assert_eq!(history.titles[0].name, "Balatro");
+        assert_eq!(
+            history.titles[0].pfn.as_deref(),
+            Some("PlayStack.Balatro_3wcqaesafpzfy")
+        );
+        assert_eq!(history.titles[1].pfn, None);
+    }
+
+    #[test]
+    fn parses_real_catalog_lookup_response_shape() {
+        // Trimmed from a real displaycatalog.mp.microsoft.com lookup response.
+        let json = r#"{"BigIds":["9PK087LNGJC5"],"HasMorePages":false,"Products":[]}"#;
+        let data: CatalogLookupResponse = serde_json::from_str(json).expect("should parse");
+        assert_eq!(data.big_ids, vec!["9PK087LNGJC5".to_string()]);
+    }
+}
