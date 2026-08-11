@@ -122,7 +122,20 @@ async fn main() -> ExitCode {
 
     xodus::secrets::init_secrets().expect("Unable to initialize credentials");
     let tokens = TokenManager::with_keychain_and_memory();
-    xodus::tokens::device::ensure_device_credentials(&client, &tokens).await;
+
+    // Clep/SpLicense are pure local data transforms and Logout only removes
+    // stored credentials - none of them need a device identity, so don't
+    // force provisioning (network + keychain access) just to run them. This
+    // matters in practice: on a session with no usable secret-service
+    // keychain, provisioning fails outright, which previously meant even
+    // these fully offline commands were unusable.
+    let needs_device_credentials = !matches!(
+        args.command,
+        SubCommand::Clep { .. } | SubCommand::SpLicense { .. } | SubCommand::Logout { .. }
+    );
+    if needs_device_credentials {
+        xodus::tokens::device::ensure_device_credentials(&client, &tokens).await;
+    }
 
     let code = match args.command {
         SubCommand::Download {
