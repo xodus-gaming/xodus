@@ -42,8 +42,20 @@ pub async fn run(
     let (tx, rx) = tokio::sync::mpsc::channel::<ProgressEvent>(256);
     if source.starts_with("file://") {
         let fsrc = source.strip_prefix("file://").unwrap_or_default();
-        let f = File::open(fsrc).await.unwrap();
-        let l = f.metadata().await.unwrap().len();
+        let f = match File::open(fsrc).await {
+            Ok(f) => f,
+            Err(err) => {
+                eprintln!("could not open {fsrc}: {err}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let l = match f.metadata().await {
+            Ok(metadata) => metadata.len(),
+            Err(err) => {
+                eprintln!("could not read metadata for {fsrc}: {err}");
+                return ExitCode::FAILURE;
+            }
+        };
         run_cli_reader(
             client,
             tokens,
