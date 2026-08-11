@@ -45,11 +45,11 @@ Content is
   "tid": "<tenant ? id>",
   "uti": "<hashed string>",
   "ver": "1.0",
-  "xms_act_fct": "3 9",
-  "xms_ftd": "<Xbox Media Services ? hashed string>",
-  "xms_idrel": "7 10",
-  "xms_rd": "<Xbox Media Services ? hashed string>",
-  "xms_sub_fct": "9 3"
+  "xms_act_fct": "3 9", # Actor facets claim
+  "xms_ftd": "<Entra-specific session, hashed string>",
+  "xms_idrel": "7 10", # Relationship between the subject and the resource tenant.
+  "xms_rd": "<Entra-specific, Xbox-scope session, hashed string>",
+  "xms_sub_fct": "9 3" #Entra Subject facets claim
 }
 
 Public Key Signature 
