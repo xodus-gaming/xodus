@@ -70,7 +70,7 @@ pub async fn get_license(
         return Err("Unsupported token".to_string());
     };
 
-    let (_response, game_license) = xodus::licensing::content::get_license_content(
+    let (_content, game_license) = xodus::licensing::content::get_license_content(
         client,
         ms_device_token,
         user_token,
@@ -79,7 +79,7 @@ pub async fn get_license(
         market,
     )
     .await
-    .expect("failed to get license");
+    .map_err(|err| err.to_string())?;
 
     let game_splicense = SPLicense::parse_base64(&game_license.splicense_block)
         .expect("could not parse base64 game SPLicense");
