@@ -152,19 +152,46 @@ fn load_raw_smbios() -> io::Result<Vec<u8>> {
 
 #[cfg(target_os = "linux")]
 fn load_raw_smbios() -> io::Result<Vec<u8>> {
-    let cmd = Command::new("pkexec")
+    use std::time::{Duration, Instant};
+
+    let mut child = Command::new("pkexec")
         .args(["cat", "/sys/firmware/dmi/entries/1-0/raw"])
         .stdout(Stdio::piped())
         .spawn()?;
-    let output = cmd.wait_with_output()?;
 
-    if output.status.success() {
-        Ok(output.stdout)
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "unable to probe SMBIOS data",
-        ))
+    // pkexec blocks forever waiting on a polkit authentication agent. If none is
+    // running (headless/SSH/minimal WM sessions), the process never returns and
+    // hangs the caller indefinitely with no error. Bound the wait so that case
+    // degrades to an error instead. The DMI type-1 "raw" entry is a few hundred
+    // bytes at most, well under a pipe buffer, so it's safe to read only after
+    // the child has exited.
+    const TIMEOUT: Duration = Duration::from_secs(10);
+    let start = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            let mut output = Vec::new();
+            if let Some(mut stdout) = child.stdout.take() {
+                use std::io::Read;
+                stdout.read_to_end(&mut output)?;
+            }
+            return if status.success() {
+                Ok(output)
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "unable to probe SMBIOS data",
+                ))
+            };
+        }
+        if start.elapsed() > TIMEOUT {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "pkexec did not respond within 10s (no polkit authentication agent running?)",
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
 }
 
