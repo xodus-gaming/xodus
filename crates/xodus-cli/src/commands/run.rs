@@ -17,6 +17,7 @@ use tokio::process::Command;
 use xodus::tokens::TokenManager;
 
 use crate::license::get_license;
+use crate::manifest;
 
 #[cfg(target_os = "linux")]
 fn make_temp_file(_folder: &str) -> std::io::Result<std::fs::File> {
@@ -212,6 +213,20 @@ pub async fn run(
     let nt_prefix = out_absolute.to_string_lossy().replace("/", "\\");
     let nt_prefix = nt_prefix.trim_end_matches('\\');
 
+    // When --exe isn't given, MicrosoftGame.config's ExecutableList is the
+    // package's own authoritative answer for which executable targets "PC" -
+    // read that instead of guessing. HashMap iteration order is randomized
+    // per process, so falling back to "whichever entry is seen first" would
+    // be non-deterministic; pick_default_exe() is only a defensive fallback
+    // for the case the manifest is missing or unparseable.
+    let default_exe: Option<String> = exe
+        .is_none()
+        .then(|| {
+            manifest::find_pc_executable(out)
+                .or_else(|| pick_default_exe(fds.iter().map(|(name, _)| *name)).cloned())
+        })
+        .flatten();
+
     let mut nt_entry = None;
 
     for fd in fds {
@@ -225,7 +240,7 @@ pub async fn run(
             if exe == fd.0 {
                 nt_entry = Some(nt_path)
             }
-        } else if nt_entry.is_none() {
+        } else if default_exe.as_deref() == Some(fd.0.as_str()) {
             nt_entry = Some(nt_path)
         }
 
@@ -257,4 +272,51 @@ pub async fn run(
     cleanup().await;
 
     ExitCode::from(status.code().map(|c| c as u8).unwrap_or(0))
+}
+
+/// Fallback used only when `MicrosoftGame.config` is missing or unparseable:
+/// picks the lexicographically smallest candidate name so the choice is at
+/// least deterministic across runs, since `HashMap` iteration order is
+/// randomized per process. Unlike the manifest, this cannot identify the
+/// package's actual main executable when it ships more than one
+/// `keep_encrypted` .exe (e.g. the game plus a crash handler) - it is a
+/// degraded fallback, not a correctness guarantee.
+fn pick_default_exe<'a>(names: impl Iterator<Item = &'a String>) -> Option<&'a String> {
+    names.min()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fallback_pick_does_not_depend_on_input_order() {
+        let names = [
+            "Updater.exe".to_string(),
+            "Game.exe".to_string(),
+            "CrashHandler.exe".to_string(),
+        ];
+
+        let orderings: [[&String; 3]; 3] = [
+            [&names[0], &names[1], &names[2]],
+            [&names[2], &names[1], &names[0]],
+            [&names[1], &names[0], &names[2]],
+        ];
+
+        let results: Vec<Option<&String>> = orderings
+            .iter()
+            .map(|order| pick_default_exe(order.iter().copied()))
+            .collect();
+
+        assert!(
+            results.iter().all(|r| *r == results[0]),
+            "fallback pick must not depend on the order candidates are seen in: {results:?}"
+        );
+    }
+
+    #[test]
+    fn fallback_pick_none_for_no_candidates() {
+        let empty: Vec<String> = vec![];
+        assert_eq!(pick_default_exe(empty.iter()), None);
+    }
 }
