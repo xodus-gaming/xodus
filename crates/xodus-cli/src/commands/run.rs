@@ -212,6 +212,20 @@ pub async fn run(
     let nt_prefix = out_absolute.to_string_lossy().replace("/", "\\");
     let nt_prefix = nt_prefix.trim_end_matches('\\');
 
+    // HashMap iteration order is randomized per-process, so picking "the first
+    // entry seen" as the default executable (when `--exe` isn't given) is
+    // undeterministic and can land on a non-.exe file. Pick deterministically
+    // instead, restricted to actual .exe candidates.
+    let default_exe = exe
+        .is_none()
+        .then(|| {
+            fds.iter()
+                .map(|(name, _)| *name)
+                .filter(|name| name.to_ascii_lowercase().ends_with(".exe"))
+                .min()
+        })
+        .flatten();
+
     let mut nt_entry = None;
 
     for fd in fds {
@@ -225,7 +239,7 @@ pub async fn run(
             if exe == fd.0 {
                 nt_entry = Some(nt_path)
             }
-        } else if nt_entry.is_none() {
+        } else if default_exe == Some(fd.0) {
             nt_entry = Some(nt_path)
         }
 
