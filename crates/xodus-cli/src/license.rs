@@ -79,7 +79,7 @@ pub async fn get_license(
         market,
     )
     .await
-    .expect("failed to get license");
+    .map_err(|err| err.to_string())?;
 
     let game_splicense = SPLicense::parse_base64(&game_license.splicense_block)
         .expect("could not parse base64 game SPLicense");

@@ -10,6 +10,30 @@ use crate::models::licensing::{
     DeviceContext, LicenseContentRequest, LicenseContentResponse, LicenseUserIdentity,
 };
 
+#[derive(Debug, thiserror::Error)]
+pub enum LicenseContentError {
+    #[error(
+        "license response did not contain a license; make sure you own the game or have an active subscription that includes it"
+    )]
+    MissingLicense,
+    #[error("license request failed: {0}")]
+    Request(#[from] reqwest::Error),
+    #[error("invalid license response: {0}")]
+    InvalidResponse(#[from] serde_json::Error),
+}
+
+fn parse_license_response(body: &str) -> Result<LicenseContentResponse, LicenseContentError> {
+    let response: serde_json::Value = serde_json::from_str(body)?;
+    if response
+        .get("license")
+        .is_none_or(serde_json::Value::is_null)
+    {
+        return Err(LicenseContentError::MissingLicense);
+    }
+
+    Ok(serde_json::from_value(response)?)
+}
+
 // we might need a bump in xal-rs concerning reqwest,
 // that might block us from using the correlationvector extension
 pub async fn get_license_content(
@@ -19,7 +43,7 @@ pub async fn get_license_content(
     ticket_reference: String,
     content_id: String,
     market: String,
-) -> reqwest::Result<(LicenseContentResponse, License)> {
+) -> Result<(LicenseContentResponse, License), LicenseContentError> {
     let cv = CorrelationVector::new();
     let response = client
         .post("https://licensing.mp.microsoft.com/v7.0/licenses/content")
@@ -48,9 +72,25 @@ pub async fn get_license_content(
         .send()
         .await?;
 
-    let content_res = response.json::<LicenseContentResponse>().await?;
+    let body = response.text().await?;
+    let content_res = parse_license_response(&body)?;
     let license = &content_res.license.keys[0].value;
     let license = BASE64_STANDARD.decode(license).unwrap();
     let license = quick_xml::de::from_str::<License>(&String::from_utf8(license).unwrap()).unwrap();
     Ok((content_res, license))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_license_explains_ownership_requirement() {
+        let error = parse_license_response(r#"{"error":"No license found"}"#).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "license response did not contain a license; make sure you own the game or have an active subscription that includes it"
+        );
+    }
 }
