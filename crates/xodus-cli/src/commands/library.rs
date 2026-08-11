@@ -42,7 +42,13 @@ pub async fn run(
         eprintln!("Invalid device STS token");
         return ExitCode::FAILURE;
     };
-    let user_token = tokens.get_user_sts_token().unwrap();
+    let user_token = match tokens.get_user_sts_token() {
+        Ok(token) => token,
+        Err(_) => {
+            eprintln!("Not logged in - run `xodus-cli login` first");
+            return ExitCode::FAILURE;
+        }
+    };
     let Token::Legacy(legacy) = user_token else {
         eprintln!("Invalid user STS token");
         return ExitCode::FAILURE;
@@ -142,6 +148,43 @@ fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use xodus::models::secrets::LegacyToken;
+    use xodus::models::soap::Timestamp;
+    use xodus::tokens::PASSPORT_STS;
+
+    fn dummy_legacy_token() -> Token {
+        Token::Legacy(LegacyToken {
+            key_name: None,
+            token: "dummy".to_string(),
+            binary_secret: None,
+            tpm_key: None,
+            lifetime: Timestamp {
+                id: None,
+                created: "2026-01-01T00:00:00Z".to_string(),
+                expires: "2099-01-01T00:00:00Z".to_string(),
+            },
+        })
+    }
+
+    #[tokio::test]
+    async fn gives_a_clean_error_when_not_logged_in() {
+        let tokens = TokenManager::with_memory();
+        // A device token is always present in real usage (ensure_device_credentials
+        // runs at binary startup), but deliberately no user token here -
+        // this simulates a session that has never run `xodus-cli login`.
+        tokens
+            .save_device_token(PASSPORT_STS.to_string(), dummy_legacy_token())
+            .unwrap();
+
+        let client = reqwest::Client::new();
+        let result = run(&client, &tokens, None, 10).await;
+
+        assert_eq!(
+            result,
+            ExitCode::FAILURE,
+            "expected a clean failure, not a panic, when not logged in"
+        );
+    }
 
     #[test]
     fn truncate_keeps_short_strings_unchanged() {
