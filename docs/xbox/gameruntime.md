@@ -60,6 +60,8 @@ Public Key Signature
 }
 ```
 
+The content structure follows Microsoft Entra's Agent Token claim/revendication : https://learn.microsoft.com/en-us/entra/agent-id/agent-token-claims
+
 answers this 
 
 ```JSON
