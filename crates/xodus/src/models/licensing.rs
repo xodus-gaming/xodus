@@ -43,9 +43,24 @@ pub struct LicenseUserIdentity {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum LicenseContentResponse {
+    Success {
+        license: LicenseContent,
+    },
+    SatisfactionFailure {
+        #[serde(rename = "satisfactionFailure")]
+        satisfaction_failure: SatisfactionFailure,
+    },
+}
+
+/// Returned instead of a license when the account has no entitlement for the
+/// requested content (e.g. not owned, not covered by the account's Game Pass tier).
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LicenseContentResponse {
-    pub license: LicenseContent,
+pub struct SatisfactionFailure {
+    pub code: i64,
+    pub description: String,
 }
 
 #[derive(Debug, Deserialize)]
