@@ -88,23 +88,31 @@ pub async fn run(
 
     let market = market.unwrap_or_else(|| "US".to_string());
 
+    // Store id lookups are independent per title, so run them concurrently
+    // rather than awaiting one at a time - with the default max_items=30
+    // this is the difference between one round-trip's latency and thirty.
+    let store_ids = futures_util::future::join_all(history.titles.iter().map(|title| {
+        let market = &market;
+        async move {
+            match &title.pfn {
+                Some(pfn) => lookup_store_id(client, pfn, market).await,
+                None => None,
+            }
+        }
+    }))
+    .await;
+
     println!(
         "{:<45} {:<25} {:<12} {}",
         "NAME", "DEVICES", "TITLE ID", "STORE ID"
     );
-    for title in &history.titles {
-        let store_id = match &title.pfn {
-            Some(pfn) => lookup_store_id(client, pfn, &market)
-                .await
-                .unwrap_or_else(|| "?".to_string()),
-            None => "?".to_string(),
-        };
+    for (title, store_id) in history.titles.iter().zip(store_ids) {
         println!(
             "{:<45} {:<25} {:<12} {}",
             truncate(&title.name, 45),
             title.devices.join(","),
             title.title_id,
-            store_id
+            store_id.unwrap_or_else(|| "?".to_string())
         );
     }
 
