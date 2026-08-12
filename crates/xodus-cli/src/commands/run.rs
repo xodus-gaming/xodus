@@ -208,28 +208,38 @@ pub async fn run(
         fds.push((file.0, stdf.into_raw_fd()));
     }
 
+    // Sort fds deterministically by path
+    fds.sort_by(|a, b| a.0.cmp(b.0));
+
     let mut env_value = String::new();
     let nt_prefix = out_absolute.to_string_lossy().replace("/", "\\");
     let nt_prefix = nt_prefix.trim_end_matches('\\');
 
     let mut nt_entry = None;
 
-    for fd in fds {
+    let target_exe = match &exe {
+        Some(user_exe) => Some(user_exe.clone()),
+        None => {
+            let paths: Vec<&str> = fds.iter().map(|(p, _)| p.as_str()).collect();
+            select_default_exe(&paths)
+        }
+    };
+
+    for fd in &fds {
         if !env_value.is_empty() {
             env_value.push('|');
         }
 
         let nt_suffix = fd.0.trim_start_matches('\\');
         let nt_path = format!("\\??\\Z:{}\\{}", nt_prefix, nt_suffix);
-        if let Some(exe) = &exe {
-            if exe == fd.0 {
-                nt_entry = Some(nt_path)
+        if let Some(target) = &target_exe {
+            let target_clean = target.trim_start_matches('\\');
+            if target == fd.0 || target_clean == nt_suffix {
+                nt_entry = Some(nt_path);
             }
-        } else if nt_entry.is_none() {
-            nt_entry = Some(nt_path)
         }
 
-        env_value.push_str(&format!("{}:\\??\\Z:{}\\{}", fd.1, nt_prefix, nt_suffix))
+        env_value.push_str(&format!("{}:\\??\\Z:{}\\{}", fd.1, nt_prefix, nt_suffix));
     }
 
     let Some(nt_entry) = nt_entry else {
@@ -258,3 +268,89 @@ pub async fn run(
 
     ExitCode::from(status.code().map(|c| c as u8).unwrap_or(0))
 }
+
+/// Helper to select the default executable from candidate relative paths.
+/// Evaluates executables deterministically:
+/// 1. Filters paths ending with `.exe` (case-insensitive).
+/// 2. Penalizes common helper/diagnostic/uninstaller binaries.
+/// 3. Prefers shallower directory depths and shorter file names.
+/// 4. Sorts by (score DESC, path ASC) to ensure 100% deterministic selection.
+pub fn select_default_exe(paths: &[&str]) -> Option<String> {
+    let mut exe_candidates: Vec<(&str, i32)> = paths
+        .iter()
+        .copied()
+        .filter(|p| p.to_lowercase().ends_with(".exe"))
+        .map(|p| {
+            let p_lower = p.to_lowercase();
+            let mut score = 100;
+
+            let helper_keywords = [
+                "crash",
+                "reporter",
+                "unins",
+                "setup",
+                "redist",
+                "helper",
+                "installer",
+                "update",
+                "tool",
+                "diagnostics",
+            ];
+            for kw in helper_keywords {
+                if p_lower.contains(kw) {
+                    score -= 1000;
+                }
+            }
+
+            let depth = p.chars().filter(|&c| c == '/' || c == '\\').count() as i32;
+            score -= depth * 10;
+
+            let filename = p.rsplit(&['/', '\\'][..]).next().unwrap_or(p);
+            score -= filename.len() as i32;
+
+            (p, score)
+        })
+        .collect();
+
+    if exe_candidates.is_empty() {
+        return None;
+    }
+
+    exe_candidates.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+
+    Some(exe_candidates[0].0.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_select_default_exe_picks_main_game_over_crash_reporter() {
+        let paths = vec![
+            "\\Engine\\Binaries\\Win64\\CrashReportClient.exe",
+            "\\Asphalt9_x64.exe",
+        ];
+        let selected = select_default_exe(&paths);
+        assert_eq!(selected, Some("\\Asphalt9_x64.exe".to_string()));
+    }
+
+    #[test]
+    fn test_select_default_exe_deterministic_tie_breaking() {
+        let paths = vec![
+            "\\GameB.exe",
+            "\\GameA.exe",
+        ];
+        let selected1 = select_default_exe(&paths);
+        let selected2 = select_default_exe(&paths);
+        assert_eq!(selected1, Some("\\GameA.exe".to_string()));
+        assert_eq!(selected1, selected2);
+    }
+
+    #[test]
+    fn test_select_default_exe_returns_none_when_no_exes() {
+        let paths = vec!["\\data.bin", "\\texture.pak"];
+        assert_eq!(select_default_exe(&paths), None);
+    }
+}
+
