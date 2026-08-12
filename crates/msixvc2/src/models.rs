@@ -27,6 +27,10 @@ pub enum Xvc2Error {
     HashValidation,
     #[error("invalid box header")]
     InvalidBoxHeader,
+    #[error("invalid package metadata: {0}")]
+    InvalidMetadata(String),
+    #[error("unsafe package path: {0}")]
+    InvalidPath(String),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -239,7 +243,6 @@ impl TryFrom<i128> for EncryptionAlgorithm {
     fn try_from(value: i128) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(EncryptionAlgorithm::None),
-            // Automatic mapping is not strictly defined in the integers provided, falling back
             256 => Ok(EncryptionAlgorithm::Aes256Cbc),
             257 => Ok(EncryptionAlgorithm::Aes256Kw),
             _ => Err(Xvc2Error::InvalidEnumValue {
@@ -383,7 +386,7 @@ impl Default for PackagingHash {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PackagingIv {
     pub counter0: u64,
     pub counter1: u64,
@@ -422,15 +425,6 @@ impl PackagingIv {
         Self {
             counter0: new_c0,
             counter1: new_c1,
-        }
-    }
-}
-
-impl Default for PackagingIv {
-    fn default() -> Self {
-        Self {
-            counter0: 0,
-            counter1: 0,
         }
     }
 }

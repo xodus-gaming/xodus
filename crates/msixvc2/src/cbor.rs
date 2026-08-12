@@ -19,10 +19,10 @@ fn expect_tag(val: &Value, expected: u64) -> Result<&Value, Xvc2Error> {
     let mut current = val;
 
     // First unwrap self-describe if present
-    if let Value::Tag(tag, inner) = current {
-        if *tag == cbor_tag::SELF_DESCRIBE {
-            current = inner.as_ref();
-        }
+    if let Value::Tag(tag, inner) = current
+        && *tag == cbor_tag::SELF_DESCRIBE
+    {
+        current = inner.as_ref();
     }
 
     if let Value::Tag(tag, inner) = current {
@@ -48,7 +48,9 @@ fn expect_map(val: &Value) -> Result<HashMap<Label, &Value>, Xvc2Error> {
         for (k, v) in entries {
             let key_int = expect_i128(k)?;
             let label = Label::try_from(key_int)?;
-            map.insert(label, v);
+            if map.insert(label, v).is_some() {
+                return Err(Xvc2Error::Cbor(format!("duplicate map label: {key_int}")));
+            }
         }
         Ok(map)
     } else {
@@ -56,12 +58,12 @@ fn expect_map(val: &Value) -> Result<HashMap<Label, &Value>, Xvc2Error> {
     }
 }
 
-fn expect_text<'a>(val: &'a Value) -> Result<&'a str, Xvc2Error> {
+fn expect_text(val: &Value) -> Result<&str, Xvc2Error> {
     val.as_text()
         .ok_or_else(|| Xvc2Error::Cbor("Expected text".to_string()))
 }
 
-fn expect_bytes<'a>(val: &'a Value) -> Result<&'a [u8], Xvc2Error> {
+fn expect_bytes(val: &Value) -> Result<&[u8], Xvc2Error> {
     val.as_bytes()
         .ok_or_else(|| Xvc2Error::Cbor("Expected bytes".to_string()))
         .map(|v| v.as_slice())
@@ -124,6 +126,18 @@ fn expect_hash(val: &Value) -> Result<PackagingHash, Xvc2Error> {
             }
         };
         let bytes = expect_bytes(inner)?;
+        let expected_len = match algo {
+            HashAlgorithm::Sha256 => 32,
+            HashAlgorithm::Sha384 => 48,
+            HashAlgorithm::Sha512 => 64,
+            HashAlgorithm::None => unreachable!(),
+        };
+        if bytes.len() != expected_len {
+            return Err(Xvc2Error::Cbor(format!(
+                "invalid {algo} digest length: expected {expected_len}, got {}",
+                bytes.len()
+            )));
+        }
         Ok(PackagingHash {
             algorithm: algo,
             hash: bytes.to_vec(),
@@ -133,7 +147,7 @@ fn expect_hash(val: &Value) -> Result<PackagingHash, Xvc2Error> {
     }
 }
 
-fn expect_array<'a>(val: &'a Value) -> Result<&'a [Value], Xvc2Error> {
+fn expect_array(val: &Value) -> Result<&[Value], Xvc2Error> {
     val.as_array()
         .map(|v| v.as_slice())
         .ok_or_else(|| Xvc2Error::Cbor("Expected array".to_string()))
@@ -141,6 +155,13 @@ fn expect_array<'a>(val: &'a Value) -> Result<&'a [Value], Xvc2Error> {
 
 fn expect_iv(val: &Value) -> Result<PackagingIv, Xvc2Error> {
     let bytes = expect_bytes(val)?;
+    if bytes.len() != PackagingIv::SIZE {
+        return Err(Xvc2Error::Cbor(format!(
+            "invalid IV length: expected {}, got {}",
+            PackagingIv::SIZE,
+            bytes.len()
+        )));
+    }
     Ok(PackagingIv::from_bytes(bytes))
 }
 
@@ -150,11 +171,10 @@ fn parse_segment_reference(
 ) -> Result<SegmentReference, Xvc2Error> {
     let map = expect_map(val)?;
 
-    let hash = if let Some(h) = map.get(&Label::Hash) {
-        expect_hash(h)?
-    } else {
-        PackagingHash::default()
-    };
+    let hash = map
+        .get(&Label::Hash)
+        .ok_or(Xvc2Error::MissingField("Hash"))
+        .and_then(|value| expect_hash(value))?;
 
     let length = map
         .get(&Label::Length)
@@ -165,7 +185,7 @@ fn parse_segment_reference(
         .get(&Label::Compression)
         .map(|v| expect_i128(v))
         .transpose()?
-        .map(|v| CompressionAlgorithm::try_from(v))
+        .map(CompressionAlgorithm::try_from)
         .transpose()?
         .unwrap_or(CompressionAlgorithm::None);
     let compressed_length = map
@@ -197,11 +217,10 @@ fn parse_segment_reference(
         None
     };
 
-    let box_hash = if let Some(h) = map.get(&Label::BoxHash) {
-        expect_hash(h)?
-    } else {
-        PackagingHash::default()
-    };
+    let box_hash = map
+        .get(&Label::BoxHash)
+        .ok_or(Xvc2Error::MissingField("BoxHash"))
+        .and_then(|value| expect_hash(value))?;
     let box_index = map
         .get(&Label::BoxIndex)
         .map(|v| expect_i32(v).map(BoxIndex))
@@ -301,14 +320,14 @@ fn parse_package_key_source(val: &Value) -> Result<PackageKeySource, Xvc2Error> 
         .get(&Label::SourcePurpose)
         .map(|v| expect_i128(v))
         .transpose()?
-        .map(|v| KeyPurpose::try_from(v))
+        .map(KeyPurpose::try_from)
         .transpose()?
         .unwrap_or(KeyPurpose::Content);
     let derivation_algorithm = map
         .get(&Label::DerivationAlgorithm)
         .map(|v| expect_i128(v))
         .transpose()?
-        .map(|v| DerivationAlgorithm::try_from(v))
+        .map(DerivationAlgorithm::try_from)
         .transpose()?
         .unwrap_or(DerivationAlgorithm::None);
     let kdf_context = map
@@ -320,7 +339,7 @@ fn parse_package_key_source(val: &Value) -> Result<PackageKeySource, Xvc2Error> 
         .get(&Label::WrapAlgorithm)
         .map(|v| expect_i128(v))
         .transpose()?
-        .map(|v| EncryptionAlgorithm::try_from(v))
+        .map(EncryptionAlgorithm::try_from)
         .transpose()?
         .unwrap_or(EncryptionAlgorithm::None);
     let wrap_iv = map.get(&Label::WrapIv).map(|v| expect_iv(v)).transpose()?;
@@ -333,7 +352,7 @@ fn parse_package_key_source(val: &Value) -> Result<PackageKeySource, Xvc2Error> 
         .get(&Label::Algorithm)
         .map(|v| expect_i128(v))
         .transpose()?
-        .map(|v| EncryptionAlgorithm::try_from(v))
+        .map(EncryptionAlgorithm::try_from)
         .transpose()?
         .unwrap_or(EncryptionAlgorithm::None);
 
@@ -456,7 +475,7 @@ fn parse_segmentation(val: &Value) -> Result<Segmentation, Xvc2Error> {
         .get(&Label::Algorithm)
         .map(|v| expect_i128(v))
         .transpose()?
-        .map(|v| SegmentationAlgorithm::try_from(v))
+        .map(SegmentationAlgorithm::try_from)
         .transpose()?
         .unwrap_or(SegmentationAlgorithm::None);
     let hash_algorithm = map
@@ -464,17 +483,12 @@ fn parse_segmentation(val: &Value) -> Result<Segmentation, Xvc2Error> {
         .map(|v| expect_i32(v))
         .transpose()?
         .unwrap_or(0);
-    let options = if let Some(opts) = map.get(&Label::Options) {
-        if let Value::Map(m) = *opts {
-            let mut hm = HashMap::new();
-            for (k, v) in m {
-                let key = expect_i32(k)?;
-                hm.insert(key, v.clone());
-            }
-            hm
-        } else {
-            HashMap::new()
+    let options = if let Some(Value::Map(entries)) = map.get(&Label::Options).copied() {
+        let mut options = HashMap::new();
+        for (key, value) in entries {
+            options.insert(expect_i32(key)?, value.clone());
         }
+        options
     } else {
         HashMap::new()
     };
@@ -580,7 +594,7 @@ pub fn deserialize_package(bytes: &[u8]) -> Result<Package, Xvc2Error> {
         .get(&Label::SupportedPlatforms)
         .map(|v| expect_i128(v))
         .transpose()?
-        .map(|v| Platform::try_from(v))
+        .map(Platform::try_from)
         .transpose()?
         .unwrap_or(Platform::None);
 
@@ -623,11 +637,10 @@ fn parse_file(val: &Value, inherited_iv: &mut Option<PackagingIv>) -> Result<Xvc
         .map(|v| expect_i64(v))
         .transpose()?
         .unwrap_or(0);
-    let hash = if let Some(h) = map.get(&Label::Hash) {
-        expect_hash(h)?
-    } else {
-        PackagingHash::default()
-    };
+    let hash = map
+        .get(&Label::Hash)
+        .ok_or(Xvc2Error::MissingField("Hash"))
+        .and_then(|value| expect_hash(value))?;
     let read_protected = map
         .get(&Label::ReadProtected)
         .map(|v| expect_bool(v))
@@ -762,24 +775,20 @@ pub fn deserialize_box_manifest(bytes: &[u8]) -> Result<BoxManifest, Xvc2Error> 
 
 pub fn deserialize_seal(bytes: &[u8]) -> Result<Seal, Xvc2Error> {
     let val = parse_cbor_value(bytes)?;
-    let map_val = if let Ok(inner) = expect_tag(&val, cbor_tag::XVC2) {
-        inner
-    } else {
-        &val
-    };
-
-    let map = expect_map(map_val)?;
+    let inner = expect_tag(&val, cbor_tag::XVCZ)?;
+    let map = expect_map(inner)?;
 
     let target = map
         .get(&Label::Target)
         .map(|v| expect_i128(v))
         .transpose()?
-        .unwrap_or(0) as u64;
-    let hash = if let Some(h) = map.get(&Label::Hash) {
-        expect_hash(h)?
-    } else {
-        PackagingHash::default()
-    };
+        .unwrap_or(0)
+        .try_into()
+        .map_err(|_| Xvc2Error::Cbor("seal target is out of range".into()))?;
+    let hash = map
+        .get(&Label::Hash)
+        .ok_or(Xvc2Error::MissingField("Hash"))
+        .and_then(|value| expect_hash(value))?;
 
     Ok(Seal { target, hash })
 }
@@ -809,11 +818,87 @@ mod tests {
 
     #[test]
     fn test_expect_hash() {
-        let inner = Value::Bytes(vec![1, 2, 3, 4]);
+        let inner = Value::Bytes(vec![1; 32]);
         let tagged = Value::Tag(cbor_tag::SHA256, Box::new(inner));
 
         let hash = expect_hash(&tagged).unwrap();
         assert_eq!(hash.algorithm, HashAlgorithm::Sha256);
-        assert_eq!(hash.hash, vec![1, 2, 3, 4]);
+        assert_eq!(hash.hash, vec![1; 32]);
+    }
+
+    #[test]
+    fn test_expect_hash_rejects_wrong_digest_length() {
+        let tagged = Value::Tag(cbor_tag::SHA256, Box::new(Value::Bytes(vec![1; 4])));
+
+        assert!(expect_hash(&tagged).is_err());
+    }
+
+    #[test]
+    fn test_serialized_enum_values() {
+        assert_eq!(
+            EncryptionAlgorithm::try_from(256).unwrap(),
+            EncryptionAlgorithm::Aes256Cbc
+        );
+        assert_eq!(
+            EncryptionAlgorithm::try_from(257).unwrap(),
+            EncryptionAlgorithm::Aes256Kw
+        );
+        assert_eq!(
+            DerivationAlgorithm::try_from(1024).unwrap(),
+            DerivationAlgorithm::Sp800108HmacSha256
+        );
+        assert_eq!(
+            SegmentationAlgorithm::try_from(512).unwrap(),
+            SegmentationAlgorithm::FastCdc
+        );
+        assert_eq!(
+            SegmentationAlgorithm::try_from(513).unwrap(),
+            SegmentationAlgorithm::Fixed
+        );
+    }
+
+    #[test]
+    fn test_expect_map_rejects_duplicate_labels() {
+        let value = Value::Map(vec![
+            (Value::Integer(2.into()), Value::Integer(1.into())),
+            (Value::Integer(2.into()), Value::Integer(2.into())),
+        ]);
+
+        assert!(expect_map(&value).is_err());
+    }
+
+    #[test]
+    fn test_expect_iv_rejects_wrong_length() {
+        assert!(expect_iv(&Value::Bytes(vec![0; 15])).is_err());
+    }
+
+    #[test]
+    fn test_segment_requires_hashes() {
+        let mut rolling_iv = None;
+        assert!(matches!(
+            parse_segment_reference(&Value::Map(Vec::new()), &mut rolling_iv),
+            Err(Xvc2Error::MissingField("Hash"))
+        ));
+    }
+
+    #[test]
+    fn test_file_requires_hash() {
+        let mut inherited_iv = None;
+        assert!(matches!(
+            parse_file(&Value::Map(Vec::new()), &mut inherited_iv),
+            Err(Xvc2Error::MissingField("Hash"))
+        ));
+    }
+
+    #[test]
+    fn test_seal_requires_hash() {
+        let value = Value::Tag(cbor_tag::XVCZ, Box::new(Value::Map(Vec::new())));
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&value, &mut bytes).unwrap();
+
+        assert!(matches!(
+            deserialize_seal(&bytes),
+            Err(Xvc2Error::MissingField("Hash"))
+        ));
     }
 }

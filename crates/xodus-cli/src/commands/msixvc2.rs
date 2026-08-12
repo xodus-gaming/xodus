@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use msixvc::xvc2::Msixvc2File;
+use msixvc2::Msixvc2File;
 
 pub fn info(path: String) -> ExitCode {
     println!("Opening MSIXVC2 package: {path}");

@@ -36,7 +36,7 @@ _TL;DR_ soon<sup>tm</sup>
 Start by joining our Discord or review any open GitHub issues .
 
 **Q: What games will be supported?**  
-We hope to manage to support most of the catalog, the limitation is the game has to be GDK in MSIXVC or MSIXVC2 format.  
+We hope to manage to support most of the catalog, the limitation is the game has to be GDK in MSIXVC or MSIXVC2 format.
 So far `Gears of War 4` is a prominent unsupported title for the time being.
 
 **Q: Will XBOX Backward Compatibility on PC work?**  
@@ -48,7 +48,8 @@ The project structure is as follows.
 
 ```
 .
-├── msixvc - [rlib] common rlib crate for utilities for parsing MSIXVC, MSIXVC2, and XSP files
+├── msixvc - [rlib] common rlib crate for utilities for parsing MSIXVC and XSP files
+├── msixvc2 - [rlib] utilities for parsing and extracting MSIXVC2 packages
 ├── xodus - [rlib] common rlib crate that contains core xodus functionality, API calls abstractions and utilities
 ├── xodus-cli - [bin] CLI currently used for iterating over new xodus features
 └── xodus-service - [bin] service process exposing a xodus.sock for IPC communication, it takes care of xgameruntime.dll integration.
