@@ -4,6 +4,7 @@ pub mod clep;
 pub mod hardware;
 pub mod licensing;
 pub mod models;
+pub mod playtime;
 pub mod secrets;
 pub mod tokens;
 

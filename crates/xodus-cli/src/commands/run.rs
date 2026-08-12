@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::os::fd::{AsFd, IntoRawFd};
 use std::path::Path;
 use std::process::ExitCode;
+use std::time::Instant;
 
 use msixvc::models::xvd::PAGE_SIZE;
 use msixvc::xvd::{SegmentFile, XvdFile};
@@ -156,10 +157,12 @@ pub async fn run(
         lfiles.extend(sfiles);
     }
 
+    let content_id = xvd.content_id().to_string();
+
     let license = get_license(
         client,
         tokens,
-        xvd.content_id().to_string(),
+        content_id.clone(),
         market.unwrap_or("neutral".to_string()),
     )
     .await;
@@ -252,7 +255,12 @@ pub async fn run(
     })
     .expect("failed to install Ctrl+C handler");
 
+    let session_start = Instant::now();
     let status = wn.wait().await.unwrap();
+
+    if let Err(err) = xodus::playtime::record_session(&content_id, session_start.elapsed()) {
+        eprintln!("Failed to record playtime: {}", err);
+    }
 
     cleanup().await;
 
