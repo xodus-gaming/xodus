@@ -237,6 +237,8 @@ pub async fn run(
         return ExitCode::FAILURE;
     };
 
+    let start_time = std::time::Instant::now();
+
     let mut wn = Command::new(wine)
         .arg(nt_entry)
         .env("WINE_DLL_FILE_MAP", env_value)
@@ -253,8 +255,22 @@ pub async fn run(
     .expect("failed to install Ctrl+C handler");
 
     let status = wn.wait().await.unwrap();
+    let elapsed_secs = start_time.elapsed().as_secs();
 
     cleanup().await;
+
+    let content_id = xvd.content_id().to_string();
+    let mut store = xodus::playtime::PlayTimeStore::load();
+    store.add_session(&content_id, elapsed_secs);
+    if let Err(e) = store.save() {
+        eprintln!("Warning: Failed to save playtime: {}", e);
+    } else {
+        println!(
+            "Session ended. Played for {} (Total: {})",
+            xodus::playtime::PlayTimeStore::format_duration(elapsed_secs),
+            xodus::playtime::PlayTimeStore::format_duration(store.get_playtime(&content_id))
+        );
+    }
 
     ExitCode::from(status.code().map(|c| c as u8).unwrap_or(0))
 }

@@ -77,6 +77,11 @@ enum SubCommand {
     SpLicense {
         block: String,
     },
+    #[command(about = "Display played time for games")]
+    Playtime {
+        #[arg(help = "Optional product / content_id to query")]
+        product: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -193,6 +198,7 @@ async fn main() -> ExitCode {
             ClepAction::Decrypt { data } => commands::clep::decrypt(data),
         },
         SubCommand::SpLicense { block } => commands::splicense::run(block),
+        SubCommand::Playtime { product } => commands::playtime::run(product).await,
     };
 
     xodus::secrets::destroy_secrets();
