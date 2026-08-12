@@ -1,9 +1,50 @@
+use std::fmt::Display;
+
+use futures_util::future::join_all;
 use inquire::Select;
 use xodus::XBOX_LIVE_PACKAGES_PC;
 use xodus::api::displaycatalog::find_products_by_id;
 use xodus::models::packagespc::{PackageDetails, PackageResponse};
 use xodus::models::secrets::Token;
 use xodus::tokens::TokenManager;
+
+struct BundleCandidate {
+    id: String,
+    title: Option<String>,
+}
+
+impl Display for BundleCandidate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.title {
+            Some(title) => f.write_fmt(format_args!("{} ({})", title, self.id)),
+            None => f.write_str(&self.id),
+        }
+    }
+}
+
+async fn resolve_title(
+    client: &reqwest::Client,
+    id: &str,
+    market: Option<String>,
+) -> Option<String> {
+    let displaycatalog = find_products_by_id(
+        client,
+        id.to_owned(),
+        market.unwrap_or("neutral".to_owned()),
+        vec!["en".to_string(), "neutral".to_string()],
+    )
+    .await
+    .ok()?;
+
+    displaycatalog
+        .product
+        .display_sku_availabilities
+        .first()?
+        .sku
+        .localized_properties
+        .first()
+        .map(|prop| prop.sku_title.clone())
+}
 
 pub async fn get_content_id(
     client: &reqwest::Client,
@@ -51,13 +92,22 @@ pub async fn get_content_id(
 
     let Some(package) = found_package else {
         if !subprods.is_empty() {
-            let Ok(item) = Select::new("Select files to download", subprods)
+            let candidates = join_all(subprods.into_iter().map(|id| {
+                let market = market.clone();
+                async move {
+                    let title = resolve_title(client, &id, market).await;
+                    BundleCandidate { id, title }
+                }
+            }))
+            .await;
+
+            let Ok(item) = Select::new("Select files to download", candidates)
                 .with_page_size(30)
                 .prompt()
             else {
                 return Err(Box::new(std::io::Error::other("Selection failed")));
             };
-            return Box::pin(get_content_id(client, item, market)).await;
+            return Box::pin(get_content_id(client, item.id, market)).await;
         }
 
         return Err(Box::new(std::io::Error::other(
