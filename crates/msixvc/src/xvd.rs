@@ -313,12 +313,6 @@ fn decode_nul_terminated_utf16(units: &[u16]) -> Result<String, std::string::Fro
     String::from_utf16(&units[..end])
 }
 
-/// Decodes a UTF-16 field with no NUL terminator (as read directly off disk
-/// for a segment's file path in `parse_segment_metadata`) into a `String`.
-fn decode_utf16(units: &[u16]) -> Result<String, std::string::FromUtf16Error> {
-    String::from_utf16(units)
-}
-
 impl XvdFile {
     pub fn content_id(&self) -> uuid::Uuid {
         self.header.vduid
@@ -531,7 +525,7 @@ impl XvdFile {
                 ))
                 .await?;
                 file.read_exact(buf.as_mut_bytes()).await?;
-                let file_name: String = decode_utf16(buf.as_slice())?;
+                let file_name: String = String::from_utf16(buf.as_slice())?;
                 let page_length = if segment.filesize == 0 {
                     1
                 } else {
@@ -1078,17 +1072,5 @@ mod tests {
         // this in an on-disk filename field.
         let field = [0xD800u16, 0];
         assert!(decode_nul_terminated_utf16(&field).is_err());
-    }
-
-    #[test]
-    fn decode_utf16_errors_cleanly_on_an_unpaired_surrogate() {
-        let units = [0xD800u16];
-        assert!(decode_utf16(&units).is_err());
-    }
-
-    #[test]
-    fn decode_utf16_happy_path() {
-        let units: Vec<u16> = "hello".encode_utf16().collect();
-        assert_eq!(decode_utf16(&units).expect("should decode"), "hello");
     }
 }
