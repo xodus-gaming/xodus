@@ -16,7 +16,6 @@ pub fn decompress_content(
     match compression {
         CompressionAlgorithm::None => Ok(compressed.to_vec()),
         CompressionAlgorithm::Deflate => {
-            // Source: https://docs.rs/flate2/1.1.9/flate2/read/struct.DeflateDecoder.html
             let mut decoder = flate2::read::DeflateDecoder::new(compressed);
             let mut decompressed = Vec::with_capacity(decompressed_len);
             decoder
@@ -25,7 +24,6 @@ pub fn decompress_content(
             Ok(decompressed)
         }
         CompressionAlgorithm::Brotli => {
-            // Source: https://docs.rs/brotli/8.0.4/brotli/struct.Decompressor.html
             let mut decompressor = brotli::Decompressor::new(compressed, 4096);
             let mut decompressed = Vec::with_capacity(decompressed_len);
             decompressor
