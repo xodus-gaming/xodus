@@ -6,6 +6,7 @@ pub mod login;
 pub mod logout;
 #[cfg(unix)]
 pub mod playtime;
+#[cfg(unix)]
 pub mod run;
 pub mod splicense;
 pub mod streaming;

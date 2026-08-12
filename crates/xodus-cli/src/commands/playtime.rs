@@ -2,7 +2,13 @@ use std::process::ExitCode;
 use xodus::playtime::PlayTimeStore;
 
 pub async fn run(product: Option<String>) -> ExitCode {
-    let store = PlayTimeStore::load();
+    let store = match PlayTimeStore::load() {
+        Ok(store) => store,
+        Err(error) => {
+            eprintln!("Failed to load playtime: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     if store.entries.is_empty() {
         println!("No played time recorded yet.");
@@ -19,11 +25,14 @@ pub async fn run(product: Option<String>) -> ExitCode {
         }
     } else {
         println!("Game Playtime Summary:");
-        println!("{:<36} | {:<15} | {:<20}", "Content ID", "Played Time", "Last Played");
+        println!(
+            "{:<36} | {:<15} | {:<20}",
+            "Content ID", "Played Time", "Last Played"
+        );
         println!("{:-<36}-+-{:-<15}-+-{:-<20}", "", "", "");
 
         let mut sorted_entries: Vec<_> = store.entries.values().collect();
-        sorted_entries.sort_by(|a, b| b.total_seconds.cmp(&a.total_seconds));
+        sorted_entries.sort_by_key(|entry| std::cmp::Reverse(entry.total_seconds));
 
         for entry in sorted_entries {
             let duration = PlayTimeStore::format_duration(entry.total_seconds);
@@ -32,7 +41,10 @@ pub async fn run(product: Option<String>) -> ExitCode {
                 .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
                 .unwrap_or_else(|| "N/A".to_string());
 
-            println!("{:<36} | {:<15} | {:<20}", entry.content_id, duration, last_played);
+            println!(
+                "{:<36} | {:<15} | {:<20}",
+                entry.content_id, duration, last_played
+            );
         }
     }
 

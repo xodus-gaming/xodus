@@ -77,11 +77,22 @@ enum SubCommand {
     SpLicense {
         block: String,
     },
+    #[cfg(unix)]
     #[command(about = "Display played time for games")]
     Playtime {
         #[arg(help = "Optional product / content_id to query")]
         product: Option<String>,
     },
+}
+
+impl SubCommand {
+    fn requires_device_credentials(&self) -> bool {
+        #[cfg(unix)]
+        if matches!(self, Self::Playtime { .. }) {
+            return false;
+        }
+        true
+    }
 }
 
 #[derive(Subcommand)]
@@ -124,6 +135,14 @@ async fn main() -> ExitCode {
         .build()
         .unwrap();
     let args = CliArgs::parse();
+
+    #[cfg(unix)]
+    if !args.command.requires_device_credentials() {
+        let SubCommand::Playtime { product } = args.command else {
+            unreachable!();
+        };
+        return commands::playtime::run(product).await;
+    }
 
     xodus::secrets::init_secrets().expect("Unable to initialize credentials");
     let tokens = TokenManager::with_keychain_and_memory();
@@ -198,10 +217,34 @@ async fn main() -> ExitCode {
             ClepAction::Decrypt { data } => commands::clep::decrypt(data),
         },
         SubCommand::SpLicense { block } => commands::splicense::run(block),
-        SubCommand::Playtime { product } => commands::playtime::run(product).await,
+        #[cfg(unix)]
+        SubCommand::Playtime { .. } => unreachable!(),
     };
 
     xodus::secrets::destroy_secrets();
 
     code
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SubCommand;
+
+    #[test]
+    #[cfg(unix)]
+    fn playtime_does_not_require_device_credentials() {
+        assert!(!SubCommand::Playtime { product: None }.requires_device_credentials());
+    }
+
+    #[test]
+    fn authenticated_commands_still_require_device_credentials() {
+        assert!(
+            SubCommand::Download {
+                product: "test".to_string(),
+                market: None,
+                dry_run: true,
+            }
+            .requires_device_credentials()
+        );
+    }
 }
