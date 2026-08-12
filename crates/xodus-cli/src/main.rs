@@ -77,6 +77,29 @@ enum SubCommand {
     SpLicense {
         block: String,
     },
+    #[command(about = "MSIXVC2 package tools (info, extract)")]
+    Msixvc2 {
+        #[command(subcommand)]
+        action: Msixvc2Action,
+    },
+}
+
+#[derive(Subcommand)]
+enum Msixvc2Action {
+    #[command(about = "Display information about an MSIXVC2 package")]
+    Info {
+        #[clap(help = "Path to the .msixvc package")]
+        path: String,
+    },
+    #[command(about = "Extract files from an MSIXVC2 package")]
+    Extract {
+        #[clap(help = "Path to the .msixvc package")]
+        path: String,
+        #[clap(short, long, help = "Output directory")]
+        output: String,
+        #[arg(long, help = "Optional content key (hex string)")]
+        key: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -193,6 +216,12 @@ async fn main() -> ExitCode {
             ClepAction::Decrypt { data } => commands::clep::decrypt(data),
         },
         SubCommand::SpLicense { block } => commands::splicense::run(block),
+        SubCommand::Msixvc2 { action } => match action {
+            Msixvc2Action::Info { path } => commands::msixvc2::info(path),
+            Msixvc2Action::Extract { path, output, key } => {
+                commands::msixvc2::extract(path, output, key)
+            }
+        },
     };
 
     xodus::secrets::destroy_secrets();

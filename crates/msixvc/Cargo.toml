@@ -18,3 +18,11 @@ thiserror = "2.0.19"
 tokio-util = { version = "0.7.19", features = ["io-util"] }
 uuid = "1.24.0"
 zerocopy = { version = "0.8.55", features = ["derive"] }
+
+ciborium = "0.2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+sha2 = "0.10"
+cbc = "0.2"
+hmac = "0.12"
+brotli = "8"
+flate2 = "1"
