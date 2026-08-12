@@ -355,8 +355,7 @@ impl XvdFile {
         // TODO: Check if we have proper content type
         if layout.xvc_info.len > Bytes(0) {
             file.seek(std::io::SeekFrom::Start(layout.xvc_info.start.to_bytes().0))
-                .await
-                .expect("Unable to seek");
+                .await?;
 
             let xvc_info = {
                 let mut buf = XvcInfo::buffer();
@@ -477,7 +476,7 @@ impl XvdFile {
                     .iter()
                     .position(|&c| c == 0)
                     .unwrap_or(fullname.len());
-                let pfull_name: String = String::from_utf16(&fullname[..end]).unwrap();
+                let pfull_name: String = String::from_utf16(&fullname[..end])?;
 
                 files.insert(
                     pfull_name,
@@ -532,7 +531,7 @@ impl XvdFile {
                 ))
                 .await?;
                 file.read_exact(buf.as_mut_bytes()).await?;
-                let file_name: String = String::from_utf16(buf.as_slice()).unwrap();
+                let file_name: String = String::from_utf16(buf.as_slice())?;
                 let page_length = if segment.filesize == 0 {
                     1
                 } else {
@@ -674,8 +673,8 @@ impl XvdFile {
                     io::Error::new(ErrorKind::NotFound, "no used GPT partition found")
                 })?;
 
-            let part_start = part.bytes_start(*gp.logical_block_size()).unwrap();
-            let part_len = part.bytes_len(*gp.logical_block_size()).unwrap();
+            let part_start = part.bytes_start(*gp.logical_block_size())?;
+            let part_len = part.bytes_len(*gp.logical_block_size())?;
 
             let bridge = gp.take_device().into_inner().into_inner();
             let partition_offset = drive_data_offset + part_start;
