@@ -76,28 +76,30 @@ impl<'a> RSTSignature<'a> {
         }
     }
 
-    pub fn signing_key(&self, nonce: &[u8]) -> bergshamra::KeyData {
+    pub fn signing_key(&self, nonce: &[u8]) -> Result<bergshamra::KeyData, bergshamra::Error> {
         match self {
             RSTSignature::Hmac {
                 clep_secret,
                 tpm_secret,
             } => {
-                let clep_key =
-                    utils::generate_shared_key(32, clep_secret, soap::HMAC_KEY_USAGE, nonce);
-                let hmac_key = if !tpm_secret.is_empty() {
-                    utils::generate_shared_key(32, tpm_secret, soap::HMAC_KEY_USAGE, &clep_key)
+                let clep = utils::generate_shared_key(32, clep_secret, soap::HMAC_KEY_USAGE, nonce);
+
+                let hmac = if tpm_secret.is_empty() {
+                    clep
                 } else {
-                    clep_key
+                    utils::generate_shared_key(32, tpm_secret, soap::HMAC_KEY_USAGE, &clep)
                 };
 
-                bergshamra::KeyData::Hmac(hmac_key.to_vec())
+                bergshamra::KeyData::from_symmetric_bytes(kryptering::KeyAlgorithm::Hmac, &hmac)
             }
             RSTSignature::Rsa(private_key) => {
-                let public_key = rsa::RsaPublicKey::from(private_key.as_ref());
-                bergshamra::KeyData::Rsa {
-                    private: Some(private_key.as_ref().clone()),
-                    public: public_key,
-                }
+                use rsa::pkcs8::EncodePrivateKey;
+
+                let der = private_key
+                    .to_pkcs8_der()
+                    .map_err(|e| bergshamra::Error::Key(e.to_string()))?;
+
+                bergshamra::KeyData::from_pkcs8_der(kryptering::KeyAlgorithm::Rsa, der.as_bytes())
             }
         }
     }

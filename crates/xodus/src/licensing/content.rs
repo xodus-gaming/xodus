@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use base64::prelude::*;
 use xal::cvlib::CorrelationVector;
-use xal::extensions::CorrelationVectorReqwestBuilder;
+//use xal::extensions::CorrelationVectorReqwestBuilder;
 
 use crate::licensing::utils;
 use crate::models::devicecredential::License;
@@ -10,6 +10,8 @@ use crate::models::licensing::{
     DeviceContext, LicenseContentRequest, LicenseContentResponse, LicenseUserIdentity,
 };
 
+// we might need a bump in xal-rs concerning reqwest,
+// that might block us from using the correlationvector extension
 pub async fn get_license_content(
     client: &reqwest::Client,
     device_ms_token: String,
@@ -18,12 +20,13 @@ pub async fn get_license_content(
     content_id: String,
     market: String,
 ) -> reqwest::Result<(LicenseContentResponse, License)> {
-    let mut cv = CorrelationVector::new();
+    let cv = CorrelationVector::new();
     let response = client
         .post("https://licensing.mp.microsoft.com/v7.0/licenses/content")
         .header("from", "XboxLicenseManager")
         .header("Authorization", device_ms_token)
         .header("user-agent", "XboxLm-PC/Microsoft.GamingServices_32.107.4002.0_x64__8wekyb3d8bbwe")
+        .header("MS-CV", cv.to_string())
         .json(&LicenseContentRequest {
             content_id,
             market,
@@ -42,8 +45,6 @@ pub async fn get_license_content(
                 }])],
             ),
         })
-        .add_cv(&mut cv)
-        .unwrap()
         .send()
         .await?;
 

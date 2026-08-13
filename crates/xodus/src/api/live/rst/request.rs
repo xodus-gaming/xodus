@@ -57,7 +57,7 @@ fn verify_and_decrypt_envelope<'a>(
         let id = &key_info.security_token_reference.reference.uri;
         let nonce = nonces.get(&id[1..]).ok_or(super::RSTError::MissingNonce)?;
         let nonce = BASE64_STANDARD.decode(nonce)?;
-        let key = signature.signing_key(&nonce);
+        let key = signature.signing_key(&nonce)?;
         let mut kmgr = bergshamra::KeysManager::new();
         kmgr.add_key(bergshamra::Key::new(key, bergshamra::KeyUsage::Verify));
         let ctx = bergshamra::DsigContext::new(kmgr).with_strict_verification(false);

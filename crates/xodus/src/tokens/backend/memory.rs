@@ -38,6 +38,11 @@ impl TokenBackend for MemoryBackend {
         );
         Ok(())
     }
+
+    fn remove(&self, key: &str) -> Result<(), TokenStoreError> {
+        self.inner.lock().unwrap().remove(key);
+        Ok(())
+    }
 }
 
 impl ExpiringTokenBackend for MemoryBackend {

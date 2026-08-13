@@ -15,4 +15,8 @@ impl TokenBackend for KeychainBackend {
     fn set(&self, key: &str, value: &[u8]) -> Result<(), TokenStoreError> {
         Ok(crate::secrets::get_entry(key)?.set_secret(value)?)
     }
+
+    fn remove(&self, key: &str) -> Result<(), TokenStoreError> {
+        Ok(crate::secrets::get_entry(key)?.delete_credential()?)
+    }
 }
