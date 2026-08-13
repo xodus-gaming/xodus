@@ -6,7 +6,7 @@
 The following headers can be seen on all requests to titlestorage.xboxlive.com:
 ```
 Connection: Keep Alive
-Authorization: XBL3.0 x={uhs};{xsts}
+Authorization: XBL3.0 x=<uhs>;<xsts>
 MS-CV: <base 64>.0
 x-xbl-pfn: <Package Family Name>
 x-xbl-lock-ext: <base 64>
@@ -16,16 +16,16 @@ x-xbl-lock-ext: <base 64>
 Locks prevent multiple devices from writing save-files at the same time.
 The lock is enabled for the duration of the game and when uploading saves.
 
-Enable:
+Enable lock:
 ```
 PUT /lock?friendlyName=<Device name>
 -H "x-xbl-lock-ver: 1"
 ```
-Sent after upload completed:
+Report upload progress out of 100:
 ```
 PUT /lock?uploadProcess=80
 ```
-Disable:
+Disable lock:
 ```
 DELETE /lock?newSavesUploaded=false
 ```
@@ -99,11 +99,12 @@ DELETE /savedgames/<containerName>
 Blobs are uploaded as atoms. Each time a blob is written to a new atom GUID is created.
 To delete a blob exclude it from the next container update.
 
+Download:
 ```
 GET /<current atom GUID>,binary
 -H "Accept-Encoding: gzip"
 ```
-When submitting an update do 1 for each blob first, then 2 for each blob, then 3.
+Upload:
 
 1
 ```
@@ -135,7 +136,7 @@ POST /atoms/<new atom GUID>?commit=true
 -d '{ "blockIds":<can be found in the URI the server gave us>, "size": <blobSize> }'
 ```
 ### XGameSaveFiles
-Each container in xgamesave is mapped to a directory in xgamesavefiles.
+Each container in XGameSave is mapped to a directory in XGameSaveFiles.
 Blobs are uploaded in the same manner as XGameSave but without setting the displayName.
 If a program tries to create a directory that corresponds to an invalid container name, creating the directory fails.
 ```
@@ -146,9 +147,11 @@ save            <----> xgs\\save
 #### Migration from XGameSave
 Characters that Windows does not allow in filenames such as `/\:*"?<>|` are replaced by `.`.
 Control characters **other than DELETE** are replaced by `_`.
-If the blob name is still invalid, the blob may be lost or your game may break completely.
+If the blob name is still invalid, the blob may be lost.
+Valid blobs after the invalid blob name may also be lost.
+In the worst case, cloud sync may stop working until the blobs are manually deleted or migration is reversed.
 To avoid breakage, it is recommended to only use [portable filename characters](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_282).
-The following names should also be avoided as they are reserved on windows:
+The following names should also be avoided as they are reserved on Windows:
 CON, PRN, AUX, NUL, COM1, COM2, COM3, COM4, COM5, COM6, COM7, COM8, COM9, LPT1, LPT2, LPT3, LPT4, LPT5, LPT6, LPT7, LPT8, LPT9.
 
 ### Glossary
@@ -166,10 +169,11 @@ Equal to `<package name>_<publisher id>`
 #### Publisher ID
 The first four bytes of the sha256 of the LE UTF-16 encoded publisher name, written in Crockford's base 32.
 
-Example: (https://discord.com/channels/1123890623586504714/1123953698440220672/1532205122430570537
+Example: (https://discord.com/channels/1123890623586504714/1123953698440220672/1532205122430570537)
 
 #### SCID
 Service Configuration ID
+
 An ID provided by Microsoft that allows games to access various cloud services.
 
 MicrosoftGame.config contains the package name, publisher, version, and SCID.
