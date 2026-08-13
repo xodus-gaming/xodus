@@ -33,6 +33,14 @@ fn make_temp_file(folder: &str) -> std::io::Result<std::fs::File> {
     }
 }
 
+fn matches_executable(exe: &str, path: &str) -> bool {
+    exe == path
+        || path
+            .rsplit(['\\', '/'])
+            .next()
+            .is_some_and(|basename| exe == basename)
+}
+
 #[cfg(target_os = "macos")]
 async fn prepare(lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(), String) {
     let disk_size: u64 = lfiles
@@ -222,7 +230,7 @@ pub async fn run(
         let nt_suffix = fd.0.trim_start_matches('\\');
         let nt_path = format!("\\??\\Z:{}\\{}", nt_prefix, nt_suffix);
         if let Some(exe) = &exe {
-            if exe == fd.0 {
+            if matches_executable(exe, fd.0) {
                 nt_entry = Some(nt_path)
             }
         } else if nt_entry.is_none() {
@@ -257,4 +265,17 @@ pub async fn run(
     cleanup().await;
 
     ExitCode::from(status.code().map(|c| c as u8).unwrap_or(0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::matches_executable;
+
+    #[test]
+    fn explicit_executable_matches_manifest_path_by_basename() {
+        assert!(matches_executable(
+            "Game.exe",
+            "\\Binaries\\WinGDK\\Game.exe"
+        ));
+    }
 }
