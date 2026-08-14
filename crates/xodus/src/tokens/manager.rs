@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::api::xbox::ProofKey;
 use crate::models::secrets::{Device, Token, TokenStore, User};
 use crate::models::xbox::XstsResponse;
 use crate::tokens::backend::{KeychainBackend, MemoryBackend};
@@ -12,6 +13,8 @@ mod keys {
     pub const DEVICE_TOKENS: &str = "device-tokens";
     pub const USER_TOKENS: &str = "user-tokens";
     pub const USER_INFO: &str = "user-DA";
+    pub const PROOF_KEY: &str = "xbox-proof-key";
+    pub const DEVICE_ID: &str = "xbox-device-id";
 }
 
 pub const PASSPORT_STS: &str = "http://Passport.NET/STS";
@@ -123,6 +126,39 @@ impl TokenManager {
     pub fn save_user(&self, user: &User) -> Result<(), TokenStoreError> {
         self.persistent
             .set(keys::USER_INFO, &serde_json::to_vec(user)?)
+    }
+
+    // ---- Xbox device identity (ProofKey + device id) --------------------------
+
+    /// The device's ECDSA key, generated once and kept.
+    ///
+    /// Xbox Live ties the device token to this key, so regenerating it per run
+    /// would look like a new device every time and lose whatever trust the old
+    /// one had accumulated.
+    pub fn get_or_create_proof_key(&self) -> Result<ProofKey, TokenStoreError> {
+        if let Some(bytes) = self.persistent.get(keys::PROOF_KEY)?
+            && let Some(key) = ProofKey::from_bytes(&bytes)
+        {
+            return Ok(key);
+        }
+
+        let key = ProofKey::generate();
+        self.persistent.set(keys::PROOF_KEY, &key.to_bytes())?;
+        Ok(key)
+    }
+
+    /// The GUID that goes with the ProofKey. Same reasoning: stable per install.
+    pub fn get_or_create_device_id(&self) -> Result<String, TokenStoreError> {
+        if let Some(bytes) = self.persistent.get(keys::DEVICE_ID)?
+            && let Ok(id) = String::from_utf8(bytes)
+            && !id.is_empty()
+        {
+            return Ok(id);
+        }
+
+        let id = uuid::Uuid::new_v4().to_string();
+        self.persistent.set(keys::DEVICE_ID, id.as_bytes())?;
+        Ok(id)
     }
 
     // ---- Ephemeral XSTS-by-relying-party cache --------------------------------

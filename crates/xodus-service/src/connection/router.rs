@@ -22,9 +22,14 @@ pub async fn route(
         if token.is_cancelled() {
             return;
         }
-        let read = socket.read_exact(&mut read_magic).await;
-        if let Err(err) = read {
-            log::error!("Failed to read magic: {err:?}");
+        if let Err(err) = socket.read_exact(&mut read_magic).await {
+            // One request per connection is the normal pattern for the Wine
+            // client, so end-of-stream here is a disconnect, not a failure.
+            if err.kind() == std::io::ErrorKind::UnexpectedEof {
+                log::debug!("Client from pid {cred:?} disconnected");
+            } else {
+                log::error!("Failed to read magic: {err:?}");
+            }
             return;
         }
 

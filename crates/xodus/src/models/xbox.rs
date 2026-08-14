@@ -18,6 +18,18 @@ pub struct UserAuthProperties {
     pub rps_ticket: String,
 }
 
+/// Device and title tokens.
+///
+/// They come back in the same envelope as an XSTS token but with a different
+/// claim shape -- a title token's `DisplayClaims.xti` is an object, not the
+/// array `XstsResponse` expects -- and nothing here needs the claims anyway.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct AuthTokenResponse {
+    pub not_after: chrono::DateTime<chrono::Utc>,
+    pub token: String,
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct XstsResponse {
@@ -55,6 +67,20 @@ impl XstsResponse {
             .first()
             .map(|claim| claim.uhs.as_str())
     }
+
+    pub fn xuid(&self) -> Option<&str> {
+        self.display_claims
+            .xui
+            .first()
+            .and_then(|claim| claim.xid.as_deref())
+    }
+
+    pub fn gamertag(&self) -> Option<&str> {
+        self.display_claims
+            .xui
+            .first()
+            .and_then(|claim| claim.gtg.as_deref())
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -71,6 +97,13 @@ pub struct XstsPropertyBag {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delegation_token: Option<String>,
+
+    /// Attaching these two is what puts the `xti` title claim on the result.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_token: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

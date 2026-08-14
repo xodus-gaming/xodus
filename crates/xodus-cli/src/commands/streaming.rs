@@ -268,44 +268,6 @@ where
         }
     }
 
-    if !try_skip_ntfs || rfiles.is_empty() {
-        tx.send(ProgressEvent::UpdateStatus {
-            name: "Downloading ntfs...".to_owned(),
-        })
-        .await
-        .ok();
-        let sfiles = remote_xvd
-            .parse_ntfs_segment_metadata(&mut remote_file, !rfiles.is_empty())
-            .await
-            .expect("ok");
-        rfiles.extend(sfiles);
-    }
-
-    let file = OpenOptions::new()
-        .read(true)
-        .open(final_path.to_owned())
-        .await
-        .ok();
-
-    if let Some(mut file) = file {
-        let xvd = XvdFile::parse(&mut file).await.expect("no err");
-
-        let files = xvd.parse_user_package_files(&mut file).await.expect("ok");
-        for (k, v) in &files {
-            if k == "SegmentMetadata.bin" {
-                let sfiles = xvd.parse_segment_metadata(&mut file, v).await.expect("ok");
-                lfiles = sfiles;
-            }
-        }
-
-        if let Ok(sfiles) = xvd
-            .parse_ntfs_segment_metadata(&mut file, !lfiles.is_empty())
-            .await
-        {
-            lfiles.extend(sfiles);
-        }
-    }
-
     let license = get_license(
         client,
         tokens,
@@ -330,6 +292,45 @@ where
     };
 
     let full_key = content_key.unpack(&key).expect("failed to unpack");
+
+    if !try_skip_ntfs || rfiles.is_empty() {
+        tx.send(ProgressEvent::UpdateStatus {
+            name: "Downloading ntfs...".to_owned(),
+        })
+        .await
+        .ok();
+        let sfiles = remote_xvd
+            .parse_ntfs_segment_metadata(&mut remote_file, !rfiles.is_empty(), Some(&full_key))
+            .await
+            .expect("ok");
+        rfiles.extend(sfiles);
+    }
+
+    let file = OpenOptions::new()
+        .read(true)
+        .open(final_path.to_owned())
+        .await
+        .ok();
+
+    if let Some(mut file) = file {
+        let xvd = XvdFile::parse(&mut file).await.expect("no err");
+
+        let files = xvd.parse_user_package_files(&mut file).await.expect("ok");
+        for (k, v) in &files {
+            if k == "SegmentMetadata.bin" {
+                let sfiles = xvd.parse_segment_metadata(&mut file, v).await.expect("ok");
+                lfiles = sfiles;
+            }
+        }
+
+        if let Ok(sfiles) = xvd
+            .parse_ntfs_segment_metadata(&mut file, !lfiles.is_empty(), Some(&full_key))
+            .await
+        {
+            lfiles.extend(sfiles);
+        }
+    }
+
 
     let total_size = rfiles
         .iter()

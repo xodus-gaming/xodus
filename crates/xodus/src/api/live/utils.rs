@@ -118,11 +118,22 @@ pub fn decrypt_soap_encrypted_data<T: serde::de::DeserializeOwned>(
     let decryptor = Aes256CbcDec::new(&key.into(), iv.into());
     let mut block = [0; 8192];
 
-    decryptor
+    // Use the slice the decryptor returns rather than the whole buffer: the
+    // rest is uninitialised zeroes, and parsing them as part of the document
+    // only works by accident.
+    let plaintext = decryptor
         .decrypt_padded_b2b::<Pkcs7>(encrypted, &mut block)
         .expect("Failed");
-    let result = std::str::from_utf8(&block).unwrap();
-    let data = quick_xml::de::from_str::<T>(result)?;
+    let result = std::str::from_utf8(plaintext).unwrap();
 
-    Ok(data)
+    match quick_xml::de::from_str::<T>(result) {
+        Ok(data) => Ok(data),
+        Err(err) => {
+            // MSA encrypts refusals too, so the body is the only thing that
+            // says why one was refused; the deserializer error alone just names
+            // whichever field the fault happens not to have.
+            log::error!("Could not parse the decrypted SOAP body ({err}): {result}");
+            Err(err.into())
+        }
+    }
 }

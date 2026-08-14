@@ -1,3 +1,75 @@
+use serde::Serialize;
+
+use crate::api::xbox::signature::{ProofKey, ProofKeyJwk};
+use crate::models::xbox::AuthTokenResponse;
+
+const TITLE_AUTH_URL: &str = "https://title.auth.xboxlive.com/title/authenticate";
+
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct TitleAuthProperties {
+    auth_method: String,
+    device_token: String,
+    site_name: String,
+    rps_ticket: String,
+    proof_key: ProofKeyJwk,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct TitleAuthRequest {
+    relying_party: String,
+    token_type: String,
+    properties: TitleAuthProperties,
+}
+
+/// A token saying which title the user is signed in through.
+///
+/// `rps_ticket` must be an RPS ticket issued to the *title's* MSA app id -- that
+/// is where the title identity comes from -- and `device_token` must have been
+/// minted with the same ProofKey that signs this request.
+pub async fn authenticate_title(
+    client: &reqwest::Client,
+    proof_key: &ProofKey,
+    rps_ticket: &str,
+    device_token: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let body = TitleAuthRequest {
+        relying_party: "http://auth.xboxlive.com".to_string(),
+        token_type: "JWT".to_string(),
+        properties: TitleAuthProperties {
+            auth_method: "RPS".to_string(),
+            device_token: device_token.to_string(),
+            site_name: "user.auth.xboxlive.com".to_string(),
+            rps_ticket: rps_ticket.to_string(),
+            proof_key: proof_key.jwk(),
+        },
+    };
+
+    let body = serde_json::to_vec(&body)?;
+    let signature = proof_key.sign_request("POST", "/title/authenticate", "", &body);
+
+    let resp = client
+        .post(TITLE_AUTH_URL)
+        .header("Content-Type", "application/json")
+        .header("x-xbl-contract-version", "1")
+        .header("Signature", signature)
+        .body(body)
+        .send()
+        .await?;
+
+    let status = resp.status();
+    let headers = resp.headers().clone();
+    let text = resp.text().await?;
+    if !status.is_success() {
+        return Err(
+            crate::api::xbox::signature::describe_failure("title authentication", status, &headers, &text).into(),
+        );
+    }
+
+    Ok(serde_json::from_str::<AuthTokenResponse>(&text)?.token)
+}
+
 use crate::models::xbox::{TitleMgtEndPoint, TitleMgtResponse};
 
 pub async fn get_title_management(client: &reqwest::Client) -> reqwest::Result<TitleMgtResponse> {

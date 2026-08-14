@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::os::fd::{AsFd, IntoRawFd};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use msixvc::models::xvd::PAGE_SIZE;
@@ -13,6 +13,7 @@ use rustix::io::{FdFlags, fcntl_getfd, fcntl_setfd};
 #[cfg(not(target_os = "linux"))]
 use tempfile::{tempdir, tempfile, tempfile_in};
 use tokio::fs::{File, OpenOptions};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::process::Command;
 use xodus::tokens::TokenManager;
 
@@ -142,20 +143,6 @@ pub async fn run(
         }
     }
 
-    // Classic files
-    if lfiles.is_empty() {
-        let sfiles = xvd
-            .parse_ntfs_segment_metadata(&mut file, !lfiles.is_empty())
-            .await
-            .expect("ok");
-        for (n, sfile) in &sfiles {
-            if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
-                println!("{}: {} {}", n, sfile.offset, sfile.length);
-            }
-        }
-        lfiles.extend(sfiles);
-    }
-
     let license = get_license(
         client,
         tokens,
@@ -181,6 +168,21 @@ pub async fn run(
 
     let full_key = content_key.unpack(&key).expect("failed to unpack");
 
+    // Classic files
+    if lfiles.is_empty() {
+        let sfiles = xvd
+            .parse_ntfs_segment_metadata(&mut file, !lfiles.is_empty(), None)
+            .await
+            .expect("ok");
+        for (n, sfile) in &sfiles {
+            if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
+                println!("{}: {} {}", n, sfile.offset, sfile.length);
+            }
+        }
+        lfiles.extend(sfiles);
+    }
+
+
     let mut fds = vec![];
 
     let (cleanup, mount_dir) = prepare(&lfiles).await;
@@ -195,9 +197,25 @@ pub async fn run(
 
         let mut i = File::open(&source_path).await.unwrap();
 
-        xvd.mount_mem_fd(&mut i, &mut game_exe, file.1, *full_key, |_, _| {})
-            .await
-            .unwrap();
+        // Which packages hand back an already-decrypted executable is decided by
+        // how their metadata described it, not by anything we can see here, so
+        // let the file itself say: a classic (NTFS-metadata) package extracts a
+        // plain PE image at its true length, while a SegmentMetadata package
+        // keeps page-aligned ciphertext. Decrypting an image that is already a
+        // PE turns it into garbage, which is how Asphalt Legends ended up
+        // failing with "invalid name" out of ShellExecuteEx.
+        let mut magic = [0u8; 2];
+        let plaintext = i.read_exact(&mut magic).await.is_ok() && &magic == b"MZ";
+        i.seek(std::io::SeekFrom::Start(0)).await.unwrap();
+
+        if plaintext {
+            println!("{} is already decrypted; mapping it as-is", file.0);
+            tokio::io::copy(&mut i, &mut game_exe).await.unwrap();
+        } else {
+            xvd.mount_mem_fd(&mut i, &mut game_exe, file.1, *full_key, |_, _| {})
+                .await
+                .unwrap();
+        }
 
         let stdf = game_exe.into_std().await;
 
@@ -209,8 +227,17 @@ pub async fn run(
     }
 
     let mut env_value = String::new();
-    let nt_prefix = out_absolute.to_string_lossy().replace("/", "\\");
-    let nt_prefix = nt_prefix.trim_end_matches('\\');
+
+    // The drive letter must be the one wine itself derives for these files.
+    // The launched executable is fine either way because we hand wine its NT
+    // path directly, but a title that spawns a helper of its own -- Asphalt
+    // starts Crashpad's handler -- resolves the path through wine's drive
+    // mappings. On a secondary drive that yields e.g. F:\..., which never
+    // matches a map keyed on Z:\mnt\..., so the child is loaded from the
+    // still-encrypted file on disk and fails ("crash server failed to launch").
+    // Mirror wine's rule: the longest matching dosdevices target wins.
+    let (nt_drive, nt_prefix) = wine_dos_path(&out_absolute);
+    let nt_prefix = nt_prefix.trim_end_matches('\\').to_owned();
 
     let mut nt_entry = None;
 
@@ -220,7 +247,7 @@ pub async fn run(
         }
 
         let nt_suffix = fd.0.trim_start_matches('\\');
-        let nt_path = format!("\\??\\Z:{}\\{}", nt_prefix, nt_suffix);
+        let nt_path = format!("\\??\\{}:{}\\{}", nt_drive, nt_prefix, nt_suffix);
         if let Some(exe) = &exe {
             if exe == fd.0 {
                 nt_entry = Some(nt_path)
@@ -229,8 +256,14 @@ pub async fn run(
             nt_entry = Some(nt_path)
         }
 
-        env_value.push_str(&format!("{}:\\??\\Z:{}\\{}", fd.1, nt_prefix, nt_suffix))
+        env_value.push_str(&format!(
+            "{}:\\??\\{}:{}\\{}",
+            fd.1, nt_drive, nt_prefix, nt_suffix
+        ))
     }
+
+    eprintln!("XODUS_MAP drive={} prefix={}", nt_drive, nt_prefix);
+    for e in env_value.split('|').take(4) { eprintln!("XODUS_MAP entry: {e}"); }
 
     let Some(nt_entry) = nt_entry else {
         eprintln!("Could not find .exe");
@@ -257,4 +290,55 @@ pub async fn run(
     cleanup().await;
 
     ExitCode::from(status.code().map(|c| c as u8).unwrap_or(0))
+}
+
+/// Resolves a unix path to the DOS drive letter and path wine would use for it.
+///
+/// Wine maps drives with symlinks under `$WINEPREFIX/dosdevices` and resolves a
+/// unix path through the *most specific* mapping covering it. Z: is normally the
+/// root mapping, so it wins only when nothing more specific matches.
+fn wine_dos_path(path: &Path) -> (char, String) {
+    let prefix = std::env::var("WINEPREFIX")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".wine")
+        });
+
+    let mut best: Option<(char, PathBuf)> = None;
+    if let Ok(entries) = std::fs::read_dir(prefix.join("dosdevices")) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            // Drive links are exactly "c:"; "c::" is the matching device link.
+            let mut chars = name.chars();
+            let (Some(letter), Some(':'), None) = (chars.next(), chars.next(), chars.next()) else {
+                continue;
+            };
+            let Ok(target) = std::fs::canonicalize(entry.path()) else {
+                continue;
+            };
+            if !path.starts_with(&target) {
+                continue;
+            }
+            if best
+                .as_ref()
+                .is_none_or(|(_, t)| target.as_os_str().len() > t.as_os_str().len())
+            {
+                best = Some((letter, target));
+            }
+        }
+    }
+
+    let Some((letter, target)) = best else {
+        return ('Z', path.to_string_lossy().replace("/", "\\"));
+    };
+
+    let rest = path.strip_prefix(&target).unwrap_or(path);
+    let rest = rest.to_string_lossy().replace("/", "\\");
+    let rest = if rest.is_empty() {
+        String::new()
+    } else {
+        format!("\\{}", rest.trim_start_matches('\\'))
+    };
+    (letter.to_ascii_uppercase(), rest)
 }

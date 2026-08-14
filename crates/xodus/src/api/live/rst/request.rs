@@ -27,7 +27,17 @@ impl<'a> RSTRequest<'a> {
         .await?;
 
         let response_text = response.text().await?;
-        let envelope: soap::Envelope = quick_xml::de::from_str(&response_text)?;
+        let envelope: soap::Envelope = match quick_xml::de::from_str(&response_text) {
+            Ok(envelope) => envelope,
+            Err(err) => {
+                // The body is the only thing that says WHY: MSA answers a
+                // refused exchange with a fault whose shape does not match the
+                // token response, and the deserializer error alone names a
+                // missing field rather than the refusal.
+                log::error!("Could not parse the RST response ({err}); body: {response_text}");
+                return Err(err.into());
+            }
+        };
 
         verify_and_decrypt_envelope(self.signature, response_text, envelope)
     }

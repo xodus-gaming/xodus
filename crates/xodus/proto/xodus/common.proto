@@ -8,4 +8,8 @@ enum XodusMessageType {
     PONG = 2;
     MSA_TOKEN_REQUEST=3;
     MSA_TOKEN_RESPONSE=4;
+    // XUserGetTokenAndSignature: an XSTS token for one relying party. The
+    // router answers with request+1, so requests stay odd.
+    XSTS_TOKEN_REQUEST=5;
+    XSTS_TOKEN_RESPONSE=6;
 }

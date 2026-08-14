@@ -157,6 +157,29 @@ impl<R: Write + Seek> Write for SyncSubstream<R> {
 
 struct XvdEncryptionInfo {
     encrypted_sections: Vec<EncryptedSectionInfo>,
+    tweak_cipher: Aes128,
+    data_cipher: Aes128,
+}
+
+impl XvdEncryptionInfo {
+    fn new(encrypted_sections: Vec<EncryptedSectionInfo>, full_key: &[u8; 32]) -> Self {
+        let mut tweak_key = [0u8; 16];
+        let mut data_key = [0u8; 16];
+        tweak_key.copy_from_slice(&full_key[..16]);
+        data_key.copy_from_slice(&full_key[16..]);
+
+        Self {
+            encrypted_sections,
+            tweak_cipher: Aes128::new((&tweak_key).into()),
+            data_cipher: Aes128::new((&data_key).into()),
+        }
+    }
+
+    fn section_at(&self, offset: u64) -> Option<&EncryptedSectionInfo> {
+        self.encrypted_sections
+            .iter()
+            .find(|s| offset >= s.section_offset && offset < s.section_offset + s.section_length)
+    }
 }
 
 // The gpt crate requires the device to implement Debug,
@@ -217,7 +240,53 @@ impl<R: Read + Seek> Read for XvdStream<R> {
             .map_err(|_| Error::new(ErrorKind::InvalidData, "remaining range too large"))?;
         let to_read = remaining.min(buf.len());
 
-        self.inner.read(&mut buf[..to_read])
+        let absolute = self.offset + current;
+
+        // Without a content key the caller can only be given whatever happens to
+        // be stored in the clear, which is how this stream behaved previously.
+        let Some(info) = self.encryption_info.as_ref() else {
+            return self.inner.read(&mut buf[..to_read]);
+        };
+        let Some(section) = info.section_at(absolute) else {
+            return self.inner.read(&mut buf[..to_read]);
+        };
+
+        // XTS operates on whole 4K pages, but callers read arbitrary ranges, so
+        // decrypt the page containing the request and hand back the slice of it
+        // that was actually asked for. Reads are clamped to a single page and
+        // the caller loops, which Read explicitly permits.
+        let offset_in_section = absolute - section.section_offset;
+        let page_in_section = offset_in_section / PAGE_SIZE as u64;
+        let offset_in_page = (offset_in_section % PAGE_SIZE as u64) as usize;
+        let page_start = section.section_offset + page_in_section * PAGE_SIZE as u64;
+
+        self.inner.seek(SeekFrom::Start(page_start))?;
+        let mut page = [0u8; PAGE_SIZE];
+        self.inner.read_exact(&mut page)?;
+
+        let data_unit = match &section.data_units {
+            Some(units) => *units.get(page_in_section as usize).ok_or_else(|| {
+                Error::new(
+                    ErrorKind::InvalidData,
+                    format!("missing data unit for page {page_in_section}"),
+                )
+            })?,
+            None => page_in_section as u32,
+        };
+        decrypt_page_xts(
+            &mut page,
+            Tweak::new(data_unit, section.header_id, section.vduid),
+            &info.tweak_cipher,
+            &info.data_cipher,
+        );
+
+        let available = PAGE_SIZE - offset_in_page;
+        let copied = to_read.min(available);
+        buf[..copied].copy_from_slice(&page[offset_in_page..offset_in_page + copied]);
+
+        // Leave the underlying stream where a plain read would have left it.
+        self.inner.seek(SeekFrom::Start(absolute + copied as u64))?;
+        Ok(copied)
     }
 }
 
@@ -277,7 +346,7 @@ pub struct XvdFile {
     user_data_offset: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EncryptedSectionInfo {
     section_offset: u64,
     section_length: u64,
@@ -624,13 +693,38 @@ impl XvdFile {
         &self,
         file: Reader,
         only_plain: bool,
+        full_key: Option<&[u8; 32]>,
     ) -> Result<HashMap<String, SegmentFile>, Box<dyn std::error::Error>>
     where
         Reader: AsyncRead + AsyncSeek + Unpin,
     {
         let drive_data_offset = self.drive_data_offset;
         let drive_size = self.header.drive_size;
+
+        // How much of the drive is stored in the clear. This is a PROPERTY OF THE
+        // PACKAGE, not of what we can read: `only_plain` callers use it below to
+        // decide which files are safe to describe without SegmentMetadata, so it
+        // must keep meaning "plaintext prefix" even when a key lets us read past
+        // it. Conflating it with the stream length silently disables that filter
+        // and lets encrypted-region files be reported as plaintext.
         let drive_plain_len = self.non_encrypted_prefix_len(drive_data_offset, drive_size);
+        let debug_ntfs = std::env::var_os("XODUS_DEBUG_NTFS").is_some();
+
+        // How much of the drive we can actually read. Classic packages keep their
+        // file table (GPT + NTFS metadata) inside an encrypted section, so with a
+        // content key the whole drive is mapped and decrypted on demand; without
+        // one the view stops at the plaintext prefix, which is why such packages
+        // used to die on EOF partway through the parse.
+        let (drive_len, drive_encryption) = match full_key {
+            Some(key) => (
+                drive_size,
+                Some(XvdEncryptionInfo::new(
+                    self.encrypted_section_infos.clone(),
+                    key,
+                )),
+            ),
+            None => (drive_plain_len, None),
+        };
 
         block_in_place(|| {
             let block_size = 4096;
@@ -638,11 +732,11 @@ impl XvdFile {
                 XvdStream {
                     inner: SyncIoBridge::new(file),
                     offset: drive_data_offset,
-                    end_offset: drive_data_offset + drive_plain_len,
-                    encryption_info: None,
+                    end_offset: drive_data_offset + drive_len,
+                    encryption_info: drive_encryption,
                 },
                 0,
-                drive_plain_len,
+                drive_len,
             );
 
             let gp = gpt::GptConfig::new()
@@ -669,16 +763,30 @@ impl XvdFile {
 
             let bridge = gp.take_device().into_inner().into_inner();
             let partition_offset = drive_data_offset + part_start;
-            let partition_plain_len = self.non_encrypted_prefix_len(partition_offset, part_len);
+            // Same reasoning as the drive above: the NTFS volume itself is inside
+            // the encrypted section, so it must be readable in full to be parsed.
+            let (partition_len, partition_encryption) = match full_key {
+                Some(key) => (
+                    part_len,
+                    Some(XvdEncryptionInfo::new(
+                        self.encrypted_section_infos.clone(),
+                        key,
+                    )),
+                ),
+                None => (
+                    self.non_encrypted_prefix_len(partition_offset, part_len),
+                    None,
+                ),
+            };
             let mut fs = SyncSubstream::new(
                 XvdStream {
                     inner: bridge,
                     offset: partition_offset,
-                    end_offset: partition_offset + partition_plain_len,
-                    encryption_info: None,
+                    end_offset: partition_offset + partition_len,
+                    encryption_info: partition_encryption,
                 },
                 0,
-                partition_plain_len,
+                partition_len,
             );
 
             let reports = collect_ntfs_stream_layouts(&mut fs)?;
@@ -699,7 +807,25 @@ impl XvdFile {
                     continue;
                 };
 
-                if only_plain && partition_offset + start >= drive_data_offset + drive_plain_len {
+                let beyond_plain =
+                    partition_offset + start >= drive_data_offset + drive_plain_len;
+
+                if debug_ntfs {
+                    eprintln!(
+                        "ntfs: {:<52} off={:<13} len={:<12} beyond_plain={} {}",
+                        report.path,
+                        partition_offset + start,
+                        report.value_length,
+                        beyond_plain,
+                        if only_plain && beyond_plain {
+                            "SKIPPED"
+                        } else {
+                            ""
+                        }
+                    );
+                }
+
+                if only_plain && beyond_plain {
                     continue;
                 }
 
@@ -949,7 +1075,31 @@ impl XvdFile {
                 min((page_in_section - page_start) * 4096, sfile.length),
                 sfile.length,
             );
-            i.read_exact(&mut page).await?;
+            // Not every source is padded out to a whole page. Classic packages
+            // extract their files at true length, so the last page is short;
+            // read what is there and zero the rest rather than treating a short
+            // tail as a truncated stream. XTS decrypts in 16-byte blocks with a
+            // per-page tweak, so a partial page still decrypts correctly for the
+            // bytes that exist.
+            let mut filled = 0;
+            while filled < PAGE_SIZE {
+                match i.read(&mut page[filled..]).await? {
+                    0 => break,
+                    got => filled += got,
+                }
+            }
+            if filled == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    format!(
+                        "stream ended at page {page_in_section} of {} ({page_start}+{page_count})",
+                        sfile.length
+                    ),
+                )
+                .into());
+            }
+            page[filled..].fill(0);
+
             let to_write = min(
                 PAGE_SIZE,
                 sfile.length as usize
