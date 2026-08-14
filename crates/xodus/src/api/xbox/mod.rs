@@ -112,31 +112,52 @@ async fn rps_ticket_for_app(
     legacy: LegacyToken,
     app_id: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    // The token-broker path, with the app id in the scope. This is what the
-    // Windows GDK asks WGC for on the title's behalf, and unlike a plain
-    // user.auth ticket the result is actually bound to the app -- title.auth
-    // answers 403 for a ticket that names no title.
-    let outcome = crate::api::live::exchange_user_token(
-        client,
-        legacy,
-        "USERNAME".to_string(),
-        dev_token,
-        None,
-        Some("Silent".to_string()),
-        app_id.to_string(),
-        &[
-            (
-                format!(
-                    "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0&clientid={app_id}"
-                ),
-                Some(soap::PolicyReference::token_broker()),
-            ),
-            ("http://Passport.NET/tb".to_string(), None),
-        ],
-    )
-    .await?;
+    // The token-broker form, with the app id in the scope. title.auth only
+    // accepts this one: a plain user.auth ticket for the same hosting app is
+    // issued happily by MSA and then rejected with 400.
+    //
+    // MSA will not always issue it, though: Asphalt Legends' 00000000441DF337
+    // comes back with reqstatus 0x8004882c / errorstatus 0x80045c30 and no
+    // token at all, while Minecraft's is fine. Asking without the "Silent"
+    // constraint returns the identical pair, so it is the app-and-scope
+    // combination being refused rather than the interaction mode -- which also
+    // means no amount of consent UI would change it. Try the narrower
+    // xboxlive.signin scope before giving up on a title claim.
+    let attempts = [
+        format!("scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0&clientid={app_id}"),
+        format!("scope=xboxlive.signin&api-version=2.0&clientid={app_id}"),
+    ];
 
-    compact_token(outcome)
+    let mut last_err = None;
+    for scope in attempts {
+        let policies = [
+            (scope.clone(), Some(soap::PolicyReference::token_broker())),
+            ("http://Passport.NET/tb".to_string(), None),
+        ];
+
+        match crate::api::live::exchange_user_token(
+            client,
+            legacy.clone(),
+            "USERNAME".to_string(),
+            dev_token.clone(),
+            None,
+            Some("Silent".to_string()),
+            app_id.to_string(),
+            &policies,
+        )
+        .await
+        {
+            Ok(outcome) => return compact_token(outcome),
+            Err(err) => {
+                log::warn!("MSA refused {scope}: {err}");
+                last_err = Some(err);
+            }
+        }
+    }
+
+    Err(last_err
+        .map(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync>)
+        .unwrap_or_else(|| "no scope was attempted".into()))
 }
 
 /// The full chain, including the title claim.
@@ -177,6 +198,7 @@ pub async fn run_with_title(
 
     // One ticket, two tokens: user.auth says who is signed in, title.auth says
     // which title they are signed in through.
+    log::debug!("RPS ticket starts {:?}", &rps_ticket[..rps_ticket.len().min(8)]);
     let title_token = title::authenticate_title(client, proof_key, &rps_ticket, &device_token).await?;
     let user_token = authenticate_xbox_user(client, rps_ticket).await?.token;
 

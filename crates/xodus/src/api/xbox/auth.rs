@@ -68,7 +68,7 @@ pub async fn request_xsts_token_for_title(
     device_token: String,
     title_token: String,
     relying_party: &str,
-) -> reqwest::Result<XstsResponse> {
+) -> Result<XstsResponse, Box<dyn std::error::Error + Send + Sync>> {
     let body = XstsRequest {
         relying_party: Some(relying_party.to_string()),
         token_type: Some("JWT".to_string()),
@@ -88,10 +88,21 @@ pub async fn request_xsts_token_for_title(
         .header("x-xbl-contract-version", "1")
         .json(&body)
         .send()
-        .await?
-        .error_for_status()?;
+        .await?;
 
-    resp.json().await
+    let status = resp.status();
+    let headers = resp.headers().clone();
+    let text = resp.text().await?;
+    if !status.is_success() {
+        // XSTS puts its reason in an XErr code and the body, both of which
+        // error_for_status throws away.
+        return Err(crate::api::xbox::signature::describe_failure(
+            "XSTS authorize", status, &headers, &text,
+        )
+        .into());
+    }
+
+    Ok(serde_json::from_str(&text)?)
 }
 
 pub fn get_xsts_auth_header(xsts: XstsResponse) -> String {
