@@ -159,6 +159,7 @@ fn load_raw_smbios() -> io::Result<Vec<u8>> {
 // run under; an unmatched-but-present agent just means the fallback below
 // (attempt pkexec anyway) is safe, since a real agent showing a prompt means
 // pkexec correctly returns once the user answers it, one way or another.
+#[cfg(target_os = "linux")]
 const KNOWN_POLKIT_AGENTS: &[&str] = &[
     "polkit-gnome-authentication-agent-1",
     "polkit-kde-authentication-agent-1",
@@ -169,6 +170,7 @@ const KNOWN_POLKIT_AGENTS: &[&str] = &[
     "ukui-polkit",
 ];
 
+#[cfg(target_os = "linux")]
 fn polkit_agent_running() -> bool {
     // -f (match against the full command line) rather than -x (match against
     // `comm`, which the kernel truncates to 15 characters): several agent
