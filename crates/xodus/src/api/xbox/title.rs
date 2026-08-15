@@ -101,6 +101,47 @@ pub fn get_endpoint<'a>(url: &str, response: &'a TitleMgtResponse) -> Option<&'a
         .copied()
 }
 
+
+use tokio::sync::OnceCell;
+
+/// The endpoint table, fetched once per process.
+///
+/// It is the same document for every caller and changes about as often as Xbox
+/// Live itself, so re-fetching it per token request would be pure latency.
+static ENDPOINTS: OnceCell<TitleMgtResponse> = OnceCell::const_new();
+
+/// The relying party Xbox Live expects for a given request URL.
+///
+/// A token is issued to a relying party, not to a URL, and the mapping is not
+/// something a caller can derive: `*.xboxlive.com` all map to
+/// `http://xboxlive.com`, `playfabapi.com` maps to `http://playfab.xboxlive.com/`,
+/// and so on. Deriving `scheme://host/` from the URL instead happens to work for
+/// the handful of parties that are named after their own host, and fails with a
+/// bare 400 from XSTS for everything else -- which is what
+/// `wss://rta.xboxlive.com/` does.
+pub async fn relying_party_for_url(client: &reqwest::Client, url: &str) -> Option<String> {
+    let table = ENDPOINTS
+        .get_or_try_init(|| get_title_management(client))
+        .await
+        .ok()?;
+
+    // The table only describes http/https. A WebSocket URL is the same
+    // endpoint reached over the same transport, so match it as its http twin.
+    let normalized = match url.split_once("://") {
+        Some(("wss", rest)) => format!("https://{rest}"),
+        Some(("ws", rest)) => format!("http://{rest}"),
+        _ => url.to_string(),
+    };
+
+    let endpoint = get_endpoint(&normalized, table)?;
+    let relying_party = endpoint.relying_party.clone();
+    log::debug!(
+        "{url} -> relying party {}",
+        relying_party.as_deref().unwrap_or("(none listed)")
+    );
+    relying_party
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

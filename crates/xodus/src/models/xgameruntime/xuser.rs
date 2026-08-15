@@ -30,6 +30,11 @@ pub struct XstsTokenRequest {
     /// XUserGetTokenAndSignatureOptions::ForceRefresh - bypass the cache.
     #[serde(default)]
     pub force_refresh: bool,
+    /// The request URL the title asked about. The relying party is resolved
+    /// from it against Xbox's endpoint table; `relying_party` above is only the
+    /// caller's guess, used when the table has nothing to say.
+    #[serde(default)]
+    pub url: String,
     /// The title's `<MSAAppId>` from MicrosoftGame.Config. When present the
     /// token is minted through sisu so it carries the title claim; without it
     /// the user-token-only chain is used and PlayFab-style services refuse the

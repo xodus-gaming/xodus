@@ -139,12 +139,22 @@ pub async fn parse_message(
 
             // XSTS tokens are good for hours; minting one per HTTP request would
             // put a SOAP round trip in front of every call the title makes.
+            // Ask Xbox what this URL's relying party actually is. Falling back
+            // to the caller's guess keeps working for the parties named after
+            // their own host, which is all the table would tell us anyway.
+            let relying_party = match req.url.is_empty() {
+                true => req.relying_party.clone(),
+                false => xodus::api::xbox::title::relying_party_for_url(&context.client, &req.url)
+                    .await
+                    .unwrap_or_else(|| req.relying_party.clone()),
+            };
+
             // The app id is part of the identity of the token, not just of the
             // request: a token minted for one title is not usable by another.
             let cache_key = if req.app_id.is_empty() {
-                req.relying_party.clone()
+                relying_party.clone()
             } else {
-                format!("{}#{}", req.relying_party, req.app_id)
+                format!("{relying_party}#{}", req.app_id)
             };
             let cached = if req.force_refresh {
                 None
@@ -173,7 +183,7 @@ pub async fn parse_message(
                             &context.client,
                             device_token.clone(),
                             user_sts,
-                            &req.relying_party,
+                            &relying_party,
                         )
                         .await?
                     } else {
@@ -185,7 +195,7 @@ pub async fn parse_message(
                             &proof_key,
                             device_token.clone(),
                             user_sts.clone(),
-                            &req.relying_party,
+                            &relying_party,
                             &req.app_id,
                             &device_id,
                         )
@@ -210,7 +220,7 @@ pub async fn parse_message(
                                     &context.client,
                                     device_token.clone(),
                                     user_sts,
-                                    &req.relying_party,
+                                    &relying_party,
                                 )
                                 .await?
                             }
