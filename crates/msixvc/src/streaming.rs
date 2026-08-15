@@ -47,14 +47,32 @@ impl<'t> HttpRead<'t> {
     where
         Progress: FnMut(u64, u64) + Send + 't,
     {
+        Self::open_at(client, url, 0, progress).await
+    }
+
+    /// Open the same remote file, but starting at `start`.
+    ///
+    /// Used to continue an interrupted download: a Range request returns the
+    /// total length in Content-Range, so `len` still describes the whole file
+    /// and only the bytes after `start` come down the wire.
+    pub async fn open_at<Progress>(
+        client: reqwest::Client,
+        url: impl Into<String>,
+        start: u64,
+        progress: Option<Progress>,
+    ) -> std::io::Result<Self>
+    where
+        Progress: FnMut(u64, u64) + Send + 't,
+    {
         let url = url.into();
-        let initial = open_http_stream(client.clone(), url.clone(), None).await?;
+        let initial =
+            open_http_stream(client.clone(), url.clone(), (start > 0).then_some(start)).await?;
 
         Ok(Self {
             client,
             url,
             len: initial.len,
-            pos: 0,
+            pos: start,
             pending_open: None,
             active: Some(ActiveHttpStream {
                 next_offset: initial.start,
@@ -237,15 +255,59 @@ where
         len: u64,
         cache_path: impl AsRef<std::path::Path>,
     ) -> std::io::Result<Self> {
+        Self::open(upstream, len, cache_path, 0).await
+    }
+
+    /// How much of `cache_path` can be trusted as an already-downloaded prefix.
+    ///
+    /// The cache is written strictly in order, and the length on disk only grows
+    /// once bytes are written, so the file length is the resume point. The last
+    /// megabyte is given up anyway: if the machine lost power or a drive was
+    /// pulled mid-write, that tail is the only part that could have reached the
+    /// filesystem's length without its data, and a megabyte is far cheaper to
+    /// fetch again than a corrupt package is to diagnose.
+    pub async fn resumable_prefix(cache_path: impl AsRef<std::path::Path>) -> u64 {
+        const MARGIN: u64 = 1024 * 1024;
+        match tokio::fs::metadata(cache_path.as_ref()).await {
+            Ok(meta) => meta.len().saturating_sub(MARGIN) / MARGIN * MARGIN,
+            Err(_) => 0,
+        }
+    }
+
+    /// Open with `resume_from` bytes already cached.
+    ///
+    /// `upstream` must be positioned at `resume_from`, because everything read
+    /// from it is appended to the cache at that point.
+    pub async fn open(
+        upstream: R,
+        len: u64,
+        cache_path: impl AsRef<std::path::Path>,
+        resume_from: u64,
+    ) -> std::io::Result<Self> {
         let cache_path = cache_path.as_ref();
 
-        let cache_writer = OpenOptions::new()
+        let mut cache_writer = OpenOptions::new()
             .create(true)
-            .truncate(true)
+            .truncate(resume_from == 0)
             .read(true)
             .write(true)
             .open(cache_path)
             .await?;
+        // Drop anything past the resume point, so the file length and
+        // `cached_len` cannot disagree.
+        //
+        // The cursor has to be moved there too. The write path skips its seek
+        // whenever `cache_write_pos` already matches `cached_len`, and a
+        // freshly opened file sits at 0 -- so without this the continued
+        // download overwrites the start of the cache instead of appending, and
+        // the file never grows past the resume point.
+        if resume_from > 0 {
+            use tokio::io::AsyncSeekExt;
+            cache_writer.set_len(resume_from).await?;
+            cache_writer
+                .seek(std::io::SeekFrom::Start(resume_from))
+                .await?;
+        }
         let cache_reader = OpenOptions::new().read(true).open(cache_path).await?;
 
         Ok(Self {
@@ -254,13 +316,13 @@ where
             pos: 0,
             cache_reader,
             cache_writer,
-            cached_len: 0,
+            cached_len: resume_from,
             pending_seek: None,
             pending_chunk: None,
             pending_chunk_offset: 0,
             cache_read_state: CacheReadState::Idle,
             cache_write_state: CacheWriteState::Idle,
-            cache_write_pos: 0,
+            cache_write_pos: resume_from,
             upstream_buf: vec![0u8; UPSTREAM_READ_CHUNK_SIZE],
         })
     }
@@ -506,6 +568,13 @@ where
             match self.as_mut().poll_fill_from_upstream(cx) {
                 Poll::Ready(Ok(true)) => continue,
                 Poll::Ready(Ok(false)) => {
+                    // Flushing the last chunk falls through to here without
+                    // rechecking, so an upstream that ends exactly when the
+                    // cache is complete is not a failure -- the bytes asked
+                    // for did arrive. Only a genuinely short read is.
+                    if self.cached_len >= target_end {
+                        continue;
+                    }
                     return Poll::Ready(Err(Error::new(
                         ErrorKind::UnexpectedEof,
                         "upstream ended before requested prefix was cached",
@@ -838,6 +907,74 @@ mod tests {
             .unwrap();
         let len = http.len();
         PrefixCacheFile::new(http, len, cache).await.unwrap()
+    }
+
+    /// 5 MiB, so the 1 MiB resume margin has something to bite on.
+    fn large_body() -> Vec<u8> {
+        (0..5 * 1024 * 1024).map(|i| (i % 251) as u8).collect()
+    }
+
+    #[tokio::test]
+    async fn an_interrupted_download_continues_where_it_stopped() {
+        let body = large_body();
+        let server = spawn_server(body.clone(), None, 0).await.unwrap();
+        let cache = cache_path("resume");
+
+        // A first attempt that stops part-way, as a closed lid or a killed
+        // process would leave it.
+        {
+            let mut file = open_cached_reader(&server, &cache).await;
+            let mut buf = vec![0u8; 3 * 1024 * 1024];
+            file.read_exact(&mut buf).await.unwrap();
+            assert_eq!(buf, body[..buf.len()]);
+        }
+
+        // The last megabyte is given up deliberately, so the resume point is
+        // behind what was actually written.
+        let resume = PrefixCacheFile::<tokio::fs::File>::resumable_prefix(&cache).await;
+        assert_eq!(resume, 2 * 1024 * 1024, "should round down by the margin");
+
+        let http = HttpRead::open_at(reqwest::Client::new(), &server.url, resume, Some(|_, _| {}))
+            .await
+            .unwrap();
+        let len = http.len();
+        assert_eq!(len, body.len() as u64, "a ranged open still knows the total");
+
+        let mut file = PrefixCacheFile::open(http, len, &cache, resume).await.unwrap();
+        let mut all = Vec::new();
+        file.read_to_end(&mut all).await.unwrap();
+
+        // The whole file, not a seam of duplicated or missing bytes at the
+        // resume point -- which is the only thing that matters here.
+        assert_eq!(all.len(), body.len());
+        assert_eq!(all, body);
+
+        // And the continuation really was a range request, rather than
+        // re-fetching from the start.
+        let ranges = server.request_ranges();
+        assert!(
+            ranges.last().unwrap().as_deref() == Some("bytes=2097152-"),
+            "expected a resume range, got {ranges:?}"
+        );
+        let _ = std::fs::remove_file(cache);
+    }
+
+    #[tokio::test]
+    async fn nothing_to_resume_from_is_zero() {
+        let missing = cache_path("absent");
+        assert_eq!(
+            PrefixCacheFile::<tokio::fs::File>::resumable_prefix(&missing).await,
+            0
+        );
+
+        // Below the margin there is nothing worth keeping either.
+        let tiny = cache_path("tiny");
+        std::fs::write(&tiny, vec![0u8; 1024]).unwrap();
+        assert_eq!(
+            PrefixCacheFile::<tokio::fs::File>::resumable_prefix(&tiny).await,
+            0
+        );
+        let _ = std::fs::remove_file(tiny);
     }
 
     #[tokio::test]
