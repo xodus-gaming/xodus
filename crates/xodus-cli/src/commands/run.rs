@@ -118,7 +118,7 @@ pub async fn run(
     tokens: &TokenManager,
     source: String,
     wine: String,
-    exe: Option<String>,
+    mut exe: Option<String>,
     market: Option<String>,
     game_args: Vec<String>,
 ) -> ExitCode {
@@ -184,7 +184,7 @@ pub async fn run(
     }
 
 
-    let mut fds = vec![];
+    let mut fds: Vec<(&String, std::os::fd::RawFd)> = vec![];
 
     let (cleanup, mount_dir) = prepare(&lfiles).await;
 
@@ -242,6 +242,23 @@ pub async fn run(
 
     let mut nt_entry = None;
     let mut nt_entry_fd = None;
+
+    // `lfiles` is a HashMap and Rust seeds its hasher afresh every process, so
+    // iteration order changed on every launch. With no --exe the first entry
+    // won, which meant a package with several executables started a *different*
+    // one each time: Subnautica 2 has four, so roughly one launch in four
+    // started the game and the rest opened crashpad_handler ("--initial-client-
+    // data or --pipe-name is required") or the prerequisite shim (which reports
+    // "Microsoft Visual C++ 2015-2022 Redistributable is required"). That is the
+    // whole of the "launches work on the second or third try" behaviour.
+    fds.sort_by(|a, b| a.0.cmp(b.0));
+
+    if exe.is_none() {
+        if let Some(chosen) = auto_entry( &fds ) {
+            eprintln!("XODUS_AUTO_EXE {chosen}");
+            exe = Some(chosen);
+        }
+    }
 
     for fd in fds {
         if !env_value.is_empty() {
@@ -311,6 +328,50 @@ pub async fn run(
     ExitCode::from(status.code().map(|c| c as u8).unwrap_or(0))
 }
 
+/// Which executable to start when the caller did not name one.
+///
+/// A game package ships more than the game: a crash handler, a crash reporter,
+/// sometimes a prerequisite installer that only knows how to say what is
+/// missing. Any of those will start, and none of them is the game, so the
+/// choice is made on what the file is rather than on whichever one the
+/// filesystem happened to yield first.
+fn auto_entry(fds: &[(&String, std::os::fd::RawFd)]) -> Option<String> {
+    let mut best: Option<(u8, &String)> = None;
+
+    for (path, _) in fds {
+        let name = path
+            .rsplit(['\\', '/'])
+            .next()
+            .unwrap_or(path)
+            .to_ascii_lowercase();
+
+        // Helpers a title spawns for itself. Starting one directly does
+        // nothing useful and looks like a failed launch.
+        if name.contains("crashpad")
+            || name.contains("crashreport")
+            || name.contains("crashhandler")
+            || name.contains("prereqsetup")
+            || name.contains("webhelper")
+            || name.contains("subprocess")
+        {
+            continue;
+        }
+
+        // Unreal names its real binary <Project>-<Platform>-Shipping.exe; the
+        // bare <Project>.exe beside it is a launcher shim, which on Subnautica 2
+        // is the one that reports a missing redistributable.
+        let rank = if name.ends_with("-shipping.exe") { 0 } else { 1 };
+
+        if best.as_ref().is_none_or(|(best_rank, best_path)| {
+            rank < *best_rank || (rank == *best_rank && path < best_path)
+        }) {
+            best = Some((rank, path));
+        }
+    }
+
+    best.map(|(_, path)| path.clone())
+}
+
 /// Resolves a unix path to the DOS drive letter and path wine would use for it.
 ///
 /// Wine maps drives with symlinks under `$WINEPREFIX/dosdevices` and resolves a
@@ -360,4 +421,73 @@ fn wine_dos_path(path: &Path) -> (char, String) {
         format!("\\{}", rest.trim_start_matches('\\'))
     };
     (letter.to_ascii_uppercase(), rest)
+}
+
+#[cfg(test)]
+mod test {
+    use super::auto_entry;
+
+    fn pick(names: &[&str]) -> Option<String> {
+        let owned: Vec<String> = names.iter().map(|n| n.to_string()).collect();
+        let fds: Vec<(&String, std::os::fd::RawFd)> =
+            owned.iter().enumerate().map(|(i, n)| (n, i as i32)).collect();
+        auto_entry(&fds)
+    }
+
+    #[test]
+    fn the_game_is_chosen_over_its_helpers() {
+        // Subnautica 2's four executables. Picking by hash order started the
+        // crash handler or the prerequisite shim most of the time.
+        let chosen = pick(&[
+            "\\Subnautica2.exe",
+            "\\Subnautica2\\Binaries\\WinGDK\\Subnautica2-WinGDK-Shipping.exe",
+            "\\Subnautica2\\Plugins\\Sentry\\Binaries\\Win64\\crashpad_handler.exe",
+            "\\Engine\\Binaries\\Win64\\CrashReportClient.exe",
+        ]);
+        assert_eq!(
+            chosen.as_deref(),
+            Some("\\Subnautica2\\Binaries\\WinGDK\\Subnautica2-WinGDK-Shipping.exe")
+        );
+    }
+
+    #[test]
+    fn the_choice_does_not_depend_on_ordering() {
+        let forwards = pick(&[
+            "\\SandFall.exe",
+            "\\Sandfall\\Binaries\\WinGDK\\SandFall-WinGDK-Shipping.exe",
+            "\\Engine\\Binaries\\Win64\\CrashReportClient.exe",
+        ]);
+        let backwards = pick(&[
+            "\\Engine\\Binaries\\Win64\\CrashReportClient.exe",
+            "\\Sandfall\\Binaries\\WinGDK\\SandFall-WinGDK-Shipping.exe",
+            "\\SandFall.exe",
+        ]);
+        assert_eq!(forwards, backwards);
+        assert_eq!(
+            forwards.as_deref(),
+            Some("\\Sandfall\\Binaries\\WinGDK\\SandFall-WinGDK-Shipping.exe")
+        );
+    }
+
+    #[test]
+    fn unitys_crash_handler_is_a_helper_too() {
+        // Deep Rock Galactic Survivor ships exactly these two. The game only
+        // won the pick alphabetically, which is luck rather than a rule.
+        let chosen = pick(&["\\UnityCrashHandler64.exe", "\\DRG Survivor.exe"]);
+        assert_eq!(chosen.as_deref(), Some("\\DRG Survivor.exe"));
+    }
+
+    #[test]
+    fn a_title_without_a_shipping_binary_still_gets_the_game() {
+        // Minecraft ships one executable and a crash handler.
+        let chosen = pick(&["\\Minecraft.Windows.exe", "\\crashpad_handler.exe"]);
+        assert_eq!(chosen.as_deref(), Some("\\Minecraft.Windows.exe"));
+    }
+
+    #[test]
+    fn helpers_alone_are_better_than_nothing() {
+        // Nothing but helpers means there is no good answer; returning None
+        // leaves the old first-entry behaviour rather than refusing to start.
+        assert_eq!(pick(&["\\crashpad_handler.exe"]), None);
+    }
 }
