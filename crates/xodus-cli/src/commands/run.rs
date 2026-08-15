@@ -120,6 +120,7 @@ pub async fn run(
     wine: String,
     exe: Option<String>,
     market: Option<String>,
+    game_args: Vec<String>,
 ) -> ExitCode {
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();
 
@@ -240,6 +241,7 @@ pub async fn run(
     let nt_prefix = nt_prefix.trim_end_matches('\\').to_owned();
 
     let mut nt_entry = None;
+    let mut nt_entry_fd = None;
 
     for fd in fds {
         if !env_value.is_empty() {
@@ -250,10 +252,12 @@ pub async fn run(
         let nt_path = format!("\\??\\{}:{}\\{}", nt_drive, nt_prefix, nt_suffix);
         if let Some(exe) = &exe {
             if exe == fd.0 {
-                nt_entry = Some(nt_path)
+                nt_entry = Some(nt_path);
+                nt_entry_fd = Some(fd.1);
             }
         } else if nt_entry.is_none() {
-            nt_entry = Some(nt_path)
+            nt_entry = Some(nt_path);
+            nt_entry_fd = Some(fd.1);
         }
 
         env_value.push_str(&format!(
@@ -265,13 +269,28 @@ pub async fn run(
     eprintln!("XODUS_MAP drive={} prefix={}", nt_drive, nt_prefix);
     for e in env_value.split('|').take(4) { eprintln!("XODUS_MAP entry: {e}"); }
 
-    let Some(nt_entry) = nt_entry else {
+    let Some(mut nt_entry) = nt_entry else {
         eprintln!("Could not find .exe");
         return ExitCode::FAILURE;
     };
 
+    // EXPERIMENT (XODUS_EXE_VIA_PROC=1): name the memfd by path instead of
+    // handing wine an fd through WINE_DLL_FILE_MAP.
+    //
+    // /proc/self/fd/N is an ordinary openable path, and the fd is inherited, so
+    // any wine -- including a stock Proton -- could map the image from it with
+    // no patch at all. The plaintext still only ever exists in the memfd, so
+    // nothing reaches the filesystem either way.
+    if std::env::var("XODUS_EXE_VIA_PROC").is_ok() {
+        if let Some(fd) = nt_entry_fd {
+            nt_entry = format!("\\??\\Z:\\proc\\self\\fd\\{fd}");
+            eprintln!("XODUS_EXE_VIA_PROC: launching {nt_entry}");
+        }
+    }
+
     let mut wn = Command::new(wine)
         .arg(nt_entry)
+        .args(&game_args)
         .env("WINE_DLL_FILE_MAP", env_value)
         .spawn()
         .unwrap();

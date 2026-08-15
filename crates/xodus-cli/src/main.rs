@@ -67,6 +67,14 @@ enum SubCommand {
         exe: Option<String>,
         #[arg(short, long)]
         market: Option<String>,
+        /// Arguments passed on to the game itself, after `--`.
+        ///
+        /// Titles routinely need these and there was no way to give them any.
+        /// Unreal Engine, for one, writes no log at all without `-log`, and its
+        /// log is the only place it explains decisions like whether DLSS is
+        /// available.
+        #[arg(last = true)]
+        game_args: Vec<String>,
     },
     #[command(about = "Generate or decrypt base64-encoded CLEP challenge data")]
     Clep {
@@ -197,7 +205,8 @@ async fn main() -> ExitCode {
             wine,
             exe,
             market,
-        } => commands::run::run(&client, &tokens, source, wine, exe, market).await,
+            game_args,
+        } => commands::run::run(&client, &tokens, source, wine, exe, market, game_args).await,
         SubCommand::Clep { action } => match action {
             ClepAction::Generate {
                 smbios,
