@@ -40,6 +40,8 @@ pub async fn run(
     market: Option<String>,
 ) -> ExitCode {
     let (tx, rx) = tokio::sync::mpsc::channel::<ProgressEvent>(256);
+    // Only a network source can be resumed; a local file is already on disk.
+    let mut resume_from = 0u64;
     if source.starts_with("file://") {
         let fsrc = source.strip_prefix("file://").unwrap_or_default();
         let f = match File::open(fsrc).await {
@@ -56,7 +58,7 @@ pub async fn run(
                 return ExitCode::FAILURE;
             }
         };
-        run_cli_reader(
+        return run_cli_reader(
             client,
             tokens,
             destination,
@@ -68,6 +70,7 @@ pub async fn run(
             &source,
             &tx,
             rx,
+            0,
         )
         .await;
     } else {
@@ -112,10 +115,26 @@ pub async fn run(
             )
         };
         let url = &vurl;
-        let mut pos = 0;
-        let http_file = streaming::HttpRead::open(
+
+        // An interrupted download leaves its cache behind. Continue from there
+        // rather than starting over: these packages run to tens of gigabytes,
+        // and losing all of it to a closed lid or an unplugged drive is the
+        // difference between an inconvenience and an unusable installer.
+        std::fs::create_dir_all(&destination).ok();
+        let cache_path = Path::new(&destination).join(".xodus-streaming-tmp.msixvc");
+        resume_from = streaming::PrefixCacheFile::<File>::resumable_prefix(&cache_path).await;
+        if resume_from > 0 {
+            eprintln!(
+                "Continuing from {:.1} GB already downloaded",
+                resume_from as f64 / 1e9
+            );
+        }
+
+        let mut pos = resume_from;
+        let http_file = streaming::HttpRead::open_at(
             client.clone(),
             url,
+            resume_from,
             Some(|c, _| {
                 if tx
                     .try_send(ProgressEvent::Advanced {
@@ -132,7 +151,7 @@ pub async fn run(
         .expect("ok");
         let l = http_file.len();
 
-        run_cli_reader(
+        return run_cli_reader(
             client,
             tokens,
             destination,
@@ -144,11 +163,10 @@ pub async fn run(
             url,
             &tx,
             rx,
+            resume_from,
         )
         .await;
     }
-
-    ExitCode::SUCCESS
 }
 
 async fn run_cli_reader<Reader>(
@@ -163,7 +181,8 @@ async fn run_cli_reader<Reader>(
     url: &str,
     tx: &Sender<ProgressEvent>,
     mut rx: Receiver<ProgressEvent>,
-) -> ()
+    resume_from: u64,
+) -> ExitCode
 where
     Reader: AsyncRead + Unpin,
 {
@@ -221,6 +240,7 @@ where
         l,
         url,
         tx,
+        resume_from,
     )
     .await
 }
@@ -236,7 +256,8 @@ async fn run_reader<Reader>(
     l: u64,
     url: &str,
     tx: &Sender<ProgressEvent>,
-) -> ()
+    resume_from: u64,
+) -> ExitCode
 where
     Reader: AsyncRead + Unpin,
 {
@@ -247,9 +268,10 @@ where
     let cache_path = out.join(".xodus-streaming-tmp.msixvc");
     let final_path = out.join(".xodus-streaming.msixvc");
 
-    let mut remote_file = streaming::PrefixCacheFile::new(reader, l, cache_path.clone())
-        .await
-        .expect("no err");
+    let mut remote_file =
+        streaming::PrefixCacheFile::open(reader, l, cache_path.clone(), resume_from)
+            .await
+            .expect("no err");
     let remote_xvd = XvdFile::parse(&mut remote_file).await.expect("no err");
     let mut rfiles: HashMap<String, SegmentFile> = HashMap::new();
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();
@@ -277,7 +299,7 @@ where
     .await;
     if let Err(err) = license {
         eprintln!("{}", err);
-        return;
+        return ExitCode::FAILURE;
     }
     let (key, game_splicense) = license.unwrap();
     if game_splicense.content_keys.len() != 1 {
@@ -285,10 +307,10 @@ where
             "unexpected number of content keys {}",
             game_splicense.content_keys.len()
         );
-        return;
+        return ExitCode::FAILURE;
     }
     let Some((_, content_key)) = game_splicense.content_keys.into_iter().next() else {
-        return;
+        return ExitCode::FAILURE;
     };
 
     let full_key = content_key.unpack(&key).expect("failed to unpack");
@@ -354,7 +376,7 @@ where
                 out.display(),
                 err
             );
-            return;
+            return ExitCode::FAILURE;
         }
     };
 
@@ -366,7 +388,7 @@ where
             available_free_space,
             total_size
         );
-        return;
+        return ExitCode::FAILURE;
     }
 
     tx.send(ProgressEvent::UpdateRemaining {
@@ -460,4 +482,5 @@ where
 
     std::fs::remove_file(&final_path).ok();
     std::fs::rename(&cache_path, &final_path).expect("ok");
+    ExitCode::SUCCESS
 }
