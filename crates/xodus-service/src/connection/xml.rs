@@ -231,6 +231,15 @@ pub async fn parse_message(
                 }
             };
 
+            // Whether the token carries profile claims decides what the title
+            // shows: without them XUserGetGamertag falls back to a placeholder,
+            // and the player sees a stranger's name on their own save.
+            log::debug!(
+                "XSTS token for {relying_party}: xuid {:?}, gamertag {:?}",
+                xsts.xuid(),
+                xsts.gamertag()
+            );
+
             let payload = XstsTokenResponse {
                 expiry: xsts.not_after.timestamp(),
                 xuid: xsts.xuid().unwrap_or_default().to_string(),
