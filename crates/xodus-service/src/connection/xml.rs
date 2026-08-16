@@ -234,18 +234,53 @@ pub async fn parse_message(
             // Whether the token carries profile claims decides what the title
             // shows: without them XUserGetGamertag falls back to a placeholder,
             // and the player sees a stranger's name on their own save.
+            // Read the identity out before the header consumes the response.
+            // Whether the token carries profile claims decides what the title
+            // shows: without them XUserGetGamertag falls back to a placeholder.
+            let xuid = xsts.xuid().unwrap_or_default().to_string();
+            let gamertag = xsts.gamertag().unwrap_or_default().to_string();
+            let expiry = xsts.not_after.timestamp();
+            let token = xodus::api::xbox::get_xsts_auth_header(xsts);
+
+            // Sign the request the title is about to send.
+            //
+            // Xbox's endpoint table gives *.xboxlive.com a signature policy
+            // (version 1, ES256), and real-time activity enforces it: an
+            // unsigned connect to rta.xboxlive.com comes back 401, XSAPI
+            // retries in a loop, and a connect left in flight at shutdown stops
+            // libHttpClient's cleanup from ever completing -- which is what
+            // hangs the title on exit.
+            //
+            // The device proof key is the right one to sign with: it is the key
+            // the device token was issued against, so the service already knows
+            // it. An empty signature is still better than a wrong one, so a
+            // failure here is reported and left empty rather than guessed at.
+            let signature = match context.tokens().get_or_create_proof_key() {
+                Ok(proof_key) => {
+                    let method = if req.method.is_empty() { "GET" } else { &req.method };
+                    let path = if req.path_and_query.is_empty() { "/" } else { &req.path_and_query };
+                    let signature = proof_key.sign_request(method, path, &token, b"");
+                    log::debug!("signed {method} {path} for {relying_party}");
+                    signature
+                }
+                Err(err) => {
+                    log::error!("no proof key to sign {relying_party} with: {err}");
+                    String::new()
+                }
+            };
+
             log::debug!(
-                "XSTS token for {relying_party}: xuid {:?}, gamertag {:?}",
-                xsts.xuid(),
-                xsts.gamertag()
+                "XSTS token for {relying_party}: xuid {xuid:?}, gamertag {gamertag:?}, \
+                 signature {} bytes",
+                signature.len()
             );
 
             let payload = XstsTokenResponse {
-                expiry: xsts.not_after.timestamp(),
-                xuid: xsts.xuid().unwrap_or_default().to_string(),
-                gamertag: xsts.gamertag().unwrap_or_default().to_string(),
-                signature: String::new(),
-                token: xodus::api::xbox::get_xsts_auth_header(xsts),
+                expiry,
+                xuid,
+                gamertag,
+                signature,
+                token,
             };
             let payload = quick_xml::se::to_string(&payload)?;
             Ok(payload.as_bytes().to_vec())

@@ -41,6 +41,13 @@ pub struct XstsTokenRequest {
     /// result.
     #[serde(default)]
     pub app_id: String,
+    /// The HTTP method of the request the title is about to send. Part of what
+    /// the signature covers, so it cannot be replayed against another verb.
+    #[serde(default)]
+    pub method: String,
+    /// The request path with its query, likewise covered by the signature.
+    #[serde(default)]
+    pub path_and_query: String,
 }
 
 #[derive(Serialize)]
@@ -49,8 +56,11 @@ pub struct XstsTokenResponse {
     /// Ready to use as an Authorization header: `XBL3.0 x=<uhs>;<jwt>`.
     pub token: String,
     pub expiry: i64,
-    /// Empty. Only xboxlive.com endpoints check a proof-of-possession
-    /// signature, and reaching those needs a device key we do not have yet.
+    /// Proof of possession over this exact request.
+    ///
+    /// Xbox's endpoint table gives `*.xboxlive.com` a signature policy, and
+    /// real-time activity enforces it: without a signature the websocket
+    /// connect is answered with 401 and the title retries forever.
     #[serde(default)]
     pub signature: String,
     /// Real identity from the XSTS xui claim, so XUserGetId/XUserGetGamertag
