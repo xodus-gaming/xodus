@@ -132,7 +132,26 @@ pub fn decrypt_soap_encrypted_data<T: serde::de::DeserializeOwned>(
             // MSA encrypts refusals too, so the body is the only thing that
             // says why one was refused; the deserializer error alone just names
             // whichever field the fault happens not to have.
-            log::error!("Could not parse the decrypted SOAP body ({err}): {result}");
+            // A refusal comes back as a well-formed response carrying a
+            // Passport fault instead of a token, so deserialisation fails on
+            // the missing token field and the real reason -- a status code
+            // sitting right there in the body -- never gets reported. Say the
+            // code, and keep the body for anything unrecognised.
+            let fault = |tag: &str| {
+                let open = format!("<psf:{tag}>");
+                let close = format!("</psf:{tag}>");
+                result
+                    .split_once(&open)
+                    .and_then(|(_, rest)| rest.split_once(&close))
+                    .map(|(value, _)| value.to_string())
+            };
+            match (fault("reqstatus"), fault("errorstatus")) {
+                (Some(req), status) => log::error!(
+                    "MSA returned a fault instead of a token: reqstatus {req}{}",
+                    status.map(|s| format!(", errorstatus {s}")).unwrap_or_default()
+                ),
+                _ => log::error!("Could not parse the decrypted SOAP body ({err}): {result}"),
+            }
             Err(err.into())
         }
     }
