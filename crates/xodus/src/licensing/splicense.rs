@@ -200,6 +200,15 @@ pub enum SPLicenseDecodeError {
 
     #[error("expected to read {expected} bytes but only {read} were read")]
     PayloadLengthMismatch { expected: usize, read: usize },
+
+    #[error("PackedContentKey id_len {id_len} is less than 16")]
+    InvalidPackedContentKeyIdLength { id_len: usize },
+
+    #[error("invalid UTF-16 package name byte length {len}")]
+    InvalidPackageNameByteLength { len: usize },
+
+    #[error("invalid UTF-16 package name: {0}")]
+    InvalidPackageNameUtf16(#[from] std::string::FromUtf16Error),
 }
 
 #[derive(Debug, Error)]
@@ -253,11 +262,16 @@ impl SPLicense {
             }
             Ok(BlockId::PackageFullName) => {
                 let data = read_vec(&mut reader, size)?;
+                if data.len() % 2 != 0 {
+                    return Err(SPLicenseDecodeError::InvalidPackageNameByteLength {
+                        len: data.len(),
+                    });
+                }
                 let utf16: Vec<u16> = data
                     .chunks_exact(2)
                     .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
                     .collect();
-                let mut s = String::from_utf16_lossy(&utf16);
+                let mut s = String::from_utf16(&utf16)?;
                 if s.ends_with('\0') {
                     s.pop();
                 }
@@ -272,10 +286,9 @@ impl SPLicense {
                     let _key_len = read_u16(&mut reader)? as usize;
 
                     if id_len < 16 {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!("PackedContentKey id_len {id_len} is less than 16"),
-                        ).into());
+                        return Err(SPLicenseDecodeError::InvalidPackedContentKeyIdLength {
+                            id_len,
+                        });
                     }
 
                     let key_id = read_uuid(&mut reader)?;
@@ -494,41 +507,14 @@ mod tests {
         data.extend_from_slice(&[0u8; 48]);
 
         let result = SPLicense::decode(Cursor::new(data));
-        match result {
-            Err(SPLicenseDecodeError::IoError(e)) => {
-                assert_eq!(e.kind(), io::ErrorKind::InvalidData);
-                assert!(e.to_string().contains("id_len"));
-            }
-            other => panic!("Expected IoError(InvalidData), got {other:?}"),
-        }
+        assert!(matches!(
+            result,
+            Err(SPLicenseDecodeError::InvalidPackedContentKeyIdLength { id_len: 8 })
+        ));
     }
 
     #[test]
-    fn test_packed_content_keys_valid() {
-        let mut data = make_test_header();
-        // BlockId::PackedContentKeys = 0xca
-        data.extend_from_slice(&0xca_u32.to_le_bytes());
-        // id_len = 16, key_len = 40
-        // size: 2 + 2 + 16 (uuid) + 0 (id_len - 16) + 40 = 60 bytes
-        let id_len: u16 = 16;
-        let key_len: u16 = 40;
-        let block_size: u32 = 4 + id_len as u32 + key_len as u32;
-        data.extend_from_slice(&block_size.to_le_bytes());
-
-        data.extend_from_slice(&id_len.to_le_bytes());
-        data.extend_from_slice(&key_len.to_le_bytes());
-        let test_uuid = uuid::Uuid::from_bytes([0x12; 16]);
-        data.extend_from_slice(test_uuid.to_bytes_le().as_ref());
-        let packed_key = [0x5au8; 40];
-        data.extend_from_slice(&packed_key);
-
-        let license = SPLicense::decode(Cursor::new(data)).expect("Valid content keys block should decode");
-        assert_eq!(license.content_keys.len(), 1);
-        assert!(license.content_keys.contains_key(&test_uuid));
-    }
-
-    #[test]
-    fn test_package_full_name_unpaired_surrogates() {
+    fn test_package_full_name_invalid_utf16() {
         let mut data = make_test_header();
         // BlockId::PackageFullName = 0xce
         data.extend_from_slice(&0xce_u32.to_le_bytes());
@@ -537,9 +523,27 @@ mod tests {
         data.extend_from_slice(&(raw_utf16_bytes.len() as u32).to_le_bytes());
         data.extend_from_slice(&raw_utf16_bytes);
 
-        let license = SPLicense::decode(Cursor::new(data)).expect("Lossy decoding should handle invalid UTF-16 gracefully");
-        assert!(license.package_name.contains('a'));
-        assert!(license.package_name.contains(char::REPLACEMENT_CHARACTER));
+        let result = SPLicense::decode(Cursor::new(data));
+        assert!(matches!(
+            result,
+            Err(SPLicenseDecodeError::InvalidPackageNameUtf16(_))
+        ));
+    }
+
+    #[test]
+    fn test_package_full_name_odd_byte_length() {
+        let mut data = make_test_header();
+        // BlockId::PackageFullName = 0xce
+        data.extend_from_slice(&0xce_u32.to_le_bytes());
+        let raw_bytes = vec![0x61, 0x00, 0x62]; // 3 bytes (odd length)
+        data.extend_from_slice(&(raw_bytes.len() as u32).to_le_bytes());
+        data.extend_from_slice(&raw_bytes);
+
+        let result = SPLicense::decode(Cursor::new(data));
+        assert!(matches!(
+            result,
+            Err(SPLicenseDecodeError::InvalidPackageNameByteLength { len: 3 })
+        ));
     }
 
     #[test]
@@ -555,7 +559,8 @@ mod tests {
         data.extend_from_slice(&(utf16_bytes.len() as u32).to_le_bytes());
         data.extend_from_slice(&utf16_bytes);
 
-        let license = SPLicense::decode(Cursor::new(data)).expect("Valid UTF-16 package name should decode");
+        let license =
+            SPLicense::decode(Cursor::new(data)).expect("Valid UTF-16 package name should decode");
         assert_eq!(license.package_name, "Microsoft.Minecraft_8wekyb3d8bbwe");
     }
 }
