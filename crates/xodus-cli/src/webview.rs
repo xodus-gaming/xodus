@@ -325,6 +325,12 @@ fn create_session<T: SessionHandler>(
         state.window = Some(window);
     }
 
+    // Tear down any previous webview before the replacement gets parented. Handlers
+    // that close the old session first already leave this empty, but opening straight
+    // into a new session would otherwise leave two webviews in the same GTK vbox.
+    state.active_session = None;
+    state.active_webview = None;
+
     let window = state
         .window
         .as_ref()
@@ -378,10 +384,13 @@ fn create_session<T: SessionHandler>(
     let webview = {
         use tao::platform::unix::WindowExtUnix;
         use wry::WebViewBuilderExtUnix;
-        builder.build_gtk(window.default_vbox().unwrap()).unwrap()
+        let vbox = window
+            .default_vbox()
+            .ok_or_else(|| std::io::Error::other("window has no GTK vbox to host the webview"))?;
+        builder.build_gtk(vbox)?
     };
     #[cfg(not(target_os = "linux"))]
-    let webview = builder.build(&window).unwrap();
+    let webview = builder.build(window)?;
 
     state.active_session = Some(session_id);
     state.active_webview = Some(webview);
