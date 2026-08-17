@@ -55,6 +55,21 @@ impl XstsResponse {
             .first()
             .map(|claim| claim.uhs.as_str())
     }
+
+    /// The XUID, when the relying party is allowed to see it.
+    pub fn xuid(&self) -> Option<&str> {
+        self.display_claims
+            .xui
+            .first()
+            .and_then(|claim| claim.xid.as_deref())
+    }
+
+    pub fn gamertag(&self) -> Option<&str> {
+        self.display_claims
+            .xui
+            .first()
+            .and_then(|claim| claim.gtg.as_deref())
+    }
 }
 
 #[derive(Debug, Serialize)]

@@ -2,7 +2,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use xodus::models::live::ExchangeUserTokenOutcome;
 use xodus::models::secrets::Token;
 use xodus::models::soap;
-use xodus::models::xgameruntime::xuser::{MSATokenRequest, MSATokenResponse};
+use xodus::models::xgameruntime::xuser::{
+    MSATokenRequest, MSATokenResponse, XSTSTokenRequest, XSTSTokenResponse,
+};
 use xodus::proto::xodus::XodusMessageType;
 
 use crate::XML_MAGIC;
@@ -19,7 +21,13 @@ pub async fn handle(
     log::debug!("Reading buffer {message_size}");
     socket.read_exact(&mut buffer).await?;
     log::debug!("Read buffer");
-    let message_type = XodusMessageType::try_from(message_type as i32).unwrap_or_default();
+    let Ok(message_type) = XodusMessageType::try_from(message_type as i32) else {
+        // Answering `UNKNOWN + 1` would hand the client a PONG for a message we
+        // never understood, so reply as UNKNOWN instead and let it decide.
+        log::error!("Unknown message type {message_type}");
+        let data = super::encode_message(XML_MAGIC, XodusMessageType::Unknown as u16, vec![]);
+        return socket.write_all(&data).await;
+    };
 
     let out_buf = match parse_message(context, message_type, buffer).await {
         Ok(buf) => buf,
@@ -31,6 +39,94 @@ pub async fn handle(
 
     let data = super::encode_message(XML_MAGIC, message_type as u16 + 1, out_buf);
     socket.write_all(&data).await
+}
+
+/// Trades the stored user credentials for an Xbox Live XSTS token. Returns the
+/// ready-made Authorization header together with the identity it carries.
+async fn fetch_xbox_identity(
+    context: &mut SimpleContext,
+    client_id: &str,
+    relying_party: &str,
+) -> Result<Option<(String, String, String, i64)>, Box<dyn std::error::Error + Send + Sync>> {
+    let Token::Legacy(token) = context.tokens().get_user_sts_token()? else {
+        return Ok(None);
+    };
+    let Some(device_token) = context.device_token.clone() else {
+        return Ok(None);
+    };
+
+    let user_token = xodus::api::live::exchange_user_token(
+        &context.client,
+        token,
+        "USERNAME".to_string(),
+        device_token,
+        None,
+        Some("Silent".to_string()),
+        client_id.to_string(),
+        &[
+            (
+                // MBI_SSL is rejected for these stored credentials; the signin scope
+                // yields a "d=" compact token, which is the RPS ticket form that
+                // user.auth.xboxlive.com accepts.
+                format!("scope=xboxlive.signin&api-version=2.0&clientid={client_id}"),
+                Some(soap::PolicyReference::token_broker()),
+            ),
+            ("http://Passport.NET/tb".to_string(), None),
+        ],
+    )
+    .await?;
+
+    let ExchangeUserTokenOutcome::Issued(
+        soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
+    ) = user_token
+    else {
+        log::error!("No token collection for the Xbox user authentication");
+        return Ok(None);
+    };
+
+    // The collection carries the DA token last and the usable compact ticket first.
+    if let Some(da) = collection.security_tokens.pop() {
+        let address = da.applies_to.endpoint_reference.address.clone();
+        let da: Token = da.into();
+        let address = if let Token::Legacy(legacy) = &da {
+            legacy.key_name.clone().unwrap_or(address)
+        } else {
+            address
+        };
+        if let Err(err) = context.tokens().save_user_token(address, da) {
+            log::warn!("Failed to persist refreshed STS token: {err}");
+        }
+    }
+
+    if collection.security_tokens.is_empty() {
+        log::error!("Token collection held no usable ticket");
+        return Ok(None);
+    }
+    let token: Token = collection.security_tokens.remove(0).into();
+    let Token::Compact(rps_ticket) = token else {
+        log::error!("Expected a compact RPS ticket, got {token:?}");
+        return Ok(None);
+    };
+
+    let xbox_user =
+        xodus::api::xbox::auth::authenticate_xbox_user(&context.client, rps_ticket).await?;
+    let xsts = xodus::api::xbox::auth::request_xsts_token(
+        &context.client,
+        xbox_user.token.clone(),
+        relying_party,
+    )
+    .await?;
+
+    let expiry = xsts.not_after.timestamp();
+    let xuid = xsts.xuid().unwrap_or_default().to_string();
+    let gamertag = xsts.gamertag().unwrap_or_default().to_string();
+
+    Ok(Some((
+        xodus::api::xbox::auth::get_xsts_auth_header(xsts),
+        xuid,
+        gamertag,
+        expiry,
+    )))
 }
 
 pub async fn parse_message(
@@ -113,9 +209,42 @@ pub async fn parse_message(
                     let Token::Compact(user_token) = token else {
                         return Ok(vec![]);
                     };
+                    // Same trip also settles the Xbox Live identity, so the caller
+                    // gets a real XUID and a usable Authorization header instead of
+                    // having to invent them.
+                    let relying_party = req
+                        .relying_party
+                        .as_deref()
+                        .unwrap_or("http://xboxlive.com");
+                    let identity = match fetch_xbox_identity(
+                        context,
+                        &req.client_id,
+                        relying_party,
+                    )
+                    .await
+                    {
+                        Ok(identity) => identity,
+                        Err(err) => {
+                            log::warn!("Xbox identity unavailable: {err}");
+                            None
+                        }
+                    };
+
                     let payload = MSATokenResponse {
                         token: user_token,
                         expiry: expiry.timestamp(),
+                        xsts_token: identity
+                            .as_ref()
+                            .map(|(t, _, _, _)| t.clone())
+                            .unwrap_or_default(),
+                        xuid: identity
+                            .as_ref()
+                            .map(|(_, x, _, _)| x.clone())
+                            .unwrap_or_default(),
+                        gamertag: identity
+                            .as_ref()
+                            .map(|(_, _, g, _)| g.clone())
+                            .unwrap_or_default(),
                         device_expiry: ms_device_rps_token.as_ref().map(|(_, r)| *r).unwrap_or(0),
                         device_rps: ms_device_rps_token
                             .map(|(t, _)| t)
@@ -124,8 +253,106 @@ pub async fn parse_message(
                     let payload = quick_xml::se::to_string(&payload)?;
                     Ok(payload.as_bytes().to_vec())
                 }
-                _ => todo!("Error handling sill sucks"),
+                other => {
+                    // Faults and single-token responses are both reachable here
+                    // once the stored tokens go stale - an empty payload is how
+                    // the rest of this path already reports "no token for you".
+                    log::error!("User token exchange returned no token collection: {other:?}");
+                    Ok(vec![])
+                }
             }
+        }
+        XodusMessageType::XstsTokenRequest => {
+            let string_buf = std::str::from_utf8(&buffer)?;
+            log::debug!("XSTS request: {string_buf:?}");
+            let req = quick_xml::de::from_str::<XSTSTokenRequest>(string_buf)?;
+
+            let Token::Legacy(token) = context.tokens().get_user_sts_token()? else {
+                return Ok(vec![]);
+            };
+
+            // The Xbox user token needs a full-trust RPS ticket, the same one the
+            // MSA path asks for with MSAFullTrust set.
+            let device_token = context.device_token.as_ref().unwrap();
+            let user_token = xodus::api::live::exchange_user_token(
+                &context.client,
+                token,
+                "USERNAME".to_string(),
+                device_token.clone(),
+                None,
+                Some("Silent".to_string()),
+                req.client_id.clone(),
+                &[
+                    (
+                        // MBI_SSL is rejected for these stored credentials; the signin
+                        // scope yields a "d=" compact token, which is exactly the RPS
+                        // ticket form user.auth.xboxlive.com accepts.
+                        format!(
+                            "scope=xboxlive.signin&api-version=2.0&clientid={}",
+                            req.client_id
+                        ),
+                        Some(soap::PolicyReference::token_broker()),
+                    ),
+                    ("http://Passport.NET/tb".to_string(), None),
+                ],
+            )
+            .await?;
+
+            let ExchangeUserTokenOutcome::Issued(
+                soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
+            ) = user_token
+            else {
+                log::error!("No token collection for the Xbox user authentication: {user_token:?}");
+                return Ok(vec![]);
+            };
+
+            // The collection carries the DA token last and the usable compact ticket
+            // first, the same way the MSA path takes them apart.
+            if let Some(da) = collection.security_tokens.pop() {
+                let address = da.applies_to.endpoint_reference.address.clone();
+                let da: Token = da.into();
+                let address = if let Token::Legacy(legacy) = &da {
+                    legacy.key_name.clone().unwrap_or(address)
+                } else {
+                    address
+                };
+                if let Err(err) = context.tokens().save_user_token(address, da) {
+                    log::warn!("Failed to persist refreshed STS token: {err}");
+                }
+            }
+
+            if collection.security_tokens.is_empty() {
+                log::error!("Token collection held no usable ticket");
+                return Ok(vec![]);
+            }
+            let token: Token = collection.security_tokens.remove(0).into();
+            let Token::Compact(rps_ticket) = token else {
+                log::error!("Expected a compact RPS ticket, got {token:?}");
+                return Ok(vec![]);
+            };
+
+            let xbox_user = xodus::api::xbox::auth::authenticate_xbox_user(
+                &context.client,
+                rps_ticket,
+            )
+            .await?;
+
+            let xsts = xodus::api::xbox::auth::request_xsts_token(
+                &context.client,
+                xbox_user.token.clone(),
+                &req.relying_party,
+            )
+            .await?;
+
+            let payload = XSTSTokenResponse {
+                expiry: xsts.not_after.timestamp(),
+                xuid: xsts.xuid().unwrap_or_default().to_string(),
+                gamertag: xsts.gamertag().unwrap_or_default().to_string(),
+                token: xodus::api::xbox::auth::get_xsts_auth_header(xsts),
+            };
+
+            let payload = quick_xml::se::to_string(&payload)?;
+            Ok(payload.as_bytes().to_vec())
         }
         _ => Err("Unimplemented".into()),
     }
