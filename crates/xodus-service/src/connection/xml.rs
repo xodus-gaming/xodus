@@ -10,6 +10,30 @@ use xodus::proto::xodus::XodusMessageType;
 use crate::XML_MAGIC;
 use crate::simple_context::SimpleContext;
 
+/// App ids MSA has already refused a title-bound ticket for.
+///
+/// The refusal is a property of the app id and the account, not of the moment,
+/// so asking again only spends a sisu round trip to be told the same thing. It
+/// is deliberately not persisted: a title that becomes provisioned later should
+/// get another go on the next run.
+fn refused_title_tokens() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static REFUSED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    REFUSED.get_or_init(Default::default)
+}
+
+fn title_tokens_refused(app_id: &str) -> bool {
+    refused_title_tokens()
+        .lock()
+        .is_ok_and(|refused| refused.contains(app_id))
+}
+
+fn remember_title_tokens_refused(app_id: &str) {
+    if let Ok(mut refused) = refused_title_tokens().lock() {
+        refused.insert(app_id.to_string());
+    }
+}
+
 pub async fn handle(
     socket: &mut tokio::net::UnixStream,
     context: &mut SimpleContext,
@@ -186,6 +210,23 @@ pub async fn parse_message(
                             &relying_party,
                         )
                         .await?
+                    } else if title_tokens_refused(&req.app_id) {
+                        // Already learned this app id gets nothing from MSA.
+                        // Trying again costs a sisu round trip per token, and
+                        // a title that times out waiting gives up on the
+                        // request entirely -- which is how a signed connect
+                        // ends up never being made.
+                        log::debug!(
+                            "skipping the title-bound attempt for {}; MSA refused it earlier",
+                            req.app_id
+                        );
+                        xodus::api::xbox::run(
+                            &context.client,
+                            device_token.clone(),
+                            user_sts,
+                            &relying_party,
+                        )
+                        .await?
                     } else {
                         let proof_key = context.tokens().get_or_create_proof_key()?;
                         let device_id = context.tokens().get_or_create_device_id()?;
@@ -216,6 +257,7 @@ pub async fn parse_message(
                                      falling back to a user-only token",
                                     req.app_id
                                 );
+                                remember_title_tokens_refused(&req.app_id);
                                 xodus::api::xbox::run(
                                     &context.client,
                                     device_token.clone(),
