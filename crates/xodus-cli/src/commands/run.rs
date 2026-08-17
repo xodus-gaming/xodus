@@ -13,6 +13,8 @@ use rustix::io::{FdFlags, fcntl_getfd, fcntl_setfd};
 #[cfg(not(target_os = "linux"))]
 use tempfile::{tempdir, tempfile, tempfile_in};
 use tokio::fs::{File, OpenOptions};
+use tokio::io::AsyncSeekExt;
+use std::io::SeekFrom;
 use tokio::process::Command;
 use xodus::tokens::TokenManager;
 
@@ -198,6 +200,17 @@ pub async fn run(
         xvd.mount_mem_fd(&mut i, &mut game_exe, file.1, *full_key, |_, _| {})
             .await
             .unwrap();
+
+        // Debug aid: the decrypted images only ever exist as memfds, which leaves no
+        // way to disassemble a crash address reported by the game itself.
+        if let Ok(dir) = std::env::var("XODUS_DUMP_DECRYPTED") {
+            let name = file.0.rsplit('\\').next().unwrap_or(file.0);
+            let dump_path = std::path::Path::new(&dir).join(name);
+            game_exe.seek(SeekFrom::Start(0)).await.unwrap();
+            let mut dump = tokio::fs::File::create(&dump_path).await.unwrap();
+            tokio::io::copy(&mut game_exe, &mut dump).await.unwrap();
+            eprintln!("dumped decrypted {} to {}", file.0, dump_path.display());
+        }
 
         let stdf = game_exe.into_std().await;
 
