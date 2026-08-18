@@ -254,7 +254,7 @@ pub async fn run(
     fds.sort_by(|a, b| a.0.cmp(b.0));
 
     if exe.is_none() {
-        if let Some(chosen) = auto_entry( &fds ) {
+        if let Some(chosen) = auto_entry(&fds, manifest_entry(out).as_deref()) {
             eprintln!("XODUS_AUTO_EXE {chosen}");
             exe = Some(chosen);
         }
@@ -335,7 +335,34 @@ pub async fn run(
 /// missing. Any of those will start, and none of them is the game, so the
 /// choice is made on what the file is rather than on whichever one the
 /// filesystem happened to yield first.
-fn auto_entry(fds: &[(&String, std::os::fd::RawFd)]) -> Option<String> {
+/// The executable an MSIX package's manifest declares.
+///
+/// `<Application Executable="...">` is the package saying which of its binaries
+/// is the application, which beats anything that can be inferred from the file
+/// names beside it.
+fn manifest_entry(dir: &Path) -> Option<String> {
+    let xml = std::fs::read_to_string(dir.join("appxmanifest.xml")).ok()?;
+    // "<Applications>" wraps the element and shares its prefix, so require the
+    // whitespace that separates the tag from its first attribute.
+    let app = xml.match_indices("<Application").find(|(i, _)| {
+        xml[i + "<Application".len()..]
+            .chars()
+            .next()
+            .is_some_and(char::is_whitespace)
+    })?.0;
+    let rest = &xml[app..];
+    // Stay within this element: a later one's attribute is not this one's.
+    let end = rest.find('>').unwrap_or(rest.len());
+    let attr = rest[..end].find("Executable=\"")?;
+    let value = &rest[attr + "Executable=\"".len()..end];
+    let value = &value[..value.find('"')?];
+    if value.is_empty() {
+        return None;
+    }
+    Some(value.replace('/', "\\"))
+}
+
+fn auto_entry(fds: &[(&String, std::os::fd::RawFd)], declared: Option<&str>) -> Option<String> {
     let mut best: Option<(u8, &String)> = None;
 
     for (path, _) in fds {
@@ -359,8 +386,23 @@ fn auto_entry(fds: &[(&String, std::os::fd::RawFd)]) -> Option<String> {
 
         // Unreal names its real binary <Project>-<Platform>-Shipping.exe; the
         // bare <Project>.exe beside it is a launcher shim, which on Subnautica 2
-        // is the one that reports a missing redistributable.
-        let rank = if name.ends_with("-shipping.exe") { 0 } else { 1 };
+        // is the one that reports a missing redistributable. That shim is also
+        // what the manifest names -- Expedition 33 declares SandFall.exe while
+        // the game is SandFall-WinGDK-Shipping.exe -- so the shipping binary
+        // outranks the declaration rather than the other way round.
+        //
+        // Below that, what the package declares beats sorting names: Hades II
+        // ships F10.exe beside Hades2.exe, and picking the first alphabetically
+        // started a helper that exits without ever opening a window.
+        let declared_name = declared
+            .map(|d| d.rsplit(['\\', '/']).next().unwrap_or(d).to_ascii_lowercase());
+        let rank = if name.ends_with("-shipping.exe") {
+            0
+        } else if declared_name.is_some_and(|d| d == name) {
+            1
+        } else {
+            2
+        };
 
         if best.as_ref().is_none_or(|(best_rank, best_path)| {
             rank < *best_rank || (rank == *best_rank && path < best_path)
@@ -431,7 +473,7 @@ mod test {
         let owned: Vec<String> = names.iter().map(|n| n.to_string()).collect();
         let fds: Vec<(&String, std::os::fd::RawFd)> =
             owned.iter().enumerate().map(|(i, n)| (n, i as i32)).collect();
-        auto_entry(&fds)
+        auto_entry(&fds, None)
     }
 
     #[test]
@@ -489,5 +531,28 @@ mod test {
         // Nothing but helpers means there is no good answer; returning None
         // leaves the old first-entry behaviour rather than refusing to start.
         assert_eq!(pick(&["\\crashpad_handler.exe"]), None);
+    }
+
+    #[test]
+    fn the_manifest_breaks_a_tie_that_sorting_gets_wrong() {
+        // Hades II ships F10.exe beside Hades2.exe; alphabetical order picks the
+        // helper, which exits without opening a window.
+        let a = "\\hades-ii\\F10.exe".to_string();
+        let b = "\\hades-ii\\Hades2.exe".to_string();
+        let fds = vec![(&a, 3), (&b, 4)];
+        assert_eq!(auto_entry(&fds, None).as_deref(), Some(a.as_str()));
+        assert_eq!(auto_entry(&fds, Some("Hades2.exe")).as_deref(), Some(b.as_str()));
+    }
+
+    #[test]
+    fn a_shipping_binary_still_beats_what_the_manifest_declares() {
+        // Expedition 33 declares SandFall.exe, but that is the launcher shim.
+        let shim = "\\exp33\\SandFall.exe".to_string();
+        let real = "\\exp33\\Binaries\\WinGDK\\SandFall-WinGDK-Shipping.exe".to_string();
+        let fds = vec![(&shim, 3), (&real, 4)];
+        assert_eq!(
+            auto_entry(&fds, Some("SandFall.exe")).as_deref(),
+            Some(real.as_str())
+        );
     }
 }
