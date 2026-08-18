@@ -12,6 +12,11 @@ pub struct MSATokenRequest {
     /// "http://xboxlive.com" when the caller does not care.
     #[serde(default)]
     pub relying_party: Option<String>,
+    /// JWK of the caller's ECDSA P-256 public key, as JSON. Xbox binds the issued
+    /// token to it so the caller can sign requests with the matching private key;
+    /// titles that verify signatures reject tokens issued without one.
+    #[serde(default)]
+    pub proof_key: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -39,6 +44,9 @@ pub struct XSTSTokenRequest {
     pub relying_party: String,
     /// Same MSA app id the title uses for its token requests.
     pub client_id: String,
+    /// JWK of the caller's ECDSA P-256 public key, as JSON. See MSATokenRequest.
+    #[serde(default)]
+    pub proof_key: Option<String>,
 }
 
 #[derive(Serialize)]

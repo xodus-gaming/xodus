@@ -43,10 +43,27 @@ pub async fn handle(
 
 /// Trades the stored user credentials for an Xbox Live XSTS token. Returns the
 /// ready-made Authorization header together with the identity it carries.
+/// The proof key arrives as JSON text in the request; a malformed one is treated as
+/// absent so the exchange still yields an unsigned token rather than failing outright.
+fn parse_proof_key(raw: Option<&str>) -> Option<serde_json::Value> {
+    let raw = raw?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    match serde_json::from_str(raw) {
+        Ok(value) => Some(value),
+        Err(err) => {
+            log::warn!("Ignoring malformed ProofKey: {err}");
+            None
+        }
+    }
+}
+
 async fn fetch_xbox_identity(
     context: &mut SimpleContext,
     client_id: &str,
     relying_party: &str,
+    proof_key: Option<serde_json::Value>,
 ) -> Result<Option<(String, String, String, i64)>, Box<dyn std::error::Error + Send + Sync>> {
     let Token::Legacy(token) = context.tokens().get_user_sts_token()? else {
         return Ok(None);
@@ -109,7 +126,8 @@ async fn fetch_xbox_identity(
     };
 
     let xbox_user =
-        xodus::api::xbox::auth::authenticate_xbox_user(&context.client, rps_ticket).await?;
+        xodus::api::xbox::auth::authenticate_xbox_user(&context.client, rps_ticket, proof_key)
+            .await?;
     let xsts = xodus::api::xbox::auth::request_xsts_token(
         &context.client,
         xbox_user.token.clone(),
@@ -220,6 +238,7 @@ pub async fn parse_message(
                         context,
                         &req.client_id,
                         relying_party,
+                        parse_proof_key(req.proof_key.as_deref()),
                     )
                     .await
                     {
@@ -334,6 +353,7 @@ pub async fn parse_message(
             let xbox_user = xodus::api::xbox::auth::authenticate_xbox_user(
                 &context.client,
                 rps_ticket,
+                parse_proof_key(req.proof_key.as_deref()),
             )
             .await?;
 

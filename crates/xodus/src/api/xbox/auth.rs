@@ -5,6 +5,7 @@ use crate::models::xbox::{
 pub async fn authenticate_xbox_user(
     client: &reqwest::Client,
     rps_ticket: String,
+    proof_key: Option<serde_json::Value>,
 ) -> reqwest::Result<XstsResponse> {
     let body = UserAuthRequest {
         relying_party: "http://auth.xboxlive.com".to_string(),
@@ -13,6 +14,7 @@ pub async fn authenticate_xbox_user(
             auth_method: "RPS".to_string(),
             site_name: "user.auth.xboxlive.com".to_string(),
             rps_ticket,
+            proof_key,
         },
     };
 

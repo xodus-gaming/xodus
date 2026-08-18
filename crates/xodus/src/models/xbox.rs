@@ -16,6 +16,12 @@ pub struct UserAuthProperties {
     pub auth_method: String,
     pub site_name: String,
     pub rps_ticket: String,
+
+    /// JWK of the caller's ECDSA P-256 public key. Xbox binds the issued token to it,
+    /// and every request signed with the matching private key can then be verified.
+    /// Titles that check request signatures reject tokens issued without one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proof_key: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

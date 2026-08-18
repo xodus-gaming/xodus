@@ -49,7 +49,7 @@ pub async fn run(
         eprintln!("Unsupported token");
         panic!("TODO");
     };
-    let resp = authenticate_xbox_user(client, user_token)
+    let resp = authenticate_xbox_user(client, user_token, None)
         .await
         .expect("Failed to authenticate Xbox user");
 
