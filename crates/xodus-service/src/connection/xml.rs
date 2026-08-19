@@ -10,6 +10,41 @@ use xodus::proto::xodus::XodusMessageType;
 use crate::XML_MAGIC;
 use crate::simple_context::SimpleContext;
 
+
+/// Title ids travel as the hex string MicrosoftGame.Config uses.
+fn parse_title_id(value: Option<&str>) -> Option<u32> {
+    u32::from_str_radix(value?.trim(), 16).ok()
+}
+
+
+/// Identity tuple built from a token that carries the title's claim.
+async fn title_scoped_identity(
+    context: &mut SimpleContext,
+    client_id: &str,
+    title_id: u32,
+    relying_party: &str,
+) -> Result<Option<(String, String, String, i64)>, Box<dyn std::error::Error + Send + Sync>> {
+    let Some(session) = context.title_session(client_id, title_id).await else {
+        return Ok(None);
+    };
+    let xsts = session
+        .xsts(relying_party)
+        .await
+        .map_err(|err| err.to_string())?;
+
+    let claims = xsts.display_claims.as_ref().and_then(|c| c.xui.first());
+    let xuid = claims.and_then(|x| x.get("xid").cloned()).unwrap_or_default();
+    let gamertag = claims.and_then(|x| x.get("gtg").cloned()).unwrap_or_default();
+    let expiry = xsts.not_after.timestamp();
+
+    Ok(Some((
+        xodus::api::xbox::auth::xsts_auth_header(&xsts),
+        xuid,
+        gamertag,
+        expiry,
+    )))
+}
+
 pub async fn handle(
     socket: &mut tokio::net::UnixStream,
     context: &mut SimpleContext,
@@ -230,22 +265,59 @@ pub async fn parse_message(
                     // Same trip also settles the Xbox Live identity, so the caller
                     // gets a real XUID and a usable Authorization header instead of
                     // having to invent them.
-                    let relying_party = req
-                        .relying_party
-                        .as_deref()
-                        .unwrap_or("http://xboxlive.com");
-                    let identity = match fetch_xbox_identity(
-                        context,
-                        &req.client_id,
-                        relying_party,
-                        parse_proof_key(req.proof_key.as_deref()),
-                    )
-                    .await
-                    {
-                        Ok(identity) => identity,
-                        Err(err) => {
-                            log::warn!("Xbox identity unavailable: {err}");
-                            None
+                    // Titles name the service they are calling, not the relying
+                    // party Xbox knows it by, so the endpoint documents decide.
+                    let title_id = parse_title_id(req.title_id.as_deref());
+                    let (relying_party, from_title) = match req.relying_party.as_deref() {
+                        Some(named) => {
+                            context
+                                .relying_party_for(named, &req.client_id, title_id)
+                                .await
+                        }
+                        None => ("http://xboxlive.com".to_string(), false),
+                    };
+
+                    // Real consoles always present a token carrying the title's
+                    // claim, and services check it: PlayFab answers
+                    // "not valid for title N" without it, and a publisher's own
+                    // back end rejects it outright. Only the SISU flow puts it in.
+                    let _ = from_title;
+                    let title_scoped = match title_id {
+                        Some(title_id) => {
+                            match title_scoped_identity(
+                                context,
+                                &req.client_id,
+                                title_id,
+                                &relying_party,
+                            )
+                            .await
+                            {
+                                Ok(identity) => identity,
+                                Err(err) => {
+                                    log::warn!("Title-scoped token unavailable: {err}");
+                                    None
+                                }
+                            }
+                        }
+                        None => None,
+                    };
+
+                    let identity = if let Some(identity) = title_scoped {
+                        Some(identity)
+                    } else {
+                        match fetch_xbox_identity(
+                            context,
+                            &req.client_id,
+                            &relying_party,
+                            parse_proof_key(req.proof_key.as_deref()),
+                        )
+                        .await
+                        {
+                            Ok(identity) => identity,
+                            Err(err) => {
+                                log::warn!("Xbox identity unavailable: {err}");
+                                None
+                            }
                         }
                     };
 
@@ -357,10 +429,20 @@ pub async fn parse_message(
             )
             .await?;
 
+            // Titles name the service they are calling, not the relying party Xbox
+            // knows it by, so the endpoint document decides which one to ask for.
+            let (relying_party, _) = context
+                .relying_party_for(
+                    &req.relying_party,
+                    &req.client_id,
+                    parse_title_id(req.title_id.as_deref()),
+                )
+                .await;
+
             let xsts = xodus::api::xbox::auth::request_xsts_token(
                 &context.client,
                 xbox_user.token.clone(),
-                &req.relying_party,
+                &relying_party,
             )
             .await?;
 

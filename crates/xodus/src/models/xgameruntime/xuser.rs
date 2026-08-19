@@ -17,6 +17,10 @@ pub struct MSATokenRequest {
     /// titles that verify signatures reject tokens issued without one.
     #[serde(default)]
     pub proof_key: Option<String>,
+    /// Title the caller runs as, in hex, from its MicrosoftGame.Config. Needed to
+    /// look up the endpoint document that names the title's own relying parties.
+    #[serde(default)]
+    pub title_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -47,6 +51,10 @@ pub struct XSTSTokenRequest {
     /// JWK of the caller's ECDSA P-256 public key, as JSON. See MSATokenRequest.
     #[serde(default)]
     pub proof_key: Option<String>,
+    /// Title the caller runs as, in hex, from its MicrosoftGame.Config. Needed to
+    /// look up the endpoint document that names the title's own relying parties.
+    #[serde(default)]
+    pub title_id: Option<String>,
 }
 
 #[derive(Serialize)]

@@ -29,6 +29,105 @@ pub fn get_endpoint<'a>(url: &str, response: &'a TitleMgtResponse) -> Option<&'a
         .copied()
 }
 
+
+/// Endpoint document scoped to one title. Publishers register their own back ends
+/// here, and this is the only place those relying parties are published - the
+/// default document only ever describes Microsoft's own services.
+///
+/// The route needs a token carrying the title's claim, so this runs a SISU flow for
+/// the title first. Note it rejects the `type` query the default document requires.
+/// One SISU flow per title, kept so every relying party after the first costs a
+/// single XSTS exchange. Redoing SISU per token made sign-in slow enough that
+/// titles gave up and retried before the first one landed.
+pub struct TitleSession {
+    auth: xal::XalAuthenticator,
+    sisu: xal::response::SisuRPSAuthorizationResponse,
+    device: xal::response::DeviceToken,
+}
+
+impl TitleSession {
+    pub async fn open(
+        client: &reqwest::Client,
+        tokens: &crate::tokens::TokenManager,
+        client_id: &str,
+        title_id: u32,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let (auth, sisu, device) =
+            crate::auth::do_sisu(client, tokens, client_id, title_id as i64).await?;
+        Ok(Self { auth, sisu, device })
+    }
+
+    /// XSTS token carrying the title's claim, which is what PlayFab and a
+    /// publisher's own back end check before they trust the caller.
+    pub async fn xsts(
+        &mut self,
+        relying_party: &str,
+    ) -> Result<xal::response::XTokenResponse<xal::response::XSTSDisplayClaims>, Box<dyn std::error::Error>>
+    {
+        Ok(self
+            .auth
+            .get_xsts_token(
+                Some(&self.device),
+                Some(&self.sisu.title_token),
+                Some(&self.sisu.user_token),
+                relying_party,
+            )
+            .await?)
+    }
+}
+
+/// Endpoint document scoped to one title. Publishers register their own back ends
+/// here, and this is the only place those relying parties are published - the
+/// default document only ever describes Microsoft's own services.
+///
+/// The route needs a token carrying the title's claim, so this runs a SISU flow for
+/// the title first. Note it rejects the `type` query the default document requires.
+/// XSTS token carrying the title's claim, which is what a publisher's own back end
+/// checks before it trusts the caller. Xbox mints these only through a SISU flow for
+/// the title, so a plain user token is not enough.
+pub async fn title_scoped_xsts(
+    client: &reqwest::Client,
+    tokens: &crate::tokens::TokenManager,
+    client_id: &str,
+    title_id: u32,
+    relying_party: &str,
+) -> Result<xal::response::XTokenResponse<xal::response::XSTSDisplayClaims>, Box<dyn std::error::Error>>
+{
+    let (mut auth, sisu, device) =
+        crate::auth::do_sisu(client, tokens, client_id, title_id as i64).await?;
+
+    Ok(auth
+        .get_xsts_token(
+            Some(&device),
+            Some(&sisu.title_token),
+            Some(&sisu.user_token),
+            relying_party,
+        )
+        .await?)
+}
+
+/// Endpoint document scoped to one title. Publishers register their own back ends
+/// here, and this is the only place those relying parties are published - the
+/// default document only ever describes Microsoft's own services.
+///
+/// Note the route rejects the `type` query the default document requires.
+pub async fn get_title_endpoints(
+    client: &reqwest::Client,
+    session: &mut TitleSession,
+) -> Result<TitleMgtResponse, Box<dyn std::error::Error>> {
+    let xsts = session.xsts("http://xboxlive.com").await?;
+
+    let response = client
+        .get("https://title.mgt.xboxlive.com/titles/current/endpoints")
+        .header("x-xbl-contract-version", "1")
+        .header("Authorization", crate::api::xbox::auth::xsts_auth_header(&xsts))
+        .send()
+        .await?
+        .error_for_status()?;
+
+    Ok(response.json().await?)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

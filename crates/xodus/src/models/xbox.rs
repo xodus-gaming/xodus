@@ -110,6 +110,8 @@ pub struct XstsRequest {
 #[serde(rename_all = "PascalCase")]
 pub struct TitleMgtResponse {
     pub end_points: Vec<TitleMgtEndPoint>,
+    /// Title-scoped documents list endpoints only, so this is absent there.
+    #[serde(default)]
     pub signature_policies: Vec<TitleMgtSignaturePolicy>,
 }
 

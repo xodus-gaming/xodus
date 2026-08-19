@@ -62,3 +62,17 @@ pub fn get_xsts_auth_header(xsts: XstsResponse) -> String {
     let uhs = xsts.user_hash().expect("XSTS response missing xui claim");
     format!("XBL3.0 x={uhs};{}", xsts.token)
 }
+
+/// Same header shape as `get_xsts_auth_header`, for the xal-typed responses the
+/// title-scoped flow produces.
+pub fn xsts_auth_header(
+    xsts: &xal::response::XTokenResponse<xal::response::XSTSDisplayClaims>,
+) -> String {
+    let uhs = xsts
+        .display_claims
+        .as_ref()
+        .and_then(|claims| claims.xui.first())
+        .and_then(|xui| xui.get("uhs").cloned())
+        .unwrap_or_default();
+    format!("XBL3.0 x={uhs};{}", xsts.token)
+}
