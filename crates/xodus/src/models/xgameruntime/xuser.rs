@@ -48,6 +48,11 @@ pub struct XstsTokenRequest {
     /// The request path with its query, likewise covered by the signature.
     #[serde(default)]
     pub path_and_query: String,
+    /// The body the title is about to send, base64 because the request carrying
+    /// it is XML. Covered by the signature as well: a presence POST signed over
+    /// an empty body does not verify.
+    #[serde(default)]
+    pub body: String,
 }
 
 #[derive(Serialize)]

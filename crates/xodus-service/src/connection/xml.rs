@@ -1,3 +1,4 @@
+use base64::Engine as _;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use xodus::models::live::ExchangeUserTokenOutcome;
 use xodus::models::secrets::Token;
@@ -301,8 +302,24 @@ pub async fn parse_message(
                 Ok(proof_key) => {
                     let method = if req.method.is_empty() { "GET" } else { &req.method };
                     let path = if req.path_and_query.is_empty() { "/" } else { &req.path_and_query };
-                    let signature = proof_key.sign_request(method, path, &token, b"");
-                    log::debug!("signed {method} {path} for {relying_party}");
+                    // The body counts too. It arrives base64 -- the request
+                    // carrying it is XML -- and anything that fails to decode
+                    // is signed as empty rather than as its own encoding.
+                    let body = if req.body.is_empty() {
+                        Vec::new()
+                    } else {
+                        base64::engine::general_purpose::STANDARD
+                            .decode(&req.body)
+                            .unwrap_or_else(|err| {
+                                log::warn!("undecodable request body, signing without it: {err}");
+                                Vec::new()
+                            })
+                    };
+                    let signature = proof_key.sign_request(method, path, &token, &body);
+                    log::debug!(
+                        "signed {method} {path} ({} body bytes) for {relying_party}",
+                        body.len()
+                    );
                     signature
                 }
                 Err(err) => {
