@@ -59,7 +59,7 @@ The project structure is as follows.
 
 ### Prerequisites
 
-- Latest stable Rust version
+- Rust version 1.98 or later
 - Right now CLI relies on wry and tao to show a login page. Consult https://docs.rs/wry/latest/wry/#platform-considerations
 - xodus-service relies on `protoc` to compile `proto/` definitions make sure to install it for your platform
 
