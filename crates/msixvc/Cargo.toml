@@ -12,12 +12,12 @@ aes = "0.9.2"
 bitflags = "2.13.1"
 bytes = "1.12.1"
 chrono = { workspace = true }
-futures-util = "0.3.33"
+futures-util = "0.3.34"
 gpt = "4.1.0"
 ntfs = "0.4.0"
 num_enum = "0.7.6"
-thiserror = "2.0.19"
+thiserror = "2.0.20"
 tokio-util = { version = "0.7.19", features = ["io-util"] }
 typenum = { version = "1.20.1", features = ["const-generics"] }
-uuid = "1.24.0"
-zerocopy = { version = "0.8.55", features = ["derive"] }
+uuid = "1.25.0"
+zerocopy = { version = "0.8.56", features = ["derive"] }

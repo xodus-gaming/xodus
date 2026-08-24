@@ -9,15 +9,15 @@ tokio = { workspace = true }
 reqwest = { workspace = true }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-quick-xml = { version = "0.41.0", features = ["serialize", "overlapped-lists"] }
-log = "0.4.28"
+quick-xml = { version = "0.42.0", features = ["serialize", "overlapped-lists"] }
+log = "0.4.34"
 chrono = { workspace = true }
 base64 = { workspace = true }
 rand = "0.10.2"
-uuid = "1.24.0"
+uuid = "1.25.0"
 aes = "0.9.2"
 keyring-core = { version = "1.0.0", features = ["sample"] }
-zerocopy = { version = "0.8.55", features = ["derive"] }
+zerocopy = { version = "0.8.56", features = ["derive"] }
 bergshamra-c14n = "0.8.0"
 hmac = "0.13.0"
 bergshamra = "0.8.0"
@@ -28,20 +28,20 @@ url = "2.5.8"
 aes-keywrap = "0.9.0"
 num_enum = "0.7.6"
 prost = "0.14.4"
-globset = "0.4.19"
-thiserror = "2.0.19"
+globset = "0.4.20"
+thiserror = "2.0.20"
 num-bigint-dig = "0.9.1"
-num-integer = "0.1.46"
+num-integer = "0.1.47"
 kryptering = "0.5.0"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 smbios-lib = "0.9.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-dbus-secret-service-keyring-store = { version = "1.0.0", features = ["crypto-openssl"]}
+dbus-secret-service-keyring-store = { version = "1.0.1", features = ["crypto-openssl"]}
 
 [target.'cfg(target_os = "macos")'.dependencies]
-apple-native-keyring-store = { version = "1.0.0", features = ["keychain"]}
+apple-native-keyring-store = { version = "1.0.2", features = ["keychain"]}
 
 [dev-dependencies]
 rsa = "0.9.10"

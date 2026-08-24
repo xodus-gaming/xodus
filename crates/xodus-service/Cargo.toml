@@ -8,8 +8,8 @@ xodus = { path = "../xodus" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
-quick-xml = { version = "0.41.0", features = ["serialize", "overlapped-lists"] }
-log = "0.4.33"
+quick-xml = { version = "0.42.0", features = ["serialize", "overlapped-lists"] }
+log = "0.4.34"
 env_logger = "0.11.11"
 tokio-util = "0.7.19"
 serde_json = "1.0.151"
