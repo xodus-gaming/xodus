@@ -341,8 +341,7 @@ where
             }
         })
         .map(|(_, v)| v.length)
-        .reduce(|old, c| old + c)
-        .map_or(0, |x| x);
+        .sum();
 
     let required_free_space = total_size;
     let available_free_space = match available_space(out) {
