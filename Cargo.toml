@@ -3,10 +3,12 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.dependencies]
+base64 = { version = "0.23.1" }
 chrono = "0.4.45"
 reqwest = { version = "0.13.4", features = ["json", "stream"] }
+thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["full"] }
-base64 = { version = "0.23.1" }
+uuid = "1.25.0"
 
 [patch.crates-io]
 ntfs = { git = "https://github.com/xodus-gaming/ntfs.git" }
