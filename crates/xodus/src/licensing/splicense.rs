@@ -204,9 +204,6 @@ pub enum SPLicenseDecodeError {
     #[error("PackedContentKey id_len {id_len} is less than 16")]
     InvalidPackedContentKeyIdLength { id_len: usize },
 
-    #[error("invalid UTF-16 package name byte length {len}")]
-    InvalidPackageNameByteLength { len: usize },
-
     #[error("invalid UTF-16 package name: {0}")]
     InvalidPackageNameUtf16(#[from] std::string::FromUtf16Error),
 }
@@ -262,20 +259,7 @@ impl SPLicense {
             }
             Ok(BlockId::PackageFullName) => {
                 let data = read_vec(&mut reader, size)?;
-                if data.len() % 2 != 0 {
-                    return Err(SPLicenseDecodeError::InvalidPackageNameByteLength {
-                        len: data.len(),
-                    });
-                }
-                let utf16: Vec<u16> = data
-                    .chunks_exact(2)
-                    .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
-                    .collect();
-                let mut s = String::from_utf16(&utf16)?;
-                if s.ends_with('\0') {
-                    s.pop();
-                }
-                self.package_name = s;
+                self.package_name = String::from_utf16le(&data)?;
             }
             Ok(BlockId::PackedContentKeys) => {
                 let mut offset = 0;
@@ -542,7 +526,7 @@ mod tests {
         let result = SPLicense::decode(Cursor::new(data));
         assert!(matches!(
             result,
-            Err(SPLicenseDecodeError::InvalidPackageNameByteLength { len: 3 })
+            Err(SPLicenseDecodeError::InvalidPackageNameUtf16(_))
         ));
     }
 
