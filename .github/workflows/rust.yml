@@ -43,3 +43,8 @@ jobs:
         run: |
           set -o pipefail
           cargo clippy --workspace --message-format=json | python3 scripts/cargo-annotate.py "${{ matrix.target }}"
+
+      - name: Run Tests
+        shell: bash
+        run: |
+          cargo test
