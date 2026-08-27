@@ -95,10 +95,10 @@ pub async fn get_license_token(
             "XboxLm-PC/Microsoft.GamingServices_32.107.4002.0_x64__8wekyb3d8bbwe",
         )
         .json(&LicenseTokenRequest {
-            parent_product_id: parent_product_id,
+            parent_product_id,
             enforce_sellable_by: true,
             related_product_ids: products,
-            custom_developer_string: custom_developer_string,
+            custom_developer_string,
             beneficiaries: vec![LicenseUserIdentity {
                 identity_type: "Msa".to_string(),
                 identity_value: user_ms_token,
