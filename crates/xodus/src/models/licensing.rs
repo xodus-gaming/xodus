@@ -18,6 +18,22 @@ pub struct LicenseContentRequest {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LicenseTokenRequest {
+    pub parent_product_id: String,
+    pub enforce_sellable_by: bool,
+    pub related_product_ids: Vec<String>,
+    pub custom_developer_string: String,
+    pub beneficiaries: Vec<LicenseUserIdentity>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LicenseTokenResponse {
+    pub license_token: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceContext {
     pub hardware_manufacturer: String,
     pub hardware_type: String,
