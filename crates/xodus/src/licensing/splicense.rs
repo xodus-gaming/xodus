@@ -545,6 +545,6 @@ mod tests {
 
         let license =
             SPLicense::decode(Cursor::new(data)).expect("Valid UTF-16 package name should decode");
-        assert_eq!(license.package_name, "Microsoft.Minecraft_8wekyb3d8bbwe");
+        assert_eq!(license.package_name, test_name);
     }
 }
