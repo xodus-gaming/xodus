@@ -110,8 +110,26 @@ struct CliArgs {
     command: SubCommand,
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
+fn main() -> ExitCode {
+    #[cfg(target_os = "linux")]
+    {
+        // WebKitGTK's DMA-BUF renderer (default since 2.42) fails silently on many
+        // wlroots-based compositors (Hyprland, Sway), surfacing as repeated
+        // "Failed to create GBM buffer" messages while the login webview never
+        // renders. Setting this before startup avoids it.
+        if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
+            // SAFETY: main() is still single-threaded here, before the tokio
+            // runtime exists so there's no concurrent reader of the enviroment
+            unsafe {std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1")} ;
+        }
+    }
+
+    tokio::runtime::Runtime::new()
+        .expect("failed to build tokio runtime")
+        .block_on(run())
+}
+
+async fn run() -> ExitCode {
     env_logger::init_from_env("XODUS_LOG");
     let client = reqwest::ClientBuilder::new()
         .user_agent(format!("xodus-cli/{}", env!("CARGO_PKG_VERSION")))
