@@ -120,7 +120,7 @@ fn main() -> ExitCode {
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
             // SAFETY: main() is still single-threaded here, before the tokio
             // runtime exists so there's no concurrent reader of the enviroment
-            unsafe {std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1")} ;
+            unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
         }
     }
 
