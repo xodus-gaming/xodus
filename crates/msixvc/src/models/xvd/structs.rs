@@ -1,10 +1,9 @@
 use super::{
-    LEGACY_SECTOR_SIZE, PAGE_SIZE, SECTOR_SIZE, WriteablePolicyFlags,
-    XVD_HEADER_INCL_SIGNATURE_SIZE, XvcInfoFlags, XvcRegionFlags, XvcRegionId,
-    XvcRegionPresenceInfoFlags, XvdContentType, XvdSegmentMetadataSegmentFlags, XvdType,
-    XvdVolumeFlags,
+    WriteablePolicyFlags, XVD_HEADER_INCL_SIGNATURE_SIZE, XvcInfoFlags, XvcRegionFlags,
+    XvcRegionId, XvcRegionPresenceInfoFlags, XvdContentType, XvdSegmentMetadataSegmentFlags,
+    XvdType, XvdVolumeFlags,
 };
-use crate::layout::{Bytes, Pages};
+use crate::layout::{Bytes, LEGACY_SECTOR_SIZE, PAGE_SIZE, Pages, SECTOR_SIZE};
 use crate::math::calculate_number_of_hash_pages;
 
 use msixvc_common::parse::byteorder::little_endian::*;

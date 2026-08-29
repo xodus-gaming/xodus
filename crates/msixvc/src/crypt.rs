@@ -1,4 +1,5 @@
-use crate::models::xvd::{PAGE_SIZE, XvcRegionId};
+use crate::layout::PAGE_SIZE;
+use crate::models::xvd::XvcRegionId;
 
 use std::iter;
 

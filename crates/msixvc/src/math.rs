@@ -1,7 +1,7 @@
-use crate::layout::Pages;
+use crate::layout::{PAGES_PER_BLOCK, Pages};
 use crate::models::xvd::{
     DATA_BLOCKS_IN_LEVEL0_HASHTREE, DATA_BLOCKS_IN_LEVEL1_HASHTREE, DATA_BLOCKS_IN_LEVEL2_HASHTREE,
-    DATA_BLOCKS_IN_LEVEL3_HASHTREE, HASH_ENTRIES_IN_PAGE, PAGES_PER_BLOCK,
+    DATA_BLOCKS_IN_LEVEL3_HASHTREE, HASH_ENTRIES_IN_PAGE,
 };
 
 pub fn calculate_hash_block_num_and_run_for_block_num(

@@ -19,12 +19,12 @@ use uuid::Uuid;
 use zerocopy::IntoBytes;
 
 use crate::crypt::{TweakGenerator, decrypt_page_xts};
-use crate::layout::{Bytes, Pages};
+use crate::layout::{Bytes, PAGE_SIZE, PAGES_PER_BLOCK, Pages};
 use crate::math::calculate_hash_block_num_and_run_for_block_num;
 use crate::models::xvd::{
-    PAGE_SIZE, PAGES_PER_BLOCK, XvcInfo, XvcRegionHeader, XvcRegionId, XvdHashEntry, XvdHeader,
-    XvdSegmentMetadataHeader, XvdSegmentMetadataSegment, XvdSegmentMetadataSegmentFlags,
-    XvdUserDataHeader, XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,
+    XvcInfo, XvcRegionHeader, XvcRegionId, XvdHashEntry, XvdHeader, XvdSegmentMetadataHeader,
+    XvdSegmentMetadataSegment, XvdSegmentMetadataSegmentFlags, XvdUserDataHeader,
+    XvdUserDataPackageFileEntry, XvdUserDataPackageFilesHeader,
 };
 use crate::streaming_ntfs::collect_ntfs_stream_layouts;
 

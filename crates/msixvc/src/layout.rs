@@ -5,6 +5,8 @@ pub const BLOCK_SIZE: usize = 0xAA000;
 pub const SECTOR_SIZE: usize = 4096;
 pub const LEGACY_SECTOR_SIZE: usize = 512;
 
+pub const PAGES_PER_BLOCK: usize = BLOCK_SIZE / PAGE_SIZE;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Pages(pub u64);
 
