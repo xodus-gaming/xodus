@@ -1,4 +1,4 @@
-use std::ops::{Add, Sub};
+use std::ops::{Add, AddAssign, Sub};
 
 pub const PAGE_SIZE: usize = 0x1000;
 pub const BLOCK_SIZE: usize = 0xAA000;
@@ -74,6 +74,18 @@ impl Add<Bytes> for Bytes {
 
     fn add(self, rhs: Bytes) -> Self::Output {
         Bytes(self.0 + rhs.0)
+    }
+}
+
+impl AddAssign for Pages {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0
+    }
+}
+
+impl AddAssign for Bytes {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0
     }
 }
 
