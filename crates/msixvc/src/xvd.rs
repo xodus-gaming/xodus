@@ -423,7 +423,7 @@ impl XvdFile {
                 page += run_length;
                 let read_offset = hash_tree_offset
                     + Pages(hash_block).to_bytes()
-                    + Bytes(entry_start * XvdHashEntry::SIZE as u64);
+                    + Bytes(entry_start as u64 * XvdHashEntry::SIZE as u64);
                 reader.seek(SeekFrom::Start(read_offset.0)).await?;
 
                 let mut buf = XvdHashEntry::buffer();

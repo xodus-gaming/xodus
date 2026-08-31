@@ -178,7 +178,7 @@ impl BinaryTryParse for XvdHeader {
                 writeable_expiration_date,
                 writeable_policy_flags,
                 persistent_local_storage_size,
-                mutable_page_count: Pages(mutable_page_count as u64),
+                mutable_page_count: Pages(mutable_page_count as u32),
                 sequence_number,
                 required_system_version,
                 odk_keyslot_id,
