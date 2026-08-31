@@ -33,31 +33,35 @@ pub struct Bytes(
 
 impl Pages {
     /// Returns the number of bytes that this many pages span.
-    pub fn to_bytes(self) -> Bytes {
+    pub const fn to_bytes(self) -> Bytes {
         Bytes((self.0 as u64) * PAGE_SIZE as u64)
     }
 }
 
 impl Bytes {
     /// Returns whether the byte offset is page-aligned or not.
-    pub fn is_page_aligned(self) -> bool {
+    pub const fn is_page_aligned(self) -> bool {
         self.0.is_multiple_of(PAGE_SIZE as u64)
     }
 
     /// Returns the index of the page to which the byte offset belongs.
-    pub fn to_page_index(self) -> Pages {
+    pub const fn to_page_index(self) -> Pages {
         Pages((self.0 / PAGE_SIZE as u64) as u32)
     }
 
     /// Returns the number of pages that this many bytes span.
-    pub fn to_page_count(self) -> Pages {
+    pub const fn to_page_count(self) -> Pages {
         Pages(self.0.div_ceil(PAGE_SIZE as u64) as u32)
     }
 
     /// If the byte offset is page-aligned then returns its page index, else
     /// returns `None`.
-    pub fn to_page_index_aligned(self) -> Option<Pages> {
-        self.is_page_aligned().then(|| self.to_page_index())
+    pub const fn to_page_index_aligned(self) -> Option<Pages> {
+        if self.is_page_aligned() {
+            Some(self.to_page_index())
+        } else {
+            None
+        }
     }
 }
 
