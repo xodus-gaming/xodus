@@ -53,3 +53,37 @@ impl XvdHeader {
         }
     }
 }
+
+impl XvdLayout {
+    pub fn header(&self) -> XvdSection {
+        self.header
+    }
+
+    pub fn embedded_xvd(&self) -> XvdSection {
+        self.embedded_xvd
+    }
+
+    pub fn mutable_data(&self) -> XvdSection {
+        self.mutable_data
+    }
+
+    pub fn hash_tree(&self) -> XvdSection {
+        self.hash_tree
+    }
+
+    pub fn user_data(&self) -> XvdSection {
+        self.user_data
+    }
+
+    pub fn xvc_info(&self) -> XvdSection {
+        self.xvc_info
+    }
+
+    pub fn dynamic_header(&self) -> XvdSection {
+        self.dynamic_header
+    }
+
+    pub fn drive_data(&self) -> XvdSection {
+        self.drive_data
+    }
+}
