@@ -4,7 +4,9 @@ use super::{
     XvcRegionId, XvcRegionPresenceInfoFlags, XvdContentType, XvdSegmentMetadataSegmentFlags,
     XvdType, XvdVolumeFlags,
 };
-use crate::layout::{Bytes, LEGACY_SECTOR_SIZE, PAGE_SIZE, Pages, SECTOR_SIZE};
+use crate::layout::{
+    Bytes, BytesParse, LEGACY_SECTOR_SIZE, PAGE_SIZE, Pages, PagesParse, SECTOR_SIZE,
+};
 use crate::math::calculate_number_of_hash_pages;
 
 use msixvc_common::parse::byteorder::little_endian::*;
@@ -105,9 +107,8 @@ impl BinaryTryParse for XvdHeader {
         let (volume_flags, r) = r.read::<XvdVolumeFlags>();
         let (format_version, r) = r.read::<U32>();
         let (file_time_created, r) = r.read::<Filetime>();
-        let (drive_size, r) = r.read::<U64>();
+        let (drive_size, r) = r.read::<BytesParse<U64>>();
 
-        let drive_size = Bytes(drive_size);
         if !Self::DRIVE_SIZE_RANGE.contains(&drive_size) {
             return Err(Self::Error::InvalidDriveSize { drive_size });
         }
@@ -121,10 +122,10 @@ impl BinaryTryParse for XvdHeader {
         let (xvd_type, r) = r.try_read::<XvdType>()?;
         let (xvd_content_type, r) = r.try_read::<XvdContentType>()?;
 
-        let (embedded_xvd_length, r) = r.read::<U32>();
-        let (user_data_length, r) = r.read::<U32>();
-        let (xvc_data_length, r) = r.read::<U32>();
-        let (dynamic_header_length, r) = r.read::<U32>();
+        let (embedded_xvd_length, r) = r.read::<BytesParse<U32>>();
+        let (user_data_length, r) = r.read::<BytesParse<U32>>();
+        let (xvc_data_length, r) = r.read::<BytesParse<U32>>();
+        let (dynamic_header_length, r) = r.read::<BytesParse<U32>>();
         let (block_size, r) = r.read::<U32>();
 
         let (ext_entries, r) = r.read::<[XvdExtEntry; 4]>();
@@ -147,7 +148,7 @@ impl BinaryTryParse for XvdHeader {
         let (writeable_policy_flags, r) = r.read::<WriteablePolicyFlags>();
 
         let (persistent_local_storage_size, r) = r.read::<U32>();
-        let (mutable_page_count, r) = r.read::<u8>();
+        let (mutable_page_count, r) = r.read::<PagesParse<u8>>();
 
         let (_unknown271, r) = r.read::<u8>();
         let (_unknown272, r) = r.array::<0x10>();
@@ -173,10 +174,10 @@ impl BinaryTryParse for XvdHeader {
                 original_xvc_data_hash,
                 xvd_type,
                 xvd_content_type,
-                embedded_xvd_length: Bytes(embedded_xvd_length as u64),
-                user_data_length: Bytes(user_data_length as u64),
-                xvc_data_length: Bytes(xvc_data_length as u64),
-                dynamic_header_length: Bytes(dynamic_header_length as u64),
+                embedded_xvd_length,
+                user_data_length,
+                xvc_data_length,
+                dynamic_header_length,
                 block_size,
                 ext_entries,
                 capabilities,
@@ -193,7 +194,7 @@ impl BinaryTryParse for XvdHeader {
                 writeable_expiration_date,
                 writeable_policy_flags,
                 persistent_local_storage_size,
-                mutable_page_count: Pages(mutable_page_count as u32),
+                mutable_page_count,
                 sequence_number,
                 required_system_version,
                 odk_keyslot_id,
@@ -434,11 +435,11 @@ pub struct XvcRegionHeader {
 
 #[derive(thiserror::Error, Debug)]
 pub enum XvcRegionHeaderParseError {
-    #[error("invalid offset {0}: must be a multiple of page size ({PAGE_SIZE})")]
-    InvalidOffset(u64),
+    #[error("invalid offset {0:?}: must be a multiple of page size ({PAGE_SIZE})")]
+    InvalidOffset(Bytes),
 
-    #[error("invalid length {0}: must be a multiple of page size ({PAGE_SIZE})")]
-    InvalidLength(u64),
+    #[error("invalid length {0:?}: must be a multiple of page size ({PAGE_SIZE})")]
+    InvalidLength(Bytes),
 }
 
 impl BinaryTryParse for XvcRegionHeader {
@@ -459,14 +460,14 @@ impl BinaryTryParse for XvcRegionHeader {
         let (first_segment_index, r) = r.read::<U32>();
         let (description, r) = r.read::<[U16; 0x20]>();
 
-        let (offset, r) = r.read::<U64>();
-        let (length, r) = r.read::<U64>();
+        let (offset, r) = r.read::<BytesParse<U64>>();
+        let (length, r) = r.read::<BytesParse<U64>>();
 
-        let offset = Bytes(offset)
+        let offset = offset
             .to_page_index_aligned()
             .ok_or(Self::Error::InvalidOffset(offset))?;
 
-        let length = Bytes(length)
+        let length = length
             .to_page_index_aligned()
             .ok_or(Self::Error::InvalidLength(length))?;
 

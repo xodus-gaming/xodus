@@ -1,4 +1,8 @@
+use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Sub};
+
+use msixvc_common::parse::byteorder::{Be, Le};
+use msixvc_common::parse::{BinaryParse, BytesReader, EmptyReader};
 
 pub const PAGE_SIZE: usize = 0x1000;
 pub const BLOCK_SIZE: usize = 0xAA000;
@@ -108,3 +112,53 @@ impl Sub<Bytes> for Bytes {
         Bytes(self.0 - rhs.0)
     }
 }
+
+/// Marker type for parsing integers through [`BinaryParse`] into a [`Pages`].
+pub struct PagesParse<T>(PhantomData<T>);
+
+/// Marker type for parsing integers through [`BinaryParse`] into a [`Bytes`].
+pub struct BytesParse<T>(PhantomData<T>);
+
+macro_rules! impl_pages_parse {
+    ($int:ty) => {
+        impl BinaryParse for PagesParse<$int> {
+            type Output = Pages;
+            type Size = <$int as BinaryParse>::Size;
+
+            #[inline]
+            fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Pages, EmptyReader<'a>) {
+                let (n, r) = r.read::<$int>();
+                (Pages(u32::from(n)), r)
+            }
+        }
+    };
+}
+
+macro_rules! impl_bytes_parse {
+    ($int:ty) => {
+        impl BinaryParse for BytesParse<$int> {
+            type Output = Bytes;
+            type Size = <$int as BinaryParse>::Size;
+
+            #[inline]
+            fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Bytes, EmptyReader<'a>) {
+                let (n, r) = r.read::<$int>();
+                (Bytes(u64::from(n)), r)
+            }
+        }
+    };
+}
+
+impl_pages_parse!(u8);
+impl_pages_parse!(Le<u16>);
+impl_pages_parse!(Be<u16>);
+impl_pages_parse!(Le<u32>);
+impl_pages_parse!(Be<u32>);
+
+impl_bytes_parse!(u8);
+impl_bytes_parse!(Le<u16>);
+impl_bytes_parse!(Be<u16>);
+impl_bytes_parse!(Le<u32>);
+impl_bytes_parse!(Be<u32>);
+impl_bytes_parse!(Le<u64>);
+impl_bytes_parse!(Be<u64>);
