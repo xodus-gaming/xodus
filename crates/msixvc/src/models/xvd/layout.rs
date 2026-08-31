@@ -62,6 +62,8 @@ impl XvdHeader {
             section
         };
 
+        // TODO: what if integrity is disabled?
+
         // Calculate the layout of the hash tree first because it's the only
         // section whose length can't be accessed directly, but has to be
         // calculated.
