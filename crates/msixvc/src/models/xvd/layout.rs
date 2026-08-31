@@ -120,8 +120,14 @@ pub struct HashTreeLevel {
     /// the hash table.
     page_range: Range<Pages>,
     /// The number of hash entries stored in this hash tree level, which is
-    /// equal to the number of pages that the hash tree level covers. `num_hashes`
-    /// might be zero for levels 1-3 if the hash tree does not need more levels.
+    /// equal to the number of pages that the hash tree level covers.
+    ///
+    /// The possible values for `num_hashes` are:
+    /// - For level 0: `1..` (the level 0 hash tree must contain at least one
+    ///   hash entry).
+    /// - For levels 1-3: `0` or `2..` (the other levels can't contain only one
+    ///   hash entry, because when there's only one entry it goes in the header
+    ///   instead).
     num_hashes: Pages,
 }
 
@@ -276,5 +282,141 @@ impl HashTreeLayout {
 
     pub fn level0(&self) -> HashTreeLevel {
         self.level0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_level(level: HashTreeLevel, len: Pages, num_hashes: Pages) {
+        assert_eq!(level.page_range.start + len, level.page_range.end);
+        assert_eq!(level.num_hashes, num_hashes);
+    }
+
+    fn assert_empty_level(level: HashTreeLevel) {
+        assert_level(level, Pages(0), Pages(0));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_empty() {
+        HashTreeLayout::new(Pages(0));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_overflow() {
+        HashTreeLayout::new(MAX_HASHED_PAGES + Pages(1));
+    }
+
+    #[test]
+    fn test_single_hashed_page() {
+        // Even when there's a single hashed page, the level 0 tree level
+        // must contain an entry.
+        let layout = HashTreeLayout::new(Pages(1));
+        assert_empty_level(layout.level3);
+        assert_empty_level(layout.level2);
+        assert_empty_level(layout.level1);
+        assert_level(layout.level0, Pages(1), Pages(1));
+    }
+
+    #[test]
+    fn test_level0_boundary() {
+        // While there's less than `HASH_ENTRIES_IN_PAGE` pages, it fits within
+        // a single level 0 page, so the level 1 hash tree is not needed.
+        let layout = HashTreeLayout::new(Pages(HASH_ENTRIES_IN_PAGE));
+        assert_empty_level(layout.level3);
+        assert_empty_level(layout.level2);
+        assert_empty_level(layout.level1);
+        assert_level(layout.level0, Pages(1), Pages(HASH_ENTRIES_IN_PAGE));
+
+        // If there's more than `HASH_ENTRIES_IN_PAGE` pages, it won't fit
+        // within a single level 0 page.
+        let layout = HashTreeLayout::new(Pages(HASH_ENTRIES_IN_PAGE + 1));
+        assert_empty_level(layout.level3);
+        assert_empty_level(layout.level2);
+
+        // The level 1 hash tree must be 1 page long and contain 2 hashes (one
+        // for each level 0 page).
+        assert_level(layout.level1, Pages(1), Pages(2));
+
+        // The level 0 hash tree must be 2 pages long.
+        assert_level(layout.level0, Pages(2), Pages(HASH_ENTRIES_IN_PAGE + 1));
+    }
+
+    #[test]
+    fn test_level1_boundary() {
+        let layout = HashTreeLayout::new(Pages(HASH_ENTRIES_IN_PAGE.pow(2)));
+        assert_empty_level(layout.level3);
+        assert_empty_level(layout.level2);
+        assert_level(layout.level1, Pages(1), Pages(HASH_ENTRIES_IN_PAGE));
+        assert_level(
+            layout.level0,
+            Pages(HASH_ENTRIES_IN_PAGE),
+            Pages(HASH_ENTRIES_IN_PAGE.pow(2)),
+        );
+
+        let layout = HashTreeLayout::new(Pages(HASH_ENTRIES_IN_PAGE.pow(2) + 1));
+        assert_empty_level(layout.level3);
+        assert_level(layout.level2, Pages(1), Pages(2));
+        assert_level(layout.level1, Pages(2), Pages(HASH_ENTRIES_IN_PAGE + 1));
+        assert_level(
+            layout.level0,
+            Pages(HASH_ENTRIES_IN_PAGE + 1),
+            Pages(HASH_ENTRIES_IN_PAGE.pow(2) + 1),
+        );
+    }
+
+    #[test]
+    fn test_level2_boundary() {
+        let layout = HashTreeLayout::new(Pages(HASH_ENTRIES_IN_PAGE.pow(3)));
+        assert_empty_level(layout.level3);
+        assert_level(layout.level2, Pages(1), Pages(HASH_ENTRIES_IN_PAGE));
+        assert_level(
+            layout.level1,
+            Pages(HASH_ENTRIES_IN_PAGE),
+            Pages(HASH_ENTRIES_IN_PAGE.pow(2)),
+        );
+        assert_level(
+            layout.level0,
+            Pages(HASH_ENTRIES_IN_PAGE.pow(2)),
+            Pages(HASH_ENTRIES_IN_PAGE.pow(3)),
+        );
+
+        let layout = HashTreeLayout::new(Pages(HASH_ENTRIES_IN_PAGE.pow(3) + 1));
+        assert_level(layout.level3, Pages(1), Pages(2));
+        assert_level(layout.level2, Pages(2), Pages(HASH_ENTRIES_IN_PAGE + 1));
+        assert_level(
+            layout.level1,
+            Pages(HASH_ENTRIES_IN_PAGE + 1),
+            Pages(HASH_ENTRIES_IN_PAGE.pow(2) + 1),
+        );
+        assert_level(
+            layout.level0,
+            Pages(HASH_ENTRIES_IN_PAGE.pow(2) + 1),
+            Pages(HASH_ENTRIES_IN_PAGE.pow(3) + 1),
+        );
+    }
+
+    #[test]
+    fn test_max() {
+        let layout = HashTreeLayout::new(MAX_HASHED_PAGES);
+        assert_level(layout.level3, Pages(1), Pages(HASH_ENTRIES_IN_PAGE));
+        assert_level(
+            layout.level2,
+            Pages(HASH_ENTRIES_IN_PAGE),
+            Pages(HASH_ENTRIES_IN_PAGE.pow(2)),
+        );
+        assert_level(
+            layout.level1,
+            Pages(HASH_ENTRIES_IN_PAGE.pow(2)),
+            Pages(HASH_ENTRIES_IN_PAGE.pow(3)),
+        );
+        assert_level(
+            layout.level0,
+            Pages(HASH_ENTRIES_IN_PAGE.pow(3)),
+            Pages(HASH_ENTRIES_IN_PAGE.pow(4)),
+        );
     }
 }
