@@ -22,7 +22,6 @@ use typenum::{
 use uuid::Uuid;
 
 use std::collections::HashMap;
-use std::range::Range;
 
 type T2900 = Sum<T2048, T852>;
 type T3496 = Diff<T4096, T600>;
@@ -70,11 +69,6 @@ pub struct XvdHeader {
 
 impl XvdHeader {
     const MAGIC: &[u8; 8] = b"msft-xvd";
-    const DRIVE_SIZE_RANGE: Range<Bytes> = Range {
-        // The drive must be at least one page long.
-        start: Bytes(1),
-        end: MAX_HASHED_PAGES.to_bytes(),
-    };
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -88,8 +82,8 @@ pub enum XvdHeaderParseError {
     #[error("invalid xvd content type: {0}")]
     InvalidXvdContentType(#[from] TryFromPrimitiveError<XvdContentType>),
 
-    #[error("invalid drive size: {drive_size:?}, must be in the range {range:?}", range = XvdHeader::DRIVE_SIZE_RANGE)]
-    InvalidDriveSize { drive_size: Bytes },
+    #[error("invalid hashed pages count: {hashed_pages:?}, must be less than {MAX_HASHED_PAGES:?}")]
+    InvalidHashedPagesCount { hashed_pages: Pages },
 }
 
 impl BinaryTryParse for XvdHeader {
@@ -109,10 +103,6 @@ impl BinaryTryParse for XvdHeader {
         let (file_time_created, r) = r.read::<Filetime>();
         let (drive_size, r) = r.read::<BytesParse<U64>>();
 
-        if !Self::DRIVE_SIZE_RANGE.contains(&drive_size) {
-            return Err(Self::Error::InvalidDriveSize { drive_size });
-        }
-
         let (vduid, r) = r.read::<Uuid>();
         let (uduid, r) = r.read::<Uuid>();
 
@@ -127,6 +117,41 @@ impl BinaryTryParse for XvdHeader {
         let (xvc_data_length, r) = r.read::<BytesParse<U32>>();
         let (dynamic_header_length, r) = r.read::<BytesParse<U32>>();
         let (block_size, r) = r.read::<U32>();
+
+        // Check that the number of hashed pages doesn't exceed the maximum
+        {
+            // All sections except for `drive_size` are parsed as an u32, so
+            // they cannot overflow when adding together. Check the drive size
+            // first, and if it doesn't overflow then check the sum.
+
+            if drive_size > MAX_HASHED_PAGES.to_bytes() {
+                return Err(Self::Error::InvalidHashedPagesCount {
+                    // We can't do `drive_size.to_page_count()` here, as the cast from u64
+                    // to u32 could fail.
+                    hashed_pages: if drive_size.0.div_ceil(PAGE_SIZE as u64) >= u32::MAX as u64 {
+                        Pages(u32::MAX)
+                    } else {
+                        drive_size.to_page_count()
+                    },
+                });
+            }
+
+            // The `drive_size` didn't overflow the maximum number of pages.
+            // Now check that adding the other sections is still in-bounds.
+
+            let hashed_pages = Pages(
+                user_data_length
+                    .to_page_count()
+                    .0
+                    .saturating_add(xvc_data_length.to_page_count().0)
+                    .saturating_add(dynamic_header_length.to_page_count().0)
+                    .saturating_add(drive_size.to_page_count().0),
+            );
+
+            if hashed_pages > MAX_HASHED_PAGES {
+                return Err(Self::Error::InvalidHashedPagesCount { hashed_pages });
+            }
+        }
 
         let (ext_entries, r) = r.read::<[XvdExtEntry; 4]>();
         let (capabilities, r) = r.read::<[U16; 8]>();
