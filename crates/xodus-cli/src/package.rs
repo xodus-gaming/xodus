@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use inquire::Select;
 use xodus::XBOX_LIVE_PACKAGES_PC;
 use xodus::api::displaycatalog::find_products_by_id;
@@ -10,6 +12,26 @@ pub async fn get_content_id(
     product: String,
     market: Option<String>,
 ) -> Result<String, Box<dyn std::error::Error>> {
+    get_content_id_impl(client, product, market, &mut HashSet::new()).await
+}
+
+/// `seen` tracks every product id already visited in this resolution chain.
+/// A bundle's sub-products can include the bundle's own id (observed live
+/// with the Minecraft bundle from #17: resolving one of its listed
+/// sub-products just returns the same bundle again) - without this guard,
+/// selecting that entry recurses into itself forever.
+async fn get_content_id_impl(
+    client: &reqwest::Client,
+    product: String,
+    market: Option<String>,
+    seen: &mut HashSet<String>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if !seen.insert(product.clone()) {
+        return Err(Box::new(std::io::Error::other(format!(
+            "bundle resolution looped back to an already-visited product id ({product}); refusing to recurse forever"
+        ))));
+    }
+
     let displaycatalog = find_products_by_id(
         client,
         product,
@@ -48,6 +70,9 @@ pub async fn get_content_id(
     }
     subprods.sort();
     subprods.dedup();
+    // Drop anything already visited (e.g. the bundle's own id showing up in
+    // its own sub-product list) before it's even offered as a choice.
+    subprods.retain(|id| !seen.contains(id));
 
     let Some(package) = found_package else {
         if !subprods.is_empty() {
@@ -57,7 +82,7 @@ pub async fn get_content_id(
             else {
                 return Err(Box::new(std::io::Error::other("Selection failed")));
             };
-            return Box::pin(get_content_id(client, item, market)).await;
+            return Box::pin(get_content_id_impl(client, item, market, seen)).await;
         }
 
         return Err(Box::new(std::io::Error::other(
