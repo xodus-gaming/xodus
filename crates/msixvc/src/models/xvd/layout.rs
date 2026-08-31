@@ -10,7 +10,6 @@ pub const HASH_ENTRIES_IN_PAGE: u32 = (PAGE_SIZE / HASH_ENTRY_LENGTH) as u32;
 
 /// Maximum number of pages that the hash tree may cover.
 pub const MAX_HASHED_PAGES: Pages = Pages(HASH_ENTRIES_IN_PAGE.pow(4));
-pub const MAX_HASHED_BYTES: Bytes = MAX_HASHED_PAGES.to_bytes();
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct XvdSection {
@@ -208,8 +207,9 @@ pub struct HashTreeLayout {
 }
 
 impl HashTreeLayout {
-    /// `drive_data_pages` must be less or equal to `MAX_HASHED_PAGES`.
+    /// `drive_data_pages` must be in the range `1..MAX_HASHED_PAGES`.
     fn new(drive_data_pages: Pages) -> HashTreeLayout {
+        assert!(drive_data_pages > Pages(0));
         assert!(drive_data_pages <= MAX_HASHED_PAGES);
 
         // The level 0 hash tree must always exist, even when there's a single drive data page.

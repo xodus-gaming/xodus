@@ -1,4 +1,4 @@
-use super::layout::MAX_HASHED_BYTES;
+use super::layout::MAX_HASHED_PAGES;
 use super::{
     WriteablePolicyFlags, XVD_HEADER_INCL_SIGNATURE_SIZE, XvcInfoFlags, XvcRegionFlags,
     XvcRegionId, XvcRegionPresenceInfoFlags, XvdContentType, XvdSegmentMetadataSegmentFlags,
@@ -20,6 +20,7 @@ use typenum::{
 use uuid::Uuid;
 
 use std::collections::HashMap;
+use std::range::Range;
 
 type T2900 = Sum<T2048, T852>;
 type T3496 = Diff<T4096, T600>;
@@ -67,6 +68,11 @@ pub struct XvdHeader {
 
 impl XvdHeader {
     const MAGIC: &[u8; 8] = b"msft-xvd";
+    const DRIVE_SIZE_RANGE: Range<Bytes> = Range {
+        // The drive must be at least one page long.
+        start: Bytes(1),
+        end: MAX_HASHED_PAGES.to_bytes(),
+    };
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -80,8 +86,8 @@ pub enum XvdHeaderParseError {
     #[error("invalid xvd content type: {0}")]
     InvalidXvdContentType(#[from] TryFromPrimitiveError<XvdContentType>),
 
-    #[error("too large drive size: {drive_size:?}, the maximum is {MAX_HASHED_BYTES:?}")]
-    TooLargeDriveSize { drive_size: Bytes },
+    #[error("invalid drive size: {drive_size:?}, must be in the range {range:?}", range = XvdHeader::DRIVE_SIZE_RANGE)]
+    InvalidDriveSize { drive_size: Bytes },
 }
 
 impl BinaryTryParse for XvdHeader {
@@ -102,8 +108,8 @@ impl BinaryTryParse for XvdHeader {
         let (drive_size, r) = r.read::<U64>();
 
         let drive_size = Bytes(drive_size);
-        if drive_size > MAX_HASHED_BYTES {
-            return Err(Self::Error::TooLargeDriveSize { drive_size });
+        if !Self::DRIVE_SIZE_RANGE.contains(&drive_size) {
+            return Err(Self::Error::InvalidDriveSize { drive_size });
         }
 
         let (vduid, r) = r.read::<Uuid>();
