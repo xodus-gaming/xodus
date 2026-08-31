@@ -17,6 +17,19 @@ pub struct XvdSection {
     pub len: Bytes,
 }
 
+/// [`XvdLayout`] describes the layout of an `MSIXVC` file.
+///
+/// Each section is directly consecutive to the next one, and it is guaranteed
+/// that no sections overlap. The sections are, in order:
+///
+/// 1. [`Self::header`]
+/// 2. [`Self::embedded_xvd`]
+/// 3. [`Self::mutable_data`]
+/// 4. [`Self::hash_tree`]
+/// 5. [`Self::user_data`]
+/// 6. [`Self::xvc_info`]
+/// 7. [`Self::dynamic_header`]
+/// 8. [`Self::drive_data`]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct XvdLayout {
     // It is guaranteed that no sections overlap.
@@ -236,6 +249,14 @@ fn hash_tree_level_pages(hashed_pages: Pages) -> Pages {
     Pages(num_hashes.div_ceil(HASH_ENTRIES_IN_PAGE))
 }
 
+/// [`HashTreeLayout`] describes the layout of the hash tree of an `MSIXVC`
+/// file.
+///
+/// The hash tree is used in order to verify the integrity of the remaining
+/// regions of the file. The hash tree levels are stored in order from 3 to 0,
+/// but the levels before 0 are optional. There's no padding between each level.
+///
+/// See [`HashTreeLevel`] for how is each level stored.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HashTreeLayout {
     level3: HashTreeLevel,
