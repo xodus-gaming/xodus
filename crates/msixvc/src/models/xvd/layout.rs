@@ -125,7 +125,7 @@ impl XvdLayout {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HashTreeLevel {
     /// Range of pages that this tree level occupies, relative to the start of
-    /// the hash table.
+    /// the hash tree.
     page_range: Range<Pages>,
     /// The number of hash entries stored in this hash tree level, which is
     /// equal to the number of pages that the hash tree level covers.
@@ -214,7 +214,7 @@ impl ExactSizeIterator for HashTreeLevelRunIterator {}
 /// as the hash would be stored in the XVD header instead.
 fn stored_hashes(hashed_pages: Pages) -> Pages {
     // If the level only covers one page, its hash is stored directly in the
-    // header instead of the hash table.
+    // header instead of the hash tree.
     if hashed_pages == Pages(1) {
         Pages(0)
     } else {
