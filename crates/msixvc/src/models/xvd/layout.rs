@@ -136,10 +136,21 @@ impl HashTreeLevel {
         self.page_range
     }
 
+    /// The number of pages that this hash tree level occupies.
+    pub fn num_pages(&self) -> Pages {
+        self.page_range.end - self.page_range.start
+    }
+
+    /// The number of hash entries stored in this hash tree level. It's equal
+    /// to the number of pages covered by this hash tree level.
     pub fn num_hashes(&self) -> Pages {
         self.num_hashes
     }
 
+    /// Returns an iterator over the "runs" of entries that this hash tree
+    /// level contains.
+    ///
+    /// See [`HashTreeLevelRunIterator`].
     pub fn hash_entry_runs(&self) -> HashTreeLevelRunIterator {
         HashTreeLevelRunIterator {
             num_hashes: self.num_hashes.0,
@@ -290,7 +301,7 @@ mod tests {
     use super::*;
 
     fn assert_level(level: HashTreeLevel, len: Pages, num_hashes: Pages) {
-        assert_eq!(level.page_range.start + len, level.page_range.end);
+        assert_eq!(level.num_pages(), len);
         assert_eq!(level.num_hashes, num_hashes);
     }
 
