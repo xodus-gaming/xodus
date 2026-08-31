@@ -43,6 +43,24 @@ enum SubCommand {
         #[arg(long, default_value_t = false, help = "Remove device license")]
         device: bool,
     },
+    #[command(
+        about = "List titles from the account's real Xbox Live history, with resolved store ids"
+    )]
+    Library {
+        #[arg(short, long)]
+        market: Option<String>,
+        #[arg(long, default_value_t = 30, help = "Maximum number of titles to list")]
+        max_items: usize,
+    },
+    #[command(
+        about = "List the full current PC Game Pass catalog with store ids (no login required)"
+    )]
+    Catalog {
+        #[arg(short, long, default_value = "US")]
+        market: String,
+        #[arg(short, long, default_value = "en-us")]
+        language: String,
+    },
     #[command(about = "Download and extract the game through streaming algorithm")]
     Streaming {
         source: String,
@@ -158,6 +176,12 @@ async fn main() -> ExitCode {
             .await
         }
         SubCommand::Login => commands::login::run(&client, &tokens).await,
+        SubCommand::Library { market, max_items } => {
+            commands::library::run(&client, &tokens, market, max_items).await
+        }
+        SubCommand::Catalog { market, language } => {
+            commands::catalog::run(&client, market, language).await
+        }
         SubCommand::Logout { device } => commands::logout::run(&tokens, device).await,
         SubCommand::Extract {
             path,
