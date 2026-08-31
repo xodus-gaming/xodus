@@ -10,10 +10,10 @@ use typenum::{U2, U4, U8, U16};
 
 use std::marker::PhantomData;
 
-/// Marker type for parsing little-endian integers though [`BinaryParse`].
+/// Marker type for parsing little-endian integers through [`BinaryParse`].
 pub struct Le<T>(PhantomData<T>);
 
-/// Marker type for parsing big-endian integers though [`BinaryParse`].
+/// Marker type for parsing big-endian integers through [`BinaryParse`].
 pub struct Be<T>(PhantomData<T>);
 
 macro_rules! impl_le_be {
