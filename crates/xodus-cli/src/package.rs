@@ -1,15 +1,80 @@
+use std::collections::HashSet;
+use std::fmt::Display;
+
+use futures_util::future::join_all;
 use inquire::Select;
 use xodus::XBOX_LIVE_PACKAGES_PC;
 use xodus::api::displaycatalog::find_products_by_id;
+use xodus::models::displaycatalog::SkuLocalizedProperty;
 use xodus::models::packagespc::{PackageDetails, PackageResponse};
 use xodus::models::secrets::Token;
 use xodus::tokens::TokenManager;
+
+struct BundleCandidate {
+    id: String,
+    title: Option<String>,
+}
+
+impl Display for BundleCandidate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.title {
+            Some(title) => f.write_fmt(format_args!("{} ({})", title, self.id)),
+            None => f.write_str(&self.id),
+        }
+    }
+}
+
+/// Picks the display title out of a SKU's localized properties. Split out from
+/// `resolve_title` so this part of the extraction (as opposed to the network
+/// call around it) can be unit tested directly.
+fn extract_title(localized_properties: &[SkuLocalizedProperty]) -> Option<String> {
+    localized_properties
+        .first()
+        .map(|prop| prop.sku_title.clone())
+}
+
+async fn resolve_title(
+    client: &reqwest::Client,
+    id: &str,
+    market: Option<String>,
+) -> Option<String> {
+    let displaycatalog = find_products_by_id(
+        client,
+        id.to_owned(),
+        market.unwrap_or("neutral".to_owned()),
+        vec!["en".to_string(), "neutral".to_string()],
+    )
+    .await
+    .inspect_err(|err| log::warn!("Failed to resolve title for bundle sub-product {id}: {err}"))
+    .ok()?;
+
+    let availability = displaycatalog.product.display_sku_availabilities.first()?;
+    extract_title(&availability.sku.localized_properties)
+}
 
 pub async fn get_content_id(
     client: &reqwest::Client,
     product: String,
     market: Option<String>,
 ) -> Result<String, Box<dyn std::error::Error>> {
+    get_content_id_impl(client, product, market, &mut HashSet::new()).await
+}
+
+/// `seen` tracks every product id already visited in this resolution chain. A
+/// bundle's sub-products can include the bundle's own id (see #17/#129), and
+/// without this guard selecting that entry would recurse into itself forever.
+async fn get_content_id_impl(
+    client: &reqwest::Client,
+    product: String,
+    market: Option<String>,
+    seen: &mut HashSet<String>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if !seen.insert(product.clone()) {
+        return Err(Box::new(std::io::Error::other(format!(
+            "bundle resolution looped back to an already-visited product id ({product}); refusing to recurse forever"
+        ))));
+    }
+
     let displaycatalog = find_products_by_id(
         client,
         product,
@@ -48,16 +113,28 @@ pub async fn get_content_id(
     }
     subprods.sort();
     subprods.dedup();
+    // Drop anything already visited (e.g. the bundle's own id showing up in
+    // its own sub-product list) before it's even offered as a choice.
+    subprods.retain(|id| !seen.contains(id));
 
     let Some(package) = found_package else {
         if !subprods.is_empty() {
-            let Ok(item) = Select::new("Select files to download", subprods)
+            let candidates = join_all(subprods.into_iter().map(|id| {
+                let market = market.clone();
+                async move {
+                    let title = resolve_title(client, &id, market).await;
+                    BundleCandidate { id, title }
+                }
+            }))
+            .await;
+
+            let Ok(item) = Select::new("Select files to download", candidates)
                 .with_page_size(30)
                 .prompt()
             else {
                 return Err(Box::new(std::io::Error::other("Selection failed")));
             };
-            return Box::pin(get_content_id(client, item, market)).await;
+            return Box::pin(get_content_id_impl(client, item.id, market, seen)).await;
         }
 
         return Err(Box::new(std::io::Error::other(
@@ -112,4 +189,90 @@ pub async fn get_packages(
         )));
     };
     Ok(package)
+}
+
+#[cfg(test)]
+mod tests {
+    use xodus::models::displaycatalog::LegalText;
+
+    use super::*;
+
+    fn sample_localized_property(title: &str) -> SkuLocalizedProperty {
+        SkuLocalizedProperty {
+            contributors: vec![],
+            features: vec![],
+            minimum_notes: String::new(),
+            recommended_notes: String::new(),
+            release_notes: String::new(),
+            display_platform_properties: None,
+            sku_description: String::new(),
+            sku_title: title.to_string(),
+            sku_button_title: String::new(),
+            delivery_date_overlay: None,
+            text_resources: None,
+            legal_text: LegalText {
+                additional_license_terms: String::new(),
+                copyright: String::new(),
+                copyright_uri: String::new(),
+                privacy_policy: String::new(),
+                privacy_policy_uri: String::new(),
+                tou: String::new(),
+                tou_uri: String::new(),
+            },
+            language: String::new(),
+            markets: vec![],
+        }
+    }
+
+    #[test]
+    fn extract_title_returns_first_localized_title() {
+        let properties = vec![sample_localized_property(
+            "Minecraft: Java & Bedrock Edition",
+        )];
+
+        assert_eq!(
+            extract_title(&properties),
+            Some("Minecraft: Java & Bedrock Edition".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_title_returns_none_when_no_localized_properties() {
+        assert_eq!(extract_title(&[]), None);
+    }
+
+    #[test]
+    fn bundle_candidate_displays_title_and_id_when_resolved() {
+        let candidate = BundleCandidate {
+            id: "9NBLGGH2JHXJ".to_string(),
+            title: Some("Minecraft: Bedrock Edition".to_string()),
+        };
+
+        assert_eq!(
+            candidate.to_string(),
+            "Minecraft: Bedrock Edition (9NBLGGH2JHXJ)"
+        );
+    }
+
+    #[test]
+    fn bundle_candidate_displays_bare_id_when_title_unresolved() {
+        let candidate = BundleCandidate {
+            id: "9NBLGGH2JHXJ".to_string(),
+            title: None,
+        };
+
+        assert_eq!(candidate.to_string(), "9NBLGGH2JHXJ");
+    }
+
+    #[tokio::test]
+    async fn refuses_to_recurse_into_an_already_visited_product_id() {
+        let client = reqwest::Client::new();
+        let mut seen = HashSet::from(["9NXP44L49SHJ".to_string()]);
+
+        let error = get_content_id_impl(&client, "9NXP44L49SHJ".to_string(), None, &mut seen)
+            .await
+            .unwrap_err();
+
+        assert!(error.to_string().contains("already-visited"));
+    }
 }
