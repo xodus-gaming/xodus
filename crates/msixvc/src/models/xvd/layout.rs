@@ -1,6 +1,13 @@
 use super::XvdHeader;
 use crate::layout::{Bytes, PAGE_SIZE, Pages};
 
+pub const HASH_ENTRY_LENGTH: usize = 0x18;
+pub const HASH_ENTRIES_IN_PAGE: u32 = (PAGE_SIZE / HASH_ENTRY_LENGTH) as u32;
+
+/// Maximum number of pages that the hash tree may cover.
+pub const MAX_HASHED_PAGES: Pages = Pages(HASH_ENTRIES_IN_PAGE.pow(4));
+pub const MAX_HASHED_BYTES: Bytes = MAX_HASHED_PAGES.to_bytes();
+
 #[derive(Clone, Copy, Debug)]
 pub struct XvdSection {
     pub start: Pages,

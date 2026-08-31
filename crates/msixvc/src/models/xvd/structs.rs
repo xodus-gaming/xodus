@@ -1,3 +1,4 @@
+use super::layout::MAX_HASHED_BYTES;
 use super::{
     WriteablePolicyFlags, XVD_HEADER_INCL_SIGNATURE_SIZE, XvcInfoFlags, XvcRegionFlags,
     XvcRegionId, XvcRegionPresenceInfoFlags, XvdContentType, XvdSegmentMetadataSegmentFlags,
@@ -78,6 +79,9 @@ pub enum XvdHeaderParseError {
 
     #[error("invalid xvd content type: {0}")]
     InvalidXvdContentType(#[from] TryFromPrimitiveError<XvdContentType>),
+
+    #[error("too large drive size: {drive_size:?}, the maximum is {MAX_HASHED_BYTES:?}")]
+    TooLargeDriveSize { drive_size: Bytes },
 }
 
 impl BinaryTryParse for XvdHeader {
@@ -96,6 +100,11 @@ impl BinaryTryParse for XvdHeader {
         let (format_version, r) = r.read::<U32>();
         let (file_time_created, r) = r.read::<Filetime>();
         let (drive_size, r) = r.read::<U64>();
+
+        let drive_size = Bytes(drive_size);
+        if drive_size > MAX_HASHED_BYTES {
+            return Err(Self::Error::TooLargeDriveSize { drive_size });
+        }
 
         let (vduid, r) = r.read::<Uuid>();
         let (uduid, r) = r.read::<Uuid>();
@@ -151,7 +160,7 @@ impl BinaryTryParse for XvdHeader {
                 volume_flags,
                 format_version,
                 file_time_created,
-                drive_size: Bytes(drive_size),
+                drive_size,
                 vduid,
                 uduid,
                 top_hash_block_hash,
