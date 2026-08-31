@@ -70,34 +70,42 @@ impl XvdHeader {
 }
 
 impl XvdLayout {
+    #[inline]
     pub fn header(&self) -> XvdSection {
         self.header
     }
 
+    #[inline]
     pub fn embedded_xvd(&self) -> XvdSection {
         self.embedded_xvd
     }
 
+    #[inline]
     pub fn mutable_data(&self) -> XvdSection {
         self.mutable_data
     }
 
+    #[inline]
     pub fn hash_tree(&self) -> (XvdSection, HashTreeLayout) {
         self.hash_tree
     }
 
+    #[inline]
     pub fn user_data(&self) -> XvdSection {
         self.user_data
     }
 
+    #[inline]
     pub fn xvc_info(&self) -> XvdSection {
         self.xvc_info
     }
 
+    #[inline]
     pub fn dynamic_header(&self) -> XvdSection {
         self.dynamic_header
     }
 
+    #[inline]
     pub fn drive_data(&self) -> XvdSection {
         self.drive_data
     }
@@ -132,17 +140,20 @@ pub struct HashTreeLevel {
 }
 
 impl HashTreeLevel {
+    #[inline]
     pub fn page_range(&self) -> Range<Pages> {
         self.page_range
     }
 
     /// The number of pages that this hash tree level occupies.
+    #[inline]
     pub fn num_pages(&self) -> Pages {
         self.page_range.end - self.page_range.start
     }
 
     /// The number of hash entries stored in this hash tree level. It's equal
     /// to the number of pages covered by this hash tree level.
+    #[inline]
     pub fn num_hashes(&self) -> Pages {
         self.num_hashes
     }
@@ -151,6 +162,7 @@ impl HashTreeLevel {
     /// level contains.
     ///
     /// See [`HashTreeLevelRunIterator`].
+    #[inline]
     pub fn hash_entry_runs(&self) -> HashTreeLevelRunIterator {
         HashTreeLevelRunIterator {
             num_hashes: self.num_hashes.0,
@@ -174,6 +186,7 @@ impl Iterator for HashTreeLevelRunIterator {
     // less than `u8::MAX`
     type Item = u8;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.num_hashes == 0 {
             return None;
@@ -184,6 +197,7 @@ impl Iterator for HashTreeLevelRunIterator {
         Some(run_hashes as u8)
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         let runs = self.num_hashes.div_ceil(HASH_ENTRIES_IN_PAGE) as usize;
         (runs, Some(runs))
@@ -275,22 +289,27 @@ impl HashTreeLayout {
     }
 
     /// Returns the length of the hash tree section (in `Pages`).
+    #[inline]
     pub fn pages(&self) -> Pages {
         self.level0.page_range.end
     }
 
+    #[inline]
     pub fn level3(&self) -> HashTreeLevel {
         self.level3
     }
 
+    #[inline]
     pub fn level2(&self) -> HashTreeLevel {
         self.level2
     }
 
+    #[inline]
     pub fn level1(&self) -> HashTreeLevel {
         self.level1
     }
 
+    #[inline]
     pub fn level0(&self) -> HashTreeLevel {
         self.level0
     }
