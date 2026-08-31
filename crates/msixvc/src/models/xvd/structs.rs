@@ -699,13 +699,6 @@ impl XvdHeader {
         self.drive_size.to_page_count()
     }
 
-    pub fn number_of_hashed_pages(&self) -> Pages {
-        self.drive_page_count()
-            + self.user_data_page_count()
-            + self.xvc_data_page_count()
-            + self.dynamic_header_page_count()
-    }
-
     pub fn number_of_metadata_pages(&self) -> Pages {
         self.user_data_page_count() + self.xvc_data_page_count() + self.dynamic_header_page_count()
     }

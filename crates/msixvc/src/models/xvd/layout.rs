@@ -31,6 +31,13 @@ pub struct XvdLayout {
 }
 
 impl XvdHeader {
+    pub fn number_of_hashed_pages(&self) -> Pages {
+        self.user_data_length.to_page_count()
+            + self.xvc_data_length.to_page_count()
+            + self.dynamic_header_length.to_page_count()
+            + self.drive_size.to_page_count()
+    }
+
     pub fn layout(&self) -> XvdLayout {
         let mut current_page = Pages(0);
         let mut next_section = |len: Bytes| -> XvdSection {
@@ -45,7 +52,7 @@ impl XvdHeader {
         // Calculate the layout of the hash tree first because it's the only
         // section whose length can't be accessed directly, but has to be
         // calculated.
-        let hash_tree_layout = HashTreeLayout::new(self.drive_size.to_page_count());
+        let hash_tree_layout = HashTreeLayout::new(self.number_of_hashed_pages());
 
         let header_section = next_section(Bytes(PAGE_SIZE as u64 * 3));
         let embedded_xvd = next_section(self.embedded_xvd_length);
