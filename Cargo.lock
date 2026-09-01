@@ -3227,8 +3227,11 @@ dependencies = [
 name = "msixvc-common"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "bitflags 2.13.1",
+ "bytes",
  "chrono",
+ "clap",
  "generic-array 1.4.5",
  "num_enum",
  "thiserror 2.0.20",
