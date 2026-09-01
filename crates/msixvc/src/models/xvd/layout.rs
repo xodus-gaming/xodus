@@ -2,7 +2,9 @@ use super::XvdHeader;
 use crate::layout::{Bytes, PAGE_SIZE, Pages};
 
 use std::cmp;
+use std::fmt::{self, Debug};
 use std::iter::FusedIterator;
+use std::marker::PhantomData;
 use std::range::Range;
 
 pub const HASH_ENTRY_LENGTH: usize = 0x18;
@@ -11,10 +13,27 @@ pub const HASH_ENTRIES_IN_PAGE: u32 = (PAGE_SIZE / HASH_ENTRY_LENGTH) as u32;
 /// Maximum number of pages that the hash tree may cover.
 pub const MAX_HASHED_PAGES: Pages = Pages(HASH_ENTRIES_IN_PAGE.pow(4));
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+// Multiple structs in this module have a `marker: PhantomData<()>` field
+// because all its fields are public, but we don't want to allow instantiating
+// those structs from outside the current module.
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct XvdSection {
     pub start: Pages,
     pub len: Bytes,
+
+    // Disallow instantiating the struct.
+    marker: PhantomData<()>,
+}
+
+// The `Debug` impl is needed to avoid polluting the output with the `marker` field.
+impl Debug for XvdSection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("XvdSection")
+            .field("start", &self.start)
+            .field("len", &self.len)
+            .finish()
+    }
 }
 
 /// [`XvdLayout`] describes the layout of an `MSIXVC` file.
@@ -25,22 +44,43 @@ pub struct XvdSection {
 /// 1. [`Self::header`]
 /// 2. [`Self::embedded_xvd`]
 /// 3. [`Self::mutable_data`]
-/// 4. [`Self::hash_tree`]
+/// 4. [`Self::hash_tree`]: its layout can be accessed via [`Self::hash_tree_layout`]
 /// 5. [`Self::user_data`]
 /// 6. [`Self::xvc_info`]
 /// 7. [`Self::dynamic_header`]
 /// 8. [`Self::drive_data`]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct XvdLayout {
     // It is guaranteed that no sections overlap.
-    header: XvdSection,
-    embedded_xvd: XvdSection,
-    mutable_data: XvdSection,
-    hash_tree: (XvdSection, HashTreeLayout),
-    user_data: XvdSection,
-    xvc_info: XvdSection,
-    dynamic_header: XvdSection,
-    drive_data: XvdSection,
+    pub header: XvdSection,
+    pub embedded_xvd: XvdSection,
+    pub mutable_data: XvdSection,
+    pub hash_tree: XvdSection,
+    pub hash_tree_layout: HashTreeLayout,
+    pub user_data: XvdSection,
+    pub xvc_info: XvdSection,
+    pub dynamic_header: XvdSection,
+    pub drive_data: XvdSection,
+
+    // Disallow instantiating the struct.
+    marker: PhantomData<()>,
+}
+
+// The `Debug` impl is needed to avoid polluting the output with the `marker` field.
+impl Debug for XvdLayout {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("XvdLayout")
+            .field("header", &self.header)
+            .field("embedded_xvd", &self.embedded_xvd)
+            .field("mutable_data", &self.mutable_data)
+            .field("hash_tree", &self.hash_tree)
+            .field("hash_tree_layout", &self.hash_tree_layout)
+            .field("user_data", &self.user_data)
+            .field("xvc_info", &self.xvc_info)
+            .field("dynamic_header", &self.dynamic_header)
+            .field("drive_data", &self.drive_data)
+            .finish()
+    }
 }
 
 impl XvdHeader {
@@ -57,6 +97,7 @@ impl XvdHeader {
             let section = XvdSection {
                 start: current_page,
                 len,
+                marker: PhantomData,
             };
             current_page += len.to_page_count();
             section
@@ -82,54 +123,14 @@ impl XvdHeader {
             header: header_section,
             embedded_xvd,
             mutable_data,
-            hash_tree: (hash_tree, hash_tree_layout),
+            hash_tree,
+            hash_tree_layout,
             user_data,
             xvc_info,
             dynamic_header,
             drive_data,
+            marker: PhantomData,
         }
-    }
-}
-
-impl XvdLayout {
-    #[inline]
-    pub fn header(&self) -> XvdSection {
-        self.header
-    }
-
-    #[inline]
-    pub fn embedded_xvd(&self) -> XvdSection {
-        self.embedded_xvd
-    }
-
-    #[inline]
-    pub fn mutable_data(&self) -> XvdSection {
-        self.mutable_data
-    }
-
-    #[inline]
-    pub fn hash_tree(&self) -> (XvdSection, HashTreeLayout) {
-        self.hash_tree
-    }
-
-    #[inline]
-    pub fn user_data(&self) -> XvdSection {
-        self.user_data
-    }
-
-    #[inline]
-    pub fn xvc_info(&self) -> XvdSection {
-        self.xvc_info
-    }
-
-    #[inline]
-    pub fn dynamic_header(&self) -> XvdSection {
-        self.dynamic_header
-    }
-
-    #[inline]
-    pub fn drive_data(&self) -> XvdSection {
-        self.drive_data
     }
 }
 
@@ -144,11 +145,11 @@ impl XvdLayout {
 /// The number of hash entries in each "run" can be retrieved via
 /// [`Self::hash_entry_runs`]. See [`HashTreeLevelRunIterator`] for more
 /// information on how to parse the runs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct HashTreeLevel {
     /// Range of pages that this tree level occupies, relative to the start of
     /// the hash tree.
-    page_range: Range<Pages>,
+    pub page_range: Range<Pages>,
     /// The number of hash entries stored in this hash tree level, which is
     /// equal to the number of pages that the hash tree level covers.
     ///
@@ -158,26 +159,27 @@ pub struct HashTreeLevel {
     /// - For levels 1-3: `0` or `2..` (the other levels can't contain only one
     ///   hash entry, because when there's only one entry it goes in the header
     ///   instead).
-    num_hashes: Pages,
+    pub num_hashes: Pages,
+
+    // Disallow instantiating the struct.
+    marker: PhantomData<()>,
+}
+
+// The `Debug` impl is needed to avoid polluting the output with the `marker` field.
+impl Debug for HashTreeLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HashTreeLevel")
+            .field("page_range", &self.page_range)
+            .field("num_hashes", &self.num_hashes)
+            .finish()
+    }
 }
 
 impl HashTreeLevel {
-    #[inline]
-    pub fn page_range(&self) -> Range<Pages> {
-        self.page_range
-    }
-
     /// The number of pages that this hash tree level occupies.
     #[inline]
     pub fn num_pages(&self) -> Pages {
         self.page_range.end - self.page_range.start
-    }
-
-    /// The number of hash entries stored in this hash tree level. It's equal
-    /// to the number of pages covered by this hash tree level.
-    #[inline]
-    pub fn num_hashes(&self) -> Pages {
-        self.num_hashes
     }
 
     /// Returns an iterator over the "runs" of entries that this hash tree
@@ -259,12 +261,27 @@ fn hash_tree_level_pages(hashed_pages: Pages) -> Pages {
 /// but the levels before 0 are optional. There's no padding between each level.
 ///
 /// See [`HashTreeLevel`] for how is each level stored.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct HashTreeLayout {
-    level3: HashTreeLevel,
-    level2: HashTreeLevel,
-    level1: HashTreeLevel,
-    level0: HashTreeLevel,
+    pub level3: HashTreeLevel,
+    pub level2: HashTreeLevel,
+    pub level1: HashTreeLevel,
+    pub level0: HashTreeLevel,
+
+    // Disallow instantiating the struct.
+    marker: PhantomData<()>,
+}
+
+// The `Debug` impl is needed to avoid polluting the output with the `marker` field.
+impl Debug for HashTreeLayout {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HashTreeLayout")
+            .field("level3", &self.level3)
+            .field("level2", &self.level2)
+            .field("level1", &self.level1)
+            .field("level0", &self.level0)
+            .finish()
+    }
 }
 
 impl HashTreeLayout {
@@ -291,16 +308,19 @@ impl HashTreeLayout {
         let level3 = HashTreeLevel {
             page_range: range(Pages(0), level3_pages),
             num_hashes: stored_hashes(level2_pages),
+            marker: PhantomData,
         };
 
         let level2 = HashTreeLevel {
             page_range: range(level3.page_range.end, level2_pages),
             num_hashes: stored_hashes(level1_pages),
+            marker: PhantomData,
         };
 
         let level1 = HashTreeLevel {
             page_range: range(level2.page_range.end, level1_pages),
             num_hashes: stored_hashes(level0_pages),
+            marker: PhantomData,
         };
 
         let level0 = HashTreeLevel {
@@ -308,6 +328,7 @@ impl HashTreeLayout {
             // Don't use `stored_hashes` here, as the level 0 hash tree always
             // contains at least one entry.
             num_hashes: drive_data_pages,
+            marker: PhantomData,
         };
 
         HashTreeLayout {
@@ -315,6 +336,7 @@ impl HashTreeLayout {
             level2,
             level1,
             level0,
+            marker: PhantomData,
         }
     }
 
@@ -322,26 +344,6 @@ impl HashTreeLayout {
     #[inline]
     pub fn pages(&self) -> Pages {
         self.level0.page_range.end
-    }
-
-    #[inline]
-    pub fn level3(&self) -> HashTreeLevel {
-        self.level3
-    }
-
-    #[inline]
-    pub fn level2(&self) -> HashTreeLevel {
-        self.level2
-    }
-
-    #[inline]
-    pub fn level1(&self) -> HashTreeLevel {
-        self.level1
-    }
-
-    #[inline]
-    pub fn level0(&self) -> HashTreeLevel {
-        self.level0
     }
 }
 
