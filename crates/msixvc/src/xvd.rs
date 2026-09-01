@@ -21,6 +21,7 @@ use zerocopy::IntoBytes;
 use crate::crypt::{TweakGenerator, decrypt_page_xts};
 use crate::layout::{Bytes, PAGE_SIZE, PAGES_PER_BLOCK, Pages};
 use crate::math::calculate_hash_block_num_and_run_for_block_num;
+use crate::models::xvd::layout::XvdLayout;
 use crate::models::xvd::{
     XvcInfo, XvcRegionHeader, XvcRegionId, XvdHashEntry, XvdHeader, XvdSegmentMetadataHeader,
     XvdSegmentMetadataSegment, XvdSegmentMetadataSegmentFlags, XvdUserDataHeader,
@@ -271,9 +272,8 @@ impl<R> Write for XvdStream<R> {
 }
 pub struct XvdFile {
     header: XvdHeader,
-    drive_data_offset: u64,
+    layout: XvdLayout,
     encrypted_section_infos: Vec<EncryptedSectionInfo>,
-    user_data_offset: u64,
 }
 
 #[derive(Debug)]
@@ -348,15 +348,13 @@ impl XvdFile {
             XvdHeader::try_from_array(&buf)?
         };
 
-        let mdu_offset = xvd_header.mdu_offset();
-        let (_hash_tree_levels, hash_tree_page_count) = xvd_header.hash_tree_info();
-        let xvc_info_offset = xvd_header.xvc_info_offset(hash_tree_page_count);
+        let layout = xvd_header.layout();
 
         let mut region_headers: Vec<XvcRegionHeader> = Vec::new();
 
         // TODO: Check if we have proper content type
-        if xvd_header.xvc_data_length > Bytes(0) {
-            file.seek(std::io::SeekFrom::Start(xvc_info_offset.0))
+        if layout.xvc_info.len > Bytes(0) {
+            file.seek(std::io::SeekFrom::Start(layout.xvc_info.start.to_bytes().0))
                 .await
                 .expect("Unable to seek");
 
@@ -378,17 +376,6 @@ impl XvdFile {
             }
         }
 
-        let hash_tree_offset = xvd_header.mutable_data_length() + mdu_offset;
-        let user_data_offset = if xvd_header.volume_flags.is_data_integrity_enabled() {
-            xvd_header.hash_tree_info().1.to_bytes()
-        } else {
-            Bytes(0)
-        } + hash_tree_offset;
-        let xvc_info_offset = xvd_header.user_data_page_count().to_bytes() + user_data_offset;
-        let dynamic_header_offset = xvd_header.xvc_data_page_count().to_bytes() + xvc_info_offset;
-        let drive_data_offset =
-            xvd_header.dynamic_header_page_count().to_bytes() + dynamic_header_offset;
-
         let mut enc_sections: Vec<EncryptedSectionInfo> = vec![];
         let mut reader = BufReader::with_capacity(PAGES_PER_BLOCK * XvdHashEntry::SIZE, file);
         for h in region_headers {
@@ -400,7 +387,7 @@ impl XvdFile {
                 Some(n) => todo!("KeyID other than 0 or unencrypted is not supported, found {n}"),
             }
 
-            let start_page = h.offset - user_data_offset.to_page_index();
+            let start_page = h.offset - layout.user_data.start;
             let mut data_units: Vec<u32> = Vec::with_capacity(num_pages as usize);
             let mut data_hashs: Vec<[u8; 20]> = Vec::with_capacity(num_pages as usize);
 
@@ -412,7 +399,7 @@ impl XvdFile {
                 let (hash_block, entry_start, run_length) =
                     calculate_hash_block_num_and_run_for_block_num(
                         xvd_header.xvd_type as u32,
-                        _hash_tree_levels,
+                        layout.hash_tree_layout.top_level() as u64 + 1,
                         xvd_header.number_of_hashed_pages(),
                         start_page.0 + page,
                         0,
@@ -421,7 +408,7 @@ impl XvdFile {
                     );
                 let run_length = min(run_length, num_pages - page);
                 page += run_length;
-                let read_offset = hash_tree_offset
+                let read_offset = layout.hash_tree.start.to_bytes()
                     + Pages(hash_block).to_bytes()
                     + Bytes(entry_start as u64 * XvdHashEntry::SIZE as u64);
                 reader.seek(SeekFrom::Start(read_offset.0)).await?;
@@ -447,9 +434,8 @@ impl XvdFile {
         }
         Ok(XvdFile {
             header: xvd_header,
-            drive_data_offset: drive_data_offset.0,
+            layout,
             encrypted_section_infos: enc_sections,
-            user_data_offset: user_data_offset.0,
         })
     }
 
@@ -462,7 +448,7 @@ impl XvdFile {
     {
         let mut files = HashMap::new();
 
-        let user_data_offset = self.user_data_offset;
+        let user_data_offset = self.layout.user_data.start.0 as u64;
         file.seek(SeekFrom::Start(user_data_offset)).await?;
         let user_data_header = {
             let mut buf = XvdUserDataHeader::buffer();
@@ -652,7 +638,7 @@ impl XvdFile {
     where
         Reader: AsyncRead + AsyncSeek + Unpin,
     {
-        let drive_data_offset = self.drive_data_offset;
+        let drive_data_offset = self.layout.drive_data.start.to_bytes().0;
         let drive_size = self.header.drive_size;
         let drive_plain_len = self.non_encrypted_prefix_len(drive_data_offset, drive_size.0);
 
