@@ -182,6 +182,12 @@ impl HashTreeLevel {
         self.page_range.end - self.page_range.start
     }
 
+    /// Returns whether this hash tree level is the top-most one.
+    #[inline]
+    pub fn is_top(&self) -> bool {
+        self.num_hashes.0 > 0 && self.num_hashes.0 <= HASH_ENTRIES_IN_PAGE
+    }
+
     /// Returns an iterator over the "runs" of entries that this hash tree
     /// level contains.
     ///
