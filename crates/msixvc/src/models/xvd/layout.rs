@@ -137,7 +137,7 @@ impl XvdHeader {
 /// The layout of a hash tree level.
 ///
 /// Each hash tree level contains the hashes of the pages of the level below it.
-/// For the level 0 it contains the hashes of the pages of the drive data.
+/// For the level 0 it contains the hashes of the pages of the actual data.
 ///
 /// Because the size of each hash entry (24 bytes) is not divisible by
 /// `PAGE_SIZE`, the last 16 bytes of each page are zeroes. For that reason,
@@ -285,13 +285,13 @@ impl Debug for HashTreeLayout {
 }
 
 impl HashTreeLayout {
-    /// `drive_data_pages` must be in the range `1..MAX_HASHED_PAGES`.
-    fn new(drive_data_pages: Pages) -> HashTreeLayout {
-        assert!(drive_data_pages > Pages(0));
-        assert!(drive_data_pages <= MAX_HASHED_PAGES);
+    /// `hashed_pages` must be in the range `1..MAX_HASHED_PAGES`.
+    fn new(hashed_pages: Pages) -> HashTreeLayout {
+        assert!(hashed_pages > Pages(0));
+        assert!(hashed_pages <= MAX_HASHED_PAGES);
 
-        // The level 0 hash tree must always exist, even when there's a single drive data page.
-        let level0_pages = cmp::max(hash_tree_level_pages(drive_data_pages), Pages(1));
+        // The level 0 hash tree must always exist, even when there's a single hashed page.
+        let level0_pages = cmp::max(hash_tree_level_pages(hashed_pages), Pages(1));
         let level1_pages = hash_tree_level_pages(level0_pages);
         let level2_pages = hash_tree_level_pages(level1_pages);
         let level3_pages = hash_tree_level_pages(level2_pages);
@@ -327,7 +327,7 @@ impl HashTreeLayout {
             page_range: range(level1.page_range.end, level0_pages),
             // Don't use `stored_hashes` here, as the level 0 hash tree always
             // contains at least one entry.
-            num_hashes: drive_data_pages,
+            num_hashes: hashed_pages,
             marker: PhantomData,
         };
 
