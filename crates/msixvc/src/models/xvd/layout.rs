@@ -351,6 +351,18 @@ impl HashTreeLayout {
     pub fn pages(&self) -> Pages {
         self.level0.page_range.end
     }
+
+    /// Returns the index of the top-most hash tree level.
+    ///
+    /// Add one to get the number of levels in the hash tree.
+    #[inline]
+    pub fn top_level(&self) -> u8 {
+        [self.level0, self.level1, self.level2, self.level3]
+            .into_iter()
+            .position(|l| l.is_top())
+            .map(|n| n as u8)
+            .expect("level 0 must contain at least one hash entry")
+    }
 }
 
 #[cfg(test)]
