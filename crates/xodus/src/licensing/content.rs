@@ -4,7 +4,6 @@ use base64::prelude::*;
 use xal::cvlib::CorrelationVector;
 //use xal::extensions::CorrelationVectorReqwestBuilder;
 
-use crate::licensing::error::Error;
 use crate::licensing::utils;
 use crate::models::devicecredential::License;
 use crate::models::licensing::{
