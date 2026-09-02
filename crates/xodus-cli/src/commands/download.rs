@@ -50,7 +50,7 @@ pub async fn run(
         })
         .prompt()
     else {
-        log::error!("Selection failed");
+        tracing::error!("Selection failed");
         return ExitCode::FAILURE;
     };
     println!();

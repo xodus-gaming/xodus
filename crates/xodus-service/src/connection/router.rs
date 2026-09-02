@@ -14,7 +14,7 @@ pub async fn route(
     tokens: Arc<TokenManager>,
 ) {
     let cred = socket.peer_cred().ok().and_then(|cred| cred.pid());
-    log::debug!("Connection from pid {cred:?}");
+    tracing::debug!("Connection from pid {cred:?}");
 
     let mut context = SimpleContext::new(device_token, tokens);
     loop {
@@ -24,7 +24,7 @@ pub async fn route(
         }
         let read = socket.read_exact(&mut read_magic).await;
         if let Err(err) = read {
-            log::error!("Failed to read magic: {err:?}");
+            tracing::error!("Failed to read magic: {err:?}");
             return;
         }
 
@@ -33,13 +33,13 @@ pub async fn route(
             crate::XML_MAGIC => super::xml::handle(&mut socket, &mut context).await,
             crate::PROTO_MAGIC => super::proto::handle(&mut socket, &mut context).await,
             _ => {
-                log::error!("Unknown magic");
+                tracing::error!("Unknown magic");
                 return;
             }
         };
 
         if let Err(err) = res {
-            log::error!("There was an error handling the message: {err}");
+            tracing::error!("There was an error handling the message: {err}");
         }
     }
 }

@@ -9,12 +9,12 @@ tokio = { workspace = true }
 reqwest = { workspace = true }
 serde = { version = "1.0.229", features = ["derive"] }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 chrono = { workspace = true }
 base64 = { workspace = true }
 uuid = { workspace = true }
 serde_json = "1.0.151"
 quick-xml = { version = "0.42.0", features = ["serialize", "overlapped-lists"] }
-log = "0.4.34"
 rand = "0.10.2"
 aes = "0.9.2"
 keyring-core = { version = "1.0.0", features = ["sample"] }

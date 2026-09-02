@@ -47,7 +47,7 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Rs
 
     match magic {
         RSAFULLPRIVATE_MAGIC => {
-            log::trace!("Got RSA Full Private");
+            tracing::trace!("Got RSA Full Private");
             // read d after p and q
             let (_d_nb, d_bytes) = take(cb_mod);
             let d_rsa = RsaBigUint::from_bytes_be(&d_bytes);
@@ -55,7 +55,7 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Rs
             RsaPrivateKey::from_components(n_rsa, e_rsa, d_rsa, vec![p_rsa, q_rsa])
         }
         RSAPRIVATE_MAGIC => {
-            log::trace!("Got RSA Private");
+            tracing::trace!("Got RSA Private");
             // No d in the blob — recompute it.
             let one = NbBigUint::from(1u32);
             let p1 = &p_nb - &one;

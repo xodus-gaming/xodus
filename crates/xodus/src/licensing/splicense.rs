@@ -332,11 +332,11 @@ impl SPLicense {
                 | BlockId::UnkBlock4
                 | BlockId::UnkBlock5,
             ) => {
-                log::warn!("Unknown block in SPLicense");
+                tracing::warn!("Unknown block in SPLicense");
                 let _unknown = read_vec(&mut reader, size)?;
             }
             _ => {
-                log::warn!("Unknown block in SPLicense");
+                tracing::warn!("Unknown block in SPLicense");
                 let _unknown = read_vec(&mut reader, size)?;
             }
         }

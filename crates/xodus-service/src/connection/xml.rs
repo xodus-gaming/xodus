@@ -12,19 +12,19 @@ pub async fn handle(
     socket: &mut tokio::net::UnixStream,
     context: &mut SimpleContext,
 ) -> tokio::io::Result<()> {
-    log::debug!("Parsing XML");
+    tracing::debug!("Parsing XML");
     let message_type = socket.read_u16_le().await?;
     let message_size = socket.read_u16_le().await?;
     let mut buffer = vec![0; message_size as usize];
-    log::debug!("Reading buffer {message_size}");
+    tracing::debug!("Reading buffer {message_size}");
     socket.read_exact(&mut buffer).await?;
-    log::debug!("Read buffer");
+    tracing::debug!("Read buffer");
     let message_type = XodusMessageType::try_from(message_type as i32).unwrap_or_default();
 
     let out_buf = match parse_message(context, message_type, buffer).await {
         Ok(buf) => buf,
         Err(err) => {
-            log::error!("Failed parsing message: {err}");
+            tracing::error!("Failed parsing message: {err}");
             vec![]
         }
     };
@@ -41,9 +41,9 @@ pub async fn parse_message(
     match message_type {
         XodusMessageType::Ping => Ok(buffer),
         XodusMessageType::MsaTokenRequest => {
-            log::debug!("Raw buffer: {buffer:?}");
+            tracing::debug!("Raw buffer: {buffer:?}");
             let string_buf = std::str::from_utf8(&buffer)?;
-            log::debug!("String buffer: {string_buf:?}");
+            tracing::debug!("String buffer: {string_buf:?}");
             let req = quick_xml::de::from_str::<MSATokenRequest>(string_buf)?;
             let Token::Legacy(token) = context.tokens().get_user_sts_token()? else {
                 return Ok(vec![]);
@@ -104,7 +104,7 @@ pub async fn parse_message(
                             address
                         };
                         if let Err(err) = context.tokens().save_user_token(address, sts) {
-                            log::warn!("Failed to persist refreshed STS token: {err}");
+                            tracing::warn!("Failed to persist refreshed STS token: {err}");
                         }
                     }
                     let token = collection.security_tokens.remove(0);

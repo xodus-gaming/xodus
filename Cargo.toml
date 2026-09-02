@@ -7,8 +7,11 @@ base64 = { version = "0.23.1" }
 chrono = "0.4.45"
 reqwest = { version = "0.13.4", features = ["json", "stream"] }
 thiserror = "2.0.20"
-tokio = { version = "1.53.1", features = ["full"] }
+tokio = { version = "1.53.1", features = ["full", "tracing"] }
 uuid = "1.25.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+console-subscriber = "0.5"
 
 [patch.crates-io]
 ntfs = { git = "https://github.com/xodus-gaming/ntfs.git" }

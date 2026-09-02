@@ -16,7 +16,7 @@ impl<'a> RSTRequest<'a> {
         self,
         client: &reqwest::Client,
     ) -> Result<soap::Envelope, super::RSTError> {
-        log::trace!("Making RST2.srf request");
+        tracing::trace!("Making RST2.srf request");
         let response = client
         .post("https://login.live.com/RST2.srf")
         .header("User-Agent", "MSAWindows/55 (OS 10.0.26100.0.0 ge_release; IDK 10.0.26100.5074 ge_release; Cfg 16.000.29325.00; Test 0)")
@@ -39,10 +39,10 @@ fn verify_and_decrypt_envelope<'a>(
     mut envelope: soap::Envelope,
 ) -> Result<soap::Envelope, super::RSTError> {
     let Some(signature) = signature else {
-        log::debug!("No signature, returning raw envelope");
+        tracing::debug!("No signature, returning raw envelope");
         return Ok(envelope);
     };
-    log::trace!("Decrypting soap::Envelope");
+    tracing::trace!("Decrypting soap::Envelope");
     let nonces: HashMap<String, String> = envelope
         .header
         .security
@@ -66,14 +66,14 @@ fn verify_and_decrypt_envelope<'a>(
             bergshamra::VerifyResult::Invalid { reason } => {
                 return Err(super::RSTError::InvalidResponseSignature(reason));
             }
-            bergshamra::VerifyResult::Valid { .. } => log::debug!("Verification successful"),
+            bergshamra::VerifyResult::Valid { .. } => tracing::debug!("Verification successful"),
         }
     }
 
     if envelope.header.pp.is_none()
         && let Some(enc_pp) = envelope.header.encrypted_pp.take()
     {
-        log::trace!("Decrypting soap::PP");
+        tracing::trace!("Decrypting soap::PP");
         let pp = utils::decrypt_soap_encrypted_data(
             Box::new(enc_pp.encrypted_data),
             &signature,
@@ -83,7 +83,7 @@ fn verify_and_decrypt_envelope<'a>(
     }
 
     if let soap::BodyContent::EncryptedData(enc_data) = envelope.body.body {
-        log::trace!("Decrypting soap::Body");
+        tracing::trace!("Decrypting soap::Body");
         envelope.body.body = utils::decrypt_soap_encrypted_data(enc_data, &signature, &nonces)?;
     }
 

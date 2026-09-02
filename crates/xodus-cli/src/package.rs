@@ -66,7 +66,7 @@ pub async fn get_content_id(
     };
 
     let Some(content_id) = &package.content_id else {
-        log::error!("ContentId not found, if you believe this is an error, please report it");
+        tracing::error!("ContentId not found, if you believe this is an error, please report it");
         return Err(Box::new(std::io::Error::other(
             "ContentId not found, if you believe this is an error, please report it",
         )));

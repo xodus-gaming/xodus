@@ -112,7 +112,10 @@ struct CliArgs {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    env_logger::init_from_env("XODUS_LOG");
+    #[cfg(feature = "tokio_console")]
+    console_subscriber::init();
+    #[cfg(not(feature = "tokio_console"))]
+    tracing_subscriber::fmt::init();
     let client = reqwest::ClientBuilder::new()
         .user_agent(format!("xodus-cli/{}", env!("CARGO_PKG_VERSION")))
         .connection_verbose(true)

@@ -147,7 +147,7 @@ pub async fn do_sisu(
             address
         };
         if let Err(err) = manager.save_user_token(address, sts) {
-            log::warn!("Failed to persist refreshed STS token: {err}");
+            tracing::warn!("Failed to persist refreshed STS token: {err}");
         }
     }
     let token: soap::RequestSecurityTokenResponse = collection.security_tokens.remove(0);

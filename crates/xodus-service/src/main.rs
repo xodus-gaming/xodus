@@ -15,6 +15,11 @@ const PROTO_MAGIC: u32 = 0x58445350;
 
 #[tokio::main]
 async fn main() {
+    #[cfg(feature = "tokio_console")]
+    console_subscriber::init();
+    #[cfg(not(feature = "tokio_console"))]
+    tracing_subscriber::fmt::init();
+
     xodus::secrets::init_secrets().expect("Failed to init keychain");
     let tokens = Arc::new(TokenManager::with_keychain_and_memory());
     xodus::tokens::device::ensure_device_credentials(&reqwest::Client::new(), &tokens).await;
@@ -24,7 +29,6 @@ async fn main() {
         panic!("Device token isnt legacy")
     };
 
-    env_logger::init_from_env("XODUS_LOG");
     let runtime_dir = utils::get_runtime_dir();
     let cancellation = CancellationToken::new();
     let socket_path = format!("{runtime_dir}/xodus.sock");

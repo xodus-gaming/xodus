@@ -8,7 +8,7 @@ pub async fn run(tokens: &TokenManager, device: bool) -> ExitCode {
     match tokens.remove_persistent() {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            log::error!("Failed to logout {err}");
+            tracing::error!("Failed to logout {err}");
             ExitCode::FAILURE
         }
     }
