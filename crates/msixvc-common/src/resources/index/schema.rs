@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 
+use crate::parse::byteorder::little_endian::U32;
 use crate::resources::error::PriParseError;
 use crate::resources::structs::{
     HSchemaVersionInfo, HierarchicalSchemaHeader, HierarchicalSchemaTrailer, ItemEntry,
@@ -31,48 +32,68 @@ pub struct HierarchicalSchema {
 
 pub(crate) fn build(data: &Bytes, extended: bool) -> Result<HierarchicalSchema, PriParseError> {
     let mut cursor = Cursor::new(data, 0);
-    let prefix = cursor.read::<HierarchicalSchemaHeader>("hierarchical schema header")?;
+    let prefix = cursor
+        .read::<HierarchicalSchemaHeader>()
+        .ok_or(PriParseError::truncated("hierarchical schema header"))?;
 
     if extended {
         // hname identifier - only distinguishes the ascii-name-block variant, which
         // is already reflected in `extended`/the trailer's ascii block length below.
-        cursor.skip(16, "hname identifier")?;
+        cursor
+            .take(16)
+            .ok_or(PriParseError::truncated("hname identifier"))?;
     }
 
-    cursor.read::<HSchemaVersionInfo>("hierarchical schema version info")?;
+    cursor
+        .read::<HSchemaVersionInfo>()
+        .ok_or(PriParseError::truncated("hierarchical schema version info"))?;
 
     // wcharz unique name, then wcharz name of the resource map - lengths (including
     // the null terminator) were already given in `prefix`.
-    cursor.skip(
-        prefix.unique_name_length as usize * 2,
-        "resource map unique name",
-    )?;
-    cursor.skip(prefix.name_length as usize * 2, "resource map name")?;
+    cursor
+        .take(prefix.unique_name_length as usize * 2)
+        .ok_or(PriParseError::truncated("resource map unique name"))?;
+    cursor
+        .take(prefix.name_length as usize * 2)
+        .ok_or(PriParseError::truncated("resource map name"))?;
 
-    let trailer = cursor.read::<HierarchicalSchemaTrailer>("hierarchical schema trailer")?;
+    let trailer = cursor
+        .read::<HierarchicalSchemaTrailer>()
+        .ok_or(PriParseError::truncated("hierarchical schema trailer"))?;
 
     let ascii_name_block_length = if extended {
-        cursor.read_u32("ascii name block length")? as usize
+        cursor
+            .read::<U32>()
+            .ok_or(PriParseError::truncated("ascii name block length"))? as usize
     } else {
         0
     };
 
     let names = (0..trailer.number_of_resource_names)
-        .map(|_| cursor.read::<ResourceNameEntry>("resource name entry"))
+        .map(|_| {
+            cursor
+                .read::<ResourceNameEntry>()
+                .ok_or(PriParseError::truncated("resource name entry"))
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     for _ in 0..trailer.number_of_scopes {
-        cursor.read::<ScopeEntry>("scope entry")?;
+        cursor
+            .read::<ScopeEntry>()
+            .ok_or(PriParseError::truncated("scope entry"))?;
     }
     for _ in 0..trailer.number_of_items {
-        cursor.read::<ItemEntry>("item entry")?;
+        cursor
+            .read::<ItemEntry>()
+            .ok_or(PriParseError::truncated("item entry"))?;
     }
 
-    let unicode_name_block = cursor.take(
-        trailer.unicode_name_block_length as usize * 2,
-        "unicode name block",
-    )?;
-    let ascii_name_block = cursor.take(ascii_name_block_length, "ascii name block")?;
+    let unicode_name_block = cursor
+        .take(trailer.unicode_name_block_length as usize * 2)
+        .ok_or(PriParseError::truncated("unicode name block"))?;
+    let ascii_name_block = cursor
+        .take(ascii_name_block_length)
+        .ok_or(PriParseError::truncated("ascii name block"))?;
 
     let short_names: Vec<String> = names
         .iter()

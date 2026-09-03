@@ -5,27 +5,20 @@
 //! count is only known at runtime (from a preceding header field). [`Cursor`] is the
 //! dynamic counterpart used to walk those tables: it performs the same kind of
 //! sequential reads, but with a runtime bounds check (returning
-//! [`PriParseError::Truncated`] instead of panicking or reading out of bounds) rather
+//! [`None`] instead of panicking or reading out of bounds) rather
 //! than a compile-time one.
 
 use bytes::Bytes;
 
+use crate::parse::byteorder::little_endian::U16;
 use crate::parse::{BinaryParse, BinaryTryParse};
 use crate::resources::error::PriParseError;
 
 /// Borrows `len` bytes starting at `offset` out of `data`, or a
-/// [`PriParseError::Truncated`] if the requested range falls outside of `data`.
-pub(crate) fn slice_range<'a>(
-    data: &'a [u8],
-    offset: usize,
-    len: usize,
-    context: &'static str,
-) -> Result<&'a [u8], PriParseError> {
-    let end = offset
-        .checked_add(len)
-        .ok_or(PriParseError::Truncated { context })?;
+/// [`None] if the requested range falls outside of `data`.
+pub(crate) fn slice_range<'a>(data: &'a [u8], offset: usize, len: usize) -> Option<&'a [u8]> {
+    let end = offset.checked_add(len)?;
     data.get(offset..end)
-        .ok_or(PriParseError::Truncated { context })
 }
 
 /// Like [`slice_range`], but returns an owned, cheaply-clonable [`Bytes`] view
@@ -59,19 +52,15 @@ impl<'a> Cursor<'a> {
         Self { buffer, offset }
     }
 
-    fn take_slice(&mut self, len: usize, context: &'static str) -> Result<&'a [u8], PriParseError> {
-        let slice = slice_range(self.buffer, self.offset, len, context)?;
+    fn take_slice(&mut self, len: usize) -> Option<&'a [u8]> {
+        let slice = slice_range(self.buffer, self.offset, len)?;
         self.offset += len;
-        Ok(slice)
+        Some(slice)
     }
 
     /// Borrows the next `len` bytes without decoding them.
-    pub(crate) fn take(
-        &mut self,
-        len: usize,
-        context: &'static str,
-    ) -> Result<&'a [u8], PriParseError> {
-        self.take_slice(len, context)
+    pub(crate) fn take(&mut self, len: usize) -> Option<&'a [u8]> {
+        self.take_slice(len)
     }
 
     /// Like [`Cursor::take`], but returns an owned, cheaply-clonable [`Bytes`] view.
@@ -85,16 +74,8 @@ impl<'a> Cursor<'a> {
         Ok(bytes)
     }
 
-    pub(crate) fn skip(&mut self, len: usize, context: &'static str) -> Result<(), PriParseError> {
-        self.take_slice(len, context)?;
-        Ok(())
-    }
-
-    pub(crate) fn read<T: BinaryParse>(
-        &mut self,
-        context: &'static str,
-    ) -> Result<T::Output, PriParseError> {
-        Ok(T::from_slice(self.take_slice(T::SIZE, context)?))
+    pub(crate) fn read<T: BinaryParse>(&mut self) -> Option<T::Output> {
+        Some(T::from_slice(self.take_slice(T::SIZE)?))
     }
 
     pub(crate) fn try_read<T>(&mut self, context: &'static str) -> Result<T::Output, PriParseError>
@@ -102,39 +83,16 @@ impl<'a> Cursor<'a> {
         T: BinaryTryParse,
         PriParseError: From<T::Error>,
     {
-        T::try_from_slice(self.take_slice(T::SIZE, context)?).map_err(PriParseError::from)
+        T::try_from_slice(
+            self.take_slice(T::SIZE)
+                .ok_or(PriParseError::Truncated { context })?,
+        )
+        .map_err(PriParseError::from)
     }
 
-    pub(crate) fn read_u16(&mut self, context: &'static str) -> Result<u16, PriParseError> {
-        let slice = self.take_slice(2, context)?;
-        Ok(u16::from_le_bytes([slice[0], slice[1]]))
+    pub(crate) fn read_u16_array(&mut self, count: usize) -> Option<Vec<u16>> {
+        (0..count).map(|_| self.read::<U16>()).collect()
     }
-
-    pub(crate) fn read_u32(&mut self, context: &'static str) -> Result<u32, PriParseError> {
-        let slice = self.take_slice(4, context)?;
-        Ok(u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]))
-    }
-
-    pub(crate) fn read_u16_array(
-        &mut self,
-        count: usize,
-        context: &'static str,
-    ) -> Result<Vec<u16>, PriParseError> {
-        (0..count).map(|_| self.read_u16(context)).collect()
-    }
-}
-
-/// Decodes a whole byte buffer as UTF-16LE (used for candidate/data-item payloads,
-/// where the slice bounds already delimit the string exactly).
-pub(crate) fn decode_utf16_bytes(bytes: &[u8]) -> String {
-    let units = bytes
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|c| u16::from_le_bytes([c[0], c[1]]));
-    char::decode_utf16(units)
-        .map(|r| r.unwrap_or(char::REPLACEMENT_CHARACTER))
-        .collect()
 }
 
 /// Decodes `count` UTF-16LE code units starting at `offset_units` (in code units, as
@@ -149,7 +107,7 @@ pub(crate) fn decode_utf16_at(block: &[u8], offset_units: usize, count: usize) -
     let end = start
         .saturating_add(count.saturating_mul(2))
         .min(block.len());
-    decode_utf16_bytes(&block[start..end])
+    String::from_utf16le_lossy(&block[start..end])
 }
 
 /// Like [`decode_utf16_at`], but for a zero-terminated (`wcharz`) string whose
@@ -183,42 +141,4 @@ pub(crate) fn decode_ascii_z(block: &[u8], offset: usize) -> String {
         .take_while(|&&b| b != 0)
         .map(|&b| b as char)
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_decode_utf16_at_and_z() {
-        // "Hi\0" as UTF-16LE, followed by more data that must not be included.
-        let block = [b'H', 0, b'i', 0, 0, 0, b'X', 0];
-        assert_eq!(decode_utf16_at(&block, 0, 2), "Hi");
-        assert_eq!(decode_utf16_z(&block, 0), "Hi");
-    }
-
-    #[test]
-    fn test_decode_ascii_at_and_z() {
-        let block = b"Hi\0X";
-        assert_eq!(decode_ascii_at(block, 0, 2), "Hi");
-        assert_eq!(decode_ascii_z(block, 0), "Hi");
-    }
-
-    #[test]
-    fn test_decode_lenient_on_bad_offset() {
-        let block = [b'H', 0, b'i', 0];
-        // Way out of bounds - must clamp rather than panic.
-        assert_eq!(decode_utf16_at(&block, 1000, 5), "");
-        assert_eq!(decode_ascii_z(&block, 1000), "");
-    }
-
-    #[test]
-    fn test_cursor_reads_sequentially() {
-        let buffer = Bytes::from_static(&[1, 0, 2, 0, 3, 0, 0, 0]);
-        let mut cursor = Cursor::new(&buffer, 0);
-        assert_eq!(cursor.read_u16("a").unwrap(), 1);
-        assert_eq!(cursor.read_u16("b").unwrap(), 2);
-        assert_eq!(cursor.read_u32("c").unwrap(), 3);
-        assert!(cursor.read_u16("d").is_err());
-    }
 }

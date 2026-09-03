@@ -10,7 +10,6 @@ use crate::resources::error::PriParseError;
 use crate::resources::index::PriIndex;
 use crate::resources::index::decisions::{Decision, Qualifier, QualifierSet};
 use crate::resources::index::resource_map::{CandidateValue, ResourceMap};
-use crate::resources::index::util::decode_utf16_bytes;
 use crate::resources::structs::{QualifierType, ResourceValueType};
 
 /// The runtime qualifier values a [`crate::resources::pri::Pri::resolve`] call is
@@ -94,9 +93,7 @@ fn locate<'a>(
     let candidates = resource_map
         .candidates
         .get(first_candidate..first_candidate + decision.qualifier_sets.len())
-        .ok_or(PriParseError::Truncated {
-            context: "resource map candidate range",
-        })?;
+        .ok_or(PriParseError::truncated("resource map candidate range"))?;
 
     Ok(Some((resource_map, decision, candidates)))
 }
@@ -272,9 +269,7 @@ fn resolve_candidate(
                 .get(section_index)
                 .ok_or(PriParseError::MissingSection(*section_index))?
                 .get(*data_item_index)
-                .ok_or(PriParseError::Truncated {
-                    context: "data item index",
-                })?;
+                .ok_or(PriParseError::truncated("data item index"))?;
             Ok(decode_value(data, value_type))
         }
         CandidateValue::External {
@@ -301,9 +296,7 @@ fn resource_value_type(
         .resource_value_types
         .get(index as usize)
         .copied()
-        .ok_or(PriParseError::Truncated {
-            context: "resource value type index",
-        })
+        .ok_or(PriParseError::truncated("resource value type index"))
 }
 
 fn decode_value(bytes: &Bytes, value_type: ResourceValueType) -> ResolvedValue {
@@ -325,7 +318,7 @@ fn trim_nul(s: String) -> Arc<str> {
 }
 
 fn decode_text(bytes: &[u8]) -> Arc<str> {
-    trim_nul(decode_utf16_bytes(bytes))
+    trim_nul(String::from_utf16le_lossy(bytes))
 }
 
 fn decode_ascii_text(bytes: &[u8]) -> Arc<str> {

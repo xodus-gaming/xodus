@@ -69,20 +69,22 @@ pub struct ResourceMap {
 
 pub(crate) fn build(data: &Bytes) -> Result<ResourceMap, PriParseError> {
     let mut cursor = Cursor::new(data, 0);
-    let header = cursor.read::<ResourceMapHeader>("resource map header")?;
+    let header = cursor
+        .read::<ResourceMapHeader>()
+        .ok_or(PriParseError::truncated("resource map header"))?;
 
     // Environment references and the hierarchical schema reference block aren't
     // modeled yet - their contents are duplicated, for our purposes, by
     // `hierarchical_schema_section_index`/the Decision Info Section itself, so
     // it's enough to skip over them.
-    cursor.skip(
-        header.environment_references_block_length as usize,
-        "environment references block",
-    )?;
-    cursor.skip(
-        header.hierarchical_schema_reference_block_length as usize,
-        "hierarchical schema reference block",
-    )?;
+    cursor
+        .take(header.environment_references_block_length as usize)
+        .ok_or(PriParseError::truncated("environment references block"))?;
+    cursor
+        .take(header.hierarchical_schema_reference_block_length as usize)
+        .ok_or(PriParseError::truncated(
+            "hierarchical schema reference block",
+        ))?;
 
     let resource_value_types = (0..header.resource_value_type_table_entries)
         .map(|_| {
@@ -95,7 +97,8 @@ pub(crate) fn build(data: &Bytes) -> Result<ResourceMap, PriParseError> {
     let mut item_to_group: Vec<(u32, u32)> = (0..header.item_to_iteminfo_group_table_entries)
         .map(|_| {
             cursor
-                .read::<ItemToItemInfoGroupEntry>("item to iteminfo group entry")
+                .read::<ItemToItemInfoGroupEntry>()
+                .ok_or(PriParseError::truncated("item to iteminfo group entry"))
                 .map(|e| {
                     (
                         e.first_item_index_property as u32,
@@ -108,7 +111,8 @@ pub(crate) fn build(data: &Bytes) -> Result<ResourceMap, PriParseError> {
     let mut groups: Vec<(u32, u32)> = (0..header.iteminfo_group_table_entries)
         .map(|_| {
             cursor
-                .read::<ItemInfoGroupEntry>("iteminfo group entry")
+                .read::<ItemInfoGroupEntry>()
+                .ok_or(PriParseError::truncated("iteminfo group entry"))
                 .map(|e| (e.number_of_iteminfos as u32, e.first_iteminfo_index as u32))
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -116,14 +120,17 @@ pub(crate) fn build(data: &Bytes) -> Result<ResourceMap, PriParseError> {
     let mut iteminfos: Vec<(u32, u32)> = (0..header.iteminfo_table_entries)
         .map(|_| {
             cursor
-                .read::<ItemInfoEntry>("iteminfo entry")
+                .read::<ItemInfoEntry>()
+                .ok_or(PriParseError::truncated("iteminfo entry"))
                 .map(|e| (e.decision_index as u32, e.first_candidate_index as u32))
         })
         .collect::<Result<Vec<_>, _>>()?;
 
     // The table extension block's 12-byte header is entirely omitted  when its declared length is zero
     let table_extension = if header.table_extension_block_length > 0 {
-        cursor.read::<TableExtensionHeader>("table extension header")?
+        cursor
+            .read::<TableExtensionHeader>()
+            .ok_or(PriParseError::truncated("table extension header"))?
     } else {
         TableExtensionHeader {
             additional_item_to_iteminfo_group_entries: 0,
@@ -132,20 +139,30 @@ pub(crate) fn build(data: &Bytes) -> Result<ResourceMap, PriParseError> {
         }
     };
     for _ in 0..table_extension.additional_item_to_iteminfo_group_entries {
-        let e = cursor.read::<ItemToItemInfoGroupEntryExt>("item to iteminfo group ext entry")?;
+        let e = cursor
+            .read::<ItemToItemInfoGroupEntryExt>()
+            .ok_or(PriParseError::truncated("item to iteminfo group ext entry"))?;
         item_to_group.push((e.first_item_index_property, e.iteminfo_group_index));
     }
     for _ in 0..table_extension.additional_iteminfo_group_entries {
-        let e = cursor.read::<ItemInfoGroupEntryExt>("iteminfo group ext entry")?;
+        let e = cursor
+            .read::<ItemInfoGroupEntryExt>()
+            .ok_or(PriParseError::truncated("iteminfo group ext entry"))?;
         groups.push((e.number_of_iteminfos, e.first_iteminfo_index));
     }
     for _ in 0..table_extension.additional_iteminfo_entries {
-        let e = cursor.read::<ItemInfoEntryExt>("iteminfo ext entry")?;
+        let e = cursor
+            .read::<ItemInfoEntryExt>()
+            .ok_or(PriParseError::truncated("iteminfo ext entry"))?;
         iteminfos.push((e.decision_index, e.first_candidate_index));
     }
 
     let candidate_entries = (0..header.number_of_candidates)
-        .map(|_| cursor.read::<Candidate>("candidate"))
+        .map(|_| {
+            cursor
+                .read::<Candidate>()
+                .ok_or(PriParseError::truncated("candidate"))
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let embedded_data = cursor.take_bytes(
         header.embedded_data_block_length as usize,
@@ -171,12 +188,9 @@ pub(crate) fn build(data: &Bytes) -> Result<ResourceMap, PriParseError> {
         for offset in 0..count {
             let index_property = first_index_property + offset;
             let iteminfo_index = (first_iteminfo_index + offset) as usize;
-            let &(decision_index, first_candidate_index) =
-                iteminfos
-                    .get(iteminfo_index)
-                    .ok_or(PriParseError::Truncated {
-                        context: "iteminfo group's iteminfo index",
-                    })?;
+            let &(decision_index, first_candidate_index) = iteminfos
+                .get(iteminfo_index)
+                .ok_or(PriParseError::truncated("iteminfo group's iteminfo index"))?;
             items.insert(
                 index_property,
                 ResolvedItem {

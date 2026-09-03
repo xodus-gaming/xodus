@@ -27,14 +27,18 @@ impl DataItemSection {
 
 pub(crate) fn build(data: &Bytes) -> Result<DataItemSection, PriParseError> {
     let mut cursor = Cursor::new(data, 0);
-    let header = cursor.read::<DataItemHeader>("data item header")?;
+    let header = cursor
+        .read::<DataItemHeader>()
+        .ok_or(PriParseError::truncated("data item header"))?;
 
     let string_entries = (0..header.number_of_strings)
-        .map(|_| cursor.read::<StringEntry>("string entry"))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|_| cursor.read::<StringEntry>())
+        .collect::<Option<Vec<_>>>()
+        .ok_or(PriParseError::truncated("string entry"))?;
     let blob_entries = (0..header.number_of_blobs)
-        .map(|_| cursor.read::<BlobEntry>("blob entry"))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|_| cursor.read::<BlobEntry>())
+        .collect::<Option<Vec<_>>>()
+        .ok_or(PriParseError::truncated("blob entry"))?;
     let stored_data =
         cursor.take_bytes(header.total_data_length as usize, "data item stored data")?;
 

@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 use num_enum::TryFromPrimitive;
 
-use crate::parse::byteorder::little_endian::{U16 as LeU16, U32 as LeU32};
+use crate::parse::byteorder::little_endian::{U16, U32};
 use crate::parse::{BinaryParse, BinaryTryParse, BytesReader, EmptyReader};
 use crate::resources::error::PriParseError;
 
@@ -18,17 +18,17 @@ pub enum VersionId {
 #[repr(u16)]
 pub enum QualifierType {
     Language = 0,
-    Contrast,
-    Scale,
-    HomeRegion,
-    TargetSize,
-    LayoutDirection,
-    Theme,
-    AlternateForm,
-    DXFeatureLevel,
-    Configuration,
-    DeviceFamily,
-    Custom,
+    Contrast = 1,
+    Scale = 2,
+    HomeRegion = 3,
+    TargetSize = 4,
+    LayoutDirection = 5,
+    Theme = 6,
+    AlternateForm = 7,
+    DXFeatureLevel = 8,
+    Configuration = 9,
+    DeviceFamily = 10,
+    Custom = 11,
 }
 
 impl BinaryTryParse for QualifierType {
@@ -39,7 +39,7 @@ impl BinaryTryParse for QualifierType {
     fn try_parse<'a>(
         r: BytesReader<'a, Self::Size>,
     ) -> Result<(Self::Output, EmptyReader<'a>), Self::Error> {
-        let (value, r) = r.read::<LeU16>();
+        let (value, r) = r.read::<U16>();
         Self::try_from(value).map(|value| (value, r))
     }
 }
@@ -90,7 +90,7 @@ impl BinaryParse for PriDescriptorFlags {
     type Output = Self;
     type Size = typenum::U2;
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (flag, r) = r.read::<LeU16>();
+        let (flag, r) = r.read::<U16>();
         (Self::from_bits_retain(flag), r)
     }
 }
@@ -110,8 +110,8 @@ impl BinaryTryParse for ResourceHeader {
     type Error = PriParseError;
 
     fn try_parse<'a>(
-        r: crate::parse::BytesReader<'a, Self::Size>,
-    ) -> Result<(Self::Output, crate::parse::EmptyReader<'a>), Self::Error> {
+        r: BytesReader<'a, Self::Size>,
+    ) -> Result<(Self::Output, EmptyReader<'a>), Self::Error> {
         let (version_identifier, r) = r.read::<[u8; 8]>();
 
         let version_id = match &version_identifier {
@@ -125,16 +125,18 @@ impl BinaryTryParse for ResourceHeader {
 
         // uint16 	unknown, zero
         // uint16 	unknown, one
-        let (_, r) = r.advance::<typenum::U4>();
+        let (_unknown1, r) = r.read::<U16>();
+        let (_unknown2, r) = r.read::<U16>();
 
-        let (total_file_size, r) = r.read::<LeU32>();
-        let (table_of_contents_offset, r) = r.read::<LeU32>();
-        let (first_section_offset, r) = r.read::<LeU32>();
-        let (number_of_sections, r) = r.read::<LeU16>();
+        let (total_file_size, r) = r.read::<U32>();
+        let (table_of_contents_offset, r) = r.read::<U32>();
+        let (first_section_offset, r) = r.read::<U32>();
+        let (number_of_sections, r) = r.read::<U16>();
 
         // uint16 	unknown, 0xFFFF
         // uint32 	unknown, zero
-        let (_, r) = r.advance::<typenum::U6>();
+        let (_unknown3, r) = r.read::<U16>();
+        let (_unknown4, r) = r.read::<U32>();
 
         Ok((
             Self {
@@ -162,16 +164,14 @@ pub struct TableOfContentsEntry {
 impl BinaryParse for TableOfContentsEntry {
     type Output = Self;
     type Size = typenum::U32;
-    fn parse<'a>(
-        r: crate::parse::BytesReader<'a, Self::Size>,
-    ) -> (Self::Output, crate::parse::EmptyReader<'a>) {
+    fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
         let (section_type, r) = r.read::<SectionType>();
 
-        let (flags, r) = r.read::<LeU16>();
-        let (section_flags, r) = r.read::<LeU16>();
-        let (section_qualifier, r) = r.read::<LeU32>();
-        let (section_offset, r) = r.read::<LeU32>();
-        let (section_length, r) = r.read::<LeU32>();
+        let (flags, r) = r.read::<U16>();
+        let (section_flags, r) = r.read::<U16>();
+        let (section_qualifier, r) = r.read::<U32>();
+        let (section_offset, r) = r.read::<U32>();
+        let (section_length, r) = r.read::<U32>();
 
         (
             Self {
@@ -199,16 +199,14 @@ pub struct SectionHeader {
 impl BinaryParse for SectionHeader {
     type Output = Self;
     type Size = typenum::U32;
-    fn parse<'a>(
-        r: crate::parse::BytesReader<'a, Self::Size>,
-    ) -> (Self::Output, crate::parse::EmptyReader<'a>) {
+    fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
         let (section_id, r) = r.read::<[u8; 16]>();
-        let (section_qualifier, r) = r.read::<LeU32>();
-        let (flags, r) = r.read::<LeU16>();
-        let (section_flags, r) = r.read::<LeU16>();
-        let (section_length, r) = r.read::<LeU32>();
+        let (section_qualifier, r) = r.read::<U32>();
+        let (flags, r) = r.read::<U16>();
+        let (section_flags, r) = r.read::<U16>();
+        let (section_length, r) = r.read::<U32>();
         // uint32  unknown, zero
-        let (_, r) = r.advance::<typenum::U4>();
+        let (_unknown, r) = r.read::<U32>();
 
         (
             Self {
@@ -234,8 +232,8 @@ impl BinaryParse for SectionFooter {
     type Size = typenum::U8;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (magic, r) = r.read::<LeU32>();
-        let (section_length, r) = r.read::<LeU32>();
+        let (magic, r) = r.read::<U32>();
+        let (section_length, r) = r.read::<U32>();
 
         (
             Self {
@@ -265,17 +263,17 @@ impl BinaryParse for PriDescriptor {
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
         let (flags, r) = r.read::<PriDescriptorFlags>();
-        let (included_file_list_section_index, r) = r.read::<LeU16>();
+        let (included_file_list_section_index, r) = r.read::<U16>();
         // uint16   unknown, zero
-        let (_, r) = r.read::<LeU16>();
-        let (hierarchical_schema_count, r) = r.read::<LeU16>();
-        let (decision_info_count, r) = r.read::<LeU16>();
-        let (resource_map_count, r) = r.read::<LeU16>();
-        let (primary_resource_map_index, r) = r.read::<LeU16>();
-        let (referenced_file_sections_count, r) = r.read::<LeU16>();
-        let (data_item_section_count, r) = r.read::<LeU16>();
+        let (_unknown1, r) = r.read::<U16>();
+        let (hierarchical_schema_count, r) = r.read::<U16>();
+        let (decision_info_count, r) = r.read::<U16>();
+        let (resource_map_count, r) = r.read::<U16>();
+        let (primary_resource_map_index, r) = r.read::<U16>();
+        let (referenced_file_sections_count, r) = r.read::<U16>();
+        let (data_item_section_count, r) = r.read::<U16>();
         // uint16   unknown, zero
-        let (_, r) = r.read::<LeU16>();
+        let (_unknown2, r) = r.read::<U16>();
 
         (
             Self {
@@ -315,13 +313,13 @@ impl BinaryParse for HSchemaVersionInfo {
     type Size = typenum::U20;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (major_version, r) = r.read::<LeU16>();
-        let (minor_version, r) = r.read::<LeU16>();
+        let (major_version, r) = r.read::<U16>();
+        let (minor_version, r) = r.read::<U16>();
         // uint32   unknown, zero
-        let (_, r) = r.advance::<typenum::U4>();
-        let (checksum, r) = r.read::<LeU32>();
-        let (number_of_scopes, r) = r.read::<LeU32>();
-        let (number_of_items, r) = r.read::<LeU32>();
+        let (_unknown, r) = r.read::<U32>();
+        let (checksum, r) = r.read::<U32>();
+        let (number_of_scopes, r) = r.read::<U32>();
+        let (number_of_items, r) = r.read::<U32>();
 
         (
             Self {
@@ -352,11 +350,11 @@ impl BinaryParse for HierarchicalSchemaHeader {
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
         // uint16   unknown, one
-        let (_, r) = r.advance::<typenum::U2>();
-        let (unique_name_length, r) = r.read::<LeU16>();
-        let (name_length, r) = r.read::<LeU16>();
+        let (_unknown1, r) = r.read::<U16>();
+        let (unique_name_length, r) = r.read::<U16>();
+        let (name_length, r) = r.read::<U16>();
         // uint16   unknown, zero
-        let (_, r) = r.advance::<typenum::U2>();
+        let (_unknown2, r) = r.read::<U16>();
 
         (
             Self {
@@ -408,15 +406,15 @@ impl BinaryParse for HierarchicalSchemaTrailer {
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
         // uint16   unknown, zero
-        let (_, r) = r.advance::<typenum::U2>();
-        let (longest_full_path_length, r) = r.read::<LeU16>();
+        let (_unknown1, r) = r.read::<U16>();
+        let (longest_full_path_length, r) = r.read::<U16>();
         // uint16   unknown, zero
-        let (_, r) = r.advance::<typenum::U2>();
-        let (number_of_resource_names, r) = r.read::<LeU32>();
-        let (number_of_scopes, r) = r.read::<LeU32>();
-        let (number_of_items, r) = r.read::<LeU32>();
-        let (unicode_name_block_length, r) = r.read::<LeU32>();
-        let (total_length, r) = r.read::<LeU32>();
+        let (_unknown2, r) = r.read::<U16>();
+        let (number_of_resource_names, r) = r.read::<U32>();
+        let (number_of_scopes, r) = r.read::<U32>();
+        let (number_of_items, r) = r.read::<U32>();
+        let (unicode_name_block_length, r) = r.read::<U32>();
+        let (total_length, r) = r.read::<U32>();
 
         (
             Self {
@@ -450,13 +448,13 @@ impl BinaryParse for ResourceNameEntry {
     type Size = typenum::U12;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (parent_scope_index, r) = r.read::<LeU16>();
-        let (full_path_length, r) = r.read::<LeU16>();
-        let (uppercase_first_char, r) = r.read::<LeU16>();
+        let (parent_scope_index, r) = r.read::<U16>();
+        let (full_path_length, r) = r.read::<U16>();
+        let (uppercase_first_char, r) = r.read::<U16>();
         let (name_length, r) = r.read::<u8>();
         let (flags, r) = r.read::<u8>();
-        let (name_offset_low, r) = r.read::<LeU16>();
-        let (index_property, r) = r.read::<LeU16>();
+        let (name_offset_low, r) = r.read::<U16>();
+        let (index_property, r) = r.read::<U16>();
 
         let is_scope = flags & (1 << 4) != 0;
         let is_ascii = flags & (1 << 5) != 0;
@@ -491,11 +489,11 @@ impl BinaryParse for ScopeEntry {
     type Size = typenum::U8;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (scope_index, r) = r.read::<LeU16>();
-        let (child_count, r) = r.read::<LeU16>();
-        let (first_child_index, r) = r.read::<LeU16>();
+        let (scope_index, r) = r.read::<U16>();
+        let (child_count, r) = r.read::<U16>();
+        let (first_child_index, r) = r.read::<U16>();
         // uint16   unknown, zero
-        let (_, r) = r.advance::<typenum::U2>();
+        let (_unknown, r) = r.read::<U16>();
 
         (
             Self {
@@ -518,7 +516,7 @@ impl BinaryParse for ItemEntry {
     type Size = typenum::U2;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (item_index, r) = r.read::<LeU16>();
+        let (item_index, r) = r.read::<U16>();
         (Self { item_index }, r)
     }
 }
@@ -538,12 +536,12 @@ impl BinaryParse for DecisionInfoHeader {
     type Size = typenum::U12;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (number_of_distinct_qualifiers, r) = r.read::<LeU16>();
-        let (number_of_qualifiers, r) = r.read::<LeU16>();
-        let (number_of_qualifier_sets, r) = r.read::<LeU16>();
-        let (number_of_decisions, r) = r.read::<LeU16>();
-        let (number_of_index_table_entries, r) = r.read::<LeU16>();
-        let (qualifier_value_block_length, r) = r.read::<LeU16>();
+        let (number_of_distinct_qualifiers, r) = r.read::<U16>();
+        let (number_of_qualifiers, r) = r.read::<U16>();
+        let (number_of_qualifier_sets, r) = r.read::<U16>();
+        let (number_of_decisions, r) = r.read::<U16>();
+        let (number_of_index_table_entries, r) = r.read::<U16>();
+        let (qualifier_value_block_length, r) = r.read::<U16>();
 
         (
             Self {
@@ -570,8 +568,8 @@ impl BinaryParse for DecisionEntry {
     type Size = typenum::U4;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (first_qualifier_set_index, r) = r.read::<LeU16>();
-        let (number_of_qualifier_sets, r) = r.read::<LeU16>();
+        let (first_qualifier_set_index, r) = r.read::<U16>();
+        let (number_of_qualifier_sets, r) = r.read::<U16>();
 
         (
             Self {
@@ -594,8 +592,8 @@ impl BinaryParse for QualifierSetEntry {
     type Size = typenum::U4;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (first_qualifier_index, r) = r.read::<LeU16>();
-        let (number_of_qualifiers, r) = r.read::<LeU16>();
+        let (first_qualifier_index, r) = r.read::<U16>();
+        let (number_of_qualifiers, r) = r.read::<U16>();
 
         (
             Self {
@@ -619,11 +617,11 @@ impl BinaryParse for QualifierEntry {
     type Size = typenum::U8;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (distinct_qualifier_index, r) = r.read::<LeU16>();
-        let (priority, r) = r.read::<LeU16>();
-        let (fallback_score, r) = r.read::<LeU16>();
+        let (distinct_qualifier_index, r) = r.read::<U16>();
+        let (priority, r) = r.read::<U16>();
+        let (fallback_score, r) = r.read::<U16>();
         // uint16   unknown, zero
-        let (_, r) = r.advance::<typenum::U2>();
+        let (_unknown, r) = r.read::<U16>();
 
         (
             Self {
@@ -653,11 +651,11 @@ impl BinaryTryParse for DistinctQualifierEntry {
     fn try_parse<'a>(
         r: BytesReader<'a, Self::Size>,
     ) -> Result<(Self::Output, EmptyReader<'a>), Self::Error> {
-        let (environment_qualifier_index, r) = r.read::<LeU16>();
+        let (environment_qualifier_index, r) = r.read::<U16>();
         let (qualifier_type, r) = r.try_read::<QualifierType>()?;
-        let (condition_operator_index, r) = r.read::<LeU16>();
-        let (value_type_index, r) = r.read::<LeU16>();
-        let (qualifier_value_offset, r) = r.read::<LeU32>();
+        let (condition_operator_index, r) = r.read::<U16>();
+        let (value_type_index, r) = r.read::<U16>();
+        let (qualifier_value_offset, r) = r.read::<U32>();
 
         Ok((
             Self {
@@ -693,18 +691,18 @@ impl BinaryParse for ResourceMapHeader {
     type Size = typenum::U32;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (environment_references_block_length, r) = r.read::<LeU16>();
-        let (number_of_environment_references, r) = r.read::<LeU16>();
-        let (hierarchical_schema_section_index, r) = r.read::<LeU16>();
-        let (hierarchical_schema_reference_block_length, r) = r.read::<LeU16>();
-        let (decision_info_section_index, r) = r.read::<LeU16>();
-        let (resource_value_type_table_entries, r) = r.read::<LeU16>();
-        let (item_to_iteminfo_group_table_entries, r) = r.read::<LeU16>();
-        let (iteminfo_group_table_entries, r) = r.read::<LeU16>();
-        let (iteminfo_table_entries, r) = r.read::<LeU32>();
-        let (number_of_candidates, r) = r.read::<LeU32>();
-        let (embedded_data_block_length, r) = r.read::<LeU32>();
-        let (table_extension_block_length, r) = r.read::<LeU32>();
+        let (environment_references_block_length, r) = r.read::<U16>();
+        let (number_of_environment_references, r) = r.read::<U16>();
+        let (hierarchical_schema_section_index, r) = r.read::<U16>();
+        let (hierarchical_schema_reference_block_length, r) = r.read::<U16>();
+        let (decision_info_section_index, r) = r.read::<U16>();
+        let (resource_value_type_table_entries, r) = r.read::<U16>();
+        let (item_to_iteminfo_group_table_entries, r) = r.read::<U16>();
+        let (iteminfo_group_table_entries, r) = r.read::<U16>();
+        let (iteminfo_table_entries, r) = r.read::<U32>();
+        let (number_of_candidates, r) = r.read::<U32>();
+        let (embedded_data_block_length, r) = r.read::<U32>();
+        let (table_extension_block_length, r) = r.read::<U32>();
 
         (
             Self {
@@ -751,22 +749,22 @@ impl BinaryParse for EnvironmentReference {
     type Size = typenum::U556;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (environment_name, r) = r.read::<[LeU16; 256]>();
-        let (major_version, r) = r.read::<LeU16>();
-        let (minor_version, r) = r.read::<LeU16>();
-        let (version_checksum, r) = r.read::<LeU32>();
-        let (number_of_qualifier_types, r) = r.read::<LeU16>();
-        let (number_of_qualifiers, r) = r.read::<LeU16>();
-        let (number_of_item_types, r) = r.read::<LeU16>();
-        let (number_of_resource_value_types, r) = r.read::<LeU16>();
-        let (number_of_value_locators, r) = r.read::<LeU16>();
-        let (number_of_condition_operators, r) = r.read::<LeU16>();
-        let (qualifier_type_table_offset, r) = r.read::<LeU32>();
-        let (qualifier_table_offset, r) = r.read::<LeU32>();
-        let (item_type_table_offset, r) = r.read::<LeU32>();
-        let (resource_value_type_table_offset, r) = r.read::<LeU32>();
-        let (value_locator_table_offset, r) = r.read::<LeU32>();
-        let (condition_operator_table_offset, r) = r.read::<LeU32>();
+        let (environment_name, r) = r.read::<[U16; 256]>();
+        let (major_version, r) = r.read::<U16>();
+        let (minor_version, r) = r.read::<U16>();
+        let (version_checksum, r) = r.read::<U32>();
+        let (number_of_qualifier_types, r) = r.read::<U16>();
+        let (number_of_qualifiers, r) = r.read::<U16>();
+        let (number_of_item_types, r) = r.read::<U16>();
+        let (number_of_resource_value_types, r) = r.read::<U16>();
+        let (number_of_value_locators, r) = r.read::<U16>();
+        let (number_of_condition_operators, r) = r.read::<U16>();
+        let (qualifier_type_table_offset, r) = r.read::<U32>();
+        let (qualifier_table_offset, r) = r.read::<U32>();
+        let (item_type_table_offset, r) = r.read::<U32>();
+        let (resource_value_type_table_offset, r) = r.read::<U32>();
+        let (value_locator_table_offset, r) = r.read::<U32>();
+        let (condition_operator_table_offset, r) = r.read::<U32>();
 
         (
             Self {
@@ -804,11 +802,13 @@ impl BinaryParse for HierarchicalSchemaReferenceHeader {
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
         let (version_info, r) = r.read::<HSchemaVersionInfo>();
-        let (unique_id_length, r) = r.read::<LeU16>();
+        let (unique_id_length, r) = r.read::<U16>();
         // uint16   unknown, zero
         // uint32   unknown, 7
         // uint32   unknown, 7
-        let (_, r) = r.advance::<typenum::U10>();
+        let (_unknown1, r) = r.read::<U16>();
+        let (_unknown2, r) = r.read::<U32>();
+        let (_unknown3, r) = r.read::<U32>();
 
         (
             Self {
@@ -824,12 +824,12 @@ impl BinaryParse for HierarchicalSchemaReferenceHeader {
 #[repr(u32)]
 pub enum ResourceValueType {
     String = 0,
-    Path,
-    EmbeddedData,
-    AsciiString,
-    Utf8String,
-    AsciiPath,
-    Utf8Path,
+    Path = 1,
+    EmbeddedData = 2,
+    AsciiString = 3,
+    Utf8String = 4,
+    AsciiPath = 5,
+    Utf8Path = 6,
 }
 
 impl BinaryTryParse for ResourceValueType {
@@ -840,7 +840,7 @@ impl BinaryTryParse for ResourceValueType {
     fn try_parse<'a>(
         r: BytesReader<'a, Self::Size>,
     ) -> Result<(Self::Output, EmptyReader<'a>), Self::Error> {
-        let (value, r) = r.read::<LeU32>();
+        let (value, r) = r.read::<U32>();
         Self::try_from(value).map(|value| (value, r))
     }
 }
@@ -859,7 +859,7 @@ impl BinaryTryParse for ResourceValueTypeEntry {
         r: BytesReader<'a, Self::Size>,
     ) -> Result<(Self::Output, EmptyReader<'a>), Self::Error> {
         // uint32   unknown, 4
-        let (_, r) = r.advance::<typenum::U4>();
+        let (_unknown, r) = r.read::<U32>();
         let (resource_value_type, r) = r.try_read::<ResourceValueType>()?;
 
         Ok((
@@ -882,8 +882,8 @@ impl BinaryParse for ItemToItemInfoGroupEntry {
     type Size = typenum::U4;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (first_item_index_property, r) = r.read::<LeU16>();
-        let (iteminfo_group_index, r) = r.read::<LeU16>();
+        let (first_item_index_property, r) = r.read::<U16>();
+        let (iteminfo_group_index, r) = r.read::<U16>();
 
         (
             Self {
@@ -906,8 +906,8 @@ impl BinaryParse for ItemInfoGroupEntry {
     type Size = typenum::U4;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (number_of_iteminfos, r) = r.read::<LeU16>();
-        let (first_iteminfo_index, r) = r.read::<LeU16>();
+        let (number_of_iteminfos, r) = r.read::<U16>();
+        let (first_iteminfo_index, r) = r.read::<U16>();
 
         (
             Self {
@@ -930,8 +930,8 @@ impl BinaryParse for ItemInfoEntry {
     type Size = typenum::U4;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (decision_index, r) = r.read::<LeU16>();
-        let (first_candidate_index, r) = r.read::<LeU16>();
+        let (decision_index, r) = r.read::<U16>();
+        let (first_candidate_index, r) = r.read::<U16>();
 
         (
             Self {
@@ -955,9 +955,9 @@ impl BinaryParse for TableExtensionHeader {
     type Size = typenum::U12;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (additional_item_to_iteminfo_group_entries, r) = r.read::<LeU32>();
-        let (additional_iteminfo_group_entries, r) = r.read::<LeU32>();
-        let (additional_iteminfo_entries, r) = r.read::<LeU32>();
+        let (additional_item_to_iteminfo_group_entries, r) = r.read::<U32>();
+        let (additional_iteminfo_group_entries, r) = r.read::<U32>();
+        let (additional_iteminfo_entries, r) = r.read::<U32>();
 
         (
             Self {
@@ -983,8 +983,8 @@ impl BinaryParse for ItemToItemInfoGroupEntryExt {
     type Size = typenum::U8;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (first_item_index_property, r) = r.read::<LeU32>();
-        let (iteminfo_group_index, r) = r.read::<LeU32>();
+        let (first_item_index_property, r) = r.read::<U32>();
+        let (iteminfo_group_index, r) = r.read::<U32>();
 
         (
             Self {
@@ -1009,8 +1009,8 @@ impl BinaryParse for ItemInfoGroupEntryExt {
     type Size = typenum::U8;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (number_of_iteminfos, r) = r.read::<LeU32>();
-        let (first_iteminfo_index, r) = r.read::<LeU32>();
+        let (number_of_iteminfos, r) = r.read::<U32>();
+        let (first_iteminfo_index, r) = r.read::<U32>();
 
         (
             Self {
@@ -1035,8 +1035,8 @@ impl BinaryParse for ItemInfoEntryExt {
     type Size = typenum::U8;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (decision_index, r) = r.read::<LeU32>();
-        let (first_candidate_index, r) = r.read::<LeU32>();
+        let (decision_index, r) = r.read::<U32>();
+        let (first_candidate_index, r) = r.read::<U32>();
 
         (
             Self {
@@ -1081,8 +1081,8 @@ impl BinaryParse for Candidate {
 
         match candidate_type {
             0 => {
-                let (embedded_data_length, r) = r.read::<LeU16>();
-                let (embedded_data_offset, r) = r.read::<LeU32>();
+                let (embedded_data_length, r) = r.read::<U16>();
+                let (embedded_data_offset, r) = r.read::<U32>();
                 (
                     Self::Embedded {
                         resource_value_type_index,
@@ -1093,9 +1093,9 @@ impl BinaryParse for Candidate {
                 )
             }
             1 => {
-                let (source_file, r) = r.read::<LeU16>();
-                let (data_item_index, r) = r.read::<LeU16>();
-                let (data_item_section_index, r) = r.read::<LeU16>();
+                let (source_file, r) = r.read::<U16>();
+                let (data_item_index, r) = r.read::<U16>();
+                let (data_item_section_index, r) = r.read::<U16>();
                 (
                     Self::Referenced {
                         resource_value_type_index,
@@ -1134,10 +1134,10 @@ impl BinaryParse for DataItemHeader {
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
         // uint32   unknown, zero
-        let (_, r) = r.advance::<typenum::U4>();
-        let (number_of_strings, r) = r.read::<LeU16>();
-        let (number_of_blobs, r) = r.read::<LeU16>();
-        let (total_data_length, r) = r.read::<LeU32>();
+        let (_unknown, r) = r.read::<U32>();
+        let (number_of_strings, r) = r.read::<U16>();
+        let (number_of_blobs, r) = r.read::<U16>();
+        let (total_data_length, r) = r.read::<U32>();
 
         (
             Self {
@@ -1161,8 +1161,8 @@ impl BinaryParse for StringEntry {
     type Size = typenum::U4;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (offset, r) = r.read::<LeU16>();
-        let (length, r) = r.read::<LeU16>();
+        let (offset, r) = r.read::<U16>();
+        let (length, r) = r.read::<U16>();
 
         (Self { offset, length }, r)
     }
@@ -1179,8 +1179,8 @@ impl BinaryParse for BlobEntry {
     type Size = typenum::U8;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (offset, r) = r.read::<LeU32>();
-        let (length, r) = r.read::<LeU32>();
+        let (offset, r) = r.read::<U32>();
+        let (length, r) = r.read::<U32>();
 
         (Self { offset, length }, r)
     }
@@ -1199,12 +1199,12 @@ impl BinaryParse for ReferencedFileHeader {
     type Size = typenum::U12;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (number_of_roots, r) = r.read::<LeU16>();
-        let (number_of_folders, r) = r.read::<LeU16>();
-        let (number_of_files, r) = r.read::<LeU16>();
+        let (number_of_roots, r) = r.read::<U16>();
+        let (number_of_folders, r) = r.read::<U16>();
+        let (number_of_files, r) = r.read::<U16>();
         // uint16   unknown, zero
-        let (_, r) = r.advance::<typenum::U2>();
-        let (unicode_name_block_length, r) = r.read::<LeU32>();
+        let (_unknown, r) = r.read::<U16>();
+        let (unicode_name_block_length, r) = r.read::<U32>();
 
         (
             Self {
@@ -1236,15 +1236,15 @@ impl BinaryParse for FolderEntry {
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
         // uint16   unknown, zero
-        let (_, r) = r.advance::<typenum::U2>();
-        let (parent_folder_index, r) = r.read::<LeU16>();
-        let (number_of_folders, r) = r.read::<LeU16>();
-        let (first_folder_index, r) = r.read::<LeU16>();
-        let (number_of_files, r) = r.read::<LeU16>();
-        let (first_file_index, r) = r.read::<LeU16>();
-        let (name_length, r) = r.read::<LeU16>();
-        let (full_path_length, r) = r.read::<LeU16>();
-        let (name_offset, r) = r.read::<LeU32>();
+        let (_unknown, r) = r.read::<U16>();
+        let (parent_folder_index, r) = r.read::<U16>();
+        let (number_of_folders, r) = r.read::<U16>();
+        let (first_folder_index, r) = r.read::<U16>();
+        let (number_of_files, r) = r.read::<U16>();
+        let (first_file_index, r) = r.read::<U16>();
+        let (name_length, r) = r.read::<U16>();
+        let (full_path_length, r) = r.read::<U16>();
+        let (name_offset, r) = r.read::<U32>();
 
         (
             Self {
@@ -1276,11 +1276,11 @@ impl BinaryParse for FileEntry {
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
         // uint16   unknown
-        let (_, r) = r.advance::<typenum::U2>();
-        let (parent_folder_index, r) = r.read::<LeU16>();
-        let (full_path_length, r) = r.read::<LeU16>();
-        let (name_length, r) = r.read::<LeU16>();
-        let (name_offset, r) = r.read::<LeU32>();
+        let (_unknown, r) = r.read::<U16>();
+        let (parent_folder_index, r) = r.read::<U16>();
+        let (full_path_length, r) = r.read::<U16>();
+        let (name_length, r) = r.read::<U16>();
+        let (name_offset, r) = r.read::<U32>();
 
         (
             Self {
@@ -1306,8 +1306,8 @@ impl BinaryParse for ResourceFooter {
     type Size = typenum::U16;
 
     fn parse<'a>(r: BytesReader<'a, Self::Size>) -> (Self::Output, EmptyReader<'a>) {
-        let (magic, r) = r.read::<LeU32>();
-        let (total_file_size, r) = r.read::<LeU32>();
+        let (magic, r) = r.read::<U32>();
+        let (total_file_size, r) = r.read::<U32>();
         let (version_identifier, r) = r.read::<[u8; 8]>();
 
         (

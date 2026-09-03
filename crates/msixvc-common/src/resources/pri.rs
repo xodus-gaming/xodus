@@ -65,22 +65,18 @@ impl Pri {
         r.read_to_end(&mut buffer).await?;
         let buffer = Bytes::from(buffer);
 
-        let header = ResourceHeader::try_from_slice(slice_range(
-            &buffer,
-            0,
-            ResourceHeader::SIZE,
-            "resource header",
-        )?)?;
+        let header = ResourceHeader::try_from_slice(
+            slice_range(&buffer, 0, ResourceHeader::SIZE)
+                .ok_or(PriParseError::truncated("resource header"))?,
+        )?;
 
         let mut offset = header.table_of_contents_offset as usize;
         let mut entries = Vec::with_capacity(header.number_of_sections as usize);
         for _ in 0..header.number_of_sections {
-            let entry = TableOfContentsEntry::from_slice(slice_range(
-                &buffer,
-                offset,
-                TableOfContentsEntry::SIZE,
-                "table of contents entry",
-            )?);
+            let entry = TableOfContentsEntry::from_slice(
+                slice_range(&buffer, offset, TableOfContentsEntry::SIZE)
+                    .ok_or(PriParseError::truncated("table of contents entry"))?,
+            );
             offset += TableOfContentsEntry::SIZE;
             entries.push(entry);
         }
@@ -98,35 +94,30 @@ impl Pri {
             .ok_or(PriParseError::DescriptorMissing)?;
         let descriptor_data = &sections.data[descriptor_index];
 
-        let descriptor = PriDescriptor::from_slice(slice_range(
-            descriptor_data,
-            0,
-            PriDescriptor::SIZE,
-            "pri descriptor",
-        )?);
+        let descriptor = PriDescriptor::from_slice(
+            slice_range(descriptor_data, 0, PriDescriptor::SIZE)
+                .ok_or(PriParseError::truncated("pri descriptor"))?,
+        );
 
         let mut cursor = Cursor::new(descriptor_data, PriDescriptor::SIZE);
         let section_indices = DescriptorSectionIndices {
-            hierarchical_schema: cursor.read_u16_array(
-                descriptor.hierarchical_schema_count as usize,
-                "hierarchical schema section indices",
-            )?,
-            decision_info: cursor.read_u16_array(
-                descriptor.decision_info_count as usize,
-                "decision info section indices",
-            )?,
-            resource_map: cursor.read_u16_array(
-                descriptor.resource_map_count as usize,
-                "resource map section indices",
-            )?,
-            referenced_file: cursor.read_u16_array(
-                descriptor.referenced_file_sections_count as usize,
-                "referenced file section indices",
-            )?,
-            data_item: cursor.read_u16_array(
-                descriptor.data_item_section_count as usize,
-                "data item section indices",
-            )?,
+            hierarchical_schema: cursor
+                .read_u16_array(descriptor.hierarchical_schema_count as usize)
+                .ok_or(PriParseError::truncated(
+                    "hierarchical schema section indices",
+                ))?,
+            decision_info: cursor
+                .read_u16_array(descriptor.decision_info_count as usize)
+                .ok_or(PriParseError::truncated("decision info section indices"))?,
+            resource_map: cursor
+                .read_u16_array(descriptor.resource_map_count as usize)
+                .ok_or(PriParseError::truncated("resource map section indices"))?,
+            referenced_file: cursor
+                .read_u16_array(descriptor.referenced_file_sections_count as usize)
+                .ok_or(PriParseError::truncated("referenced file section indices"))?,
+            data_item: cursor
+                .read_u16_array(descriptor.data_item_section_count as usize)
+                .ok_or(PriParseError::truncated("data item section indices"))?,
         };
 
         let index = PriIndex::build(&descriptor, &section_indices, &sections)?;
@@ -170,12 +161,10 @@ fn section_data(
     entry: &TableOfContentsEntry,
 ) -> Result<Bytes, PriParseError> {
     let header_start = first_section_offset as usize + entry.section_offset as usize;
-    let header = SectionHeader::from_slice(slice_range(
-        buffer,
-        header_start,
-        SectionHeader::SIZE,
-        "section header",
-    )?);
+    let header = SectionHeader::from_slice(
+        slice_range(buffer, header_start, SectionHeader::SIZE)
+            .ok_or(PriParseError::truncated("section header"))?,
+    );
 
     // A section's declared length covers its header, data, padding and footer
     // together, not the data alone - confirmed against every section of a
@@ -183,9 +172,9 @@ fn section_data(
     // section's header to its footer's magic.
     let data_length = (header.section_length as usize)
         .checked_sub(SectionHeader::SIZE + SectionFooter::SIZE)
-        .ok_or(PriParseError::Truncated {
-            context: "section length (shorter than its own header and footer)",
-        })?;
+        .ok_or(PriParseError::truncated(
+            "section length (shorter than its own header and footer)",
+        ))?;
 
     let data_start = header_start + SectionHeader::SIZE;
     bytes_slice(buffer, data_start, data_length, "section data")

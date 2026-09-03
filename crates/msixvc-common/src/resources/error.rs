@@ -29,3 +29,10 @@ pub enum PriParseError {
     #[error("Unexpected IO error {0:?}")]
     Io(#[from] std::io::Error),
 }
+
+impl PriParseError {
+    #[inline]
+    pub fn truncated(context: &'static str) -> Self {
+        Self::Truncated { context }
+    }
+}

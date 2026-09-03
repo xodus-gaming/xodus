@@ -46,48 +46,43 @@ fn resolve_range<T: Clone>(
     first: u16,
     count: u16,
     table: &[T],
-    context: &'static str,
-) -> Result<Vec<T>, PriParseError> {
+) -> Option<Vec<T>> {
     let start = first as usize;
-    let end = start
-        .checked_add(count as usize)
-        .ok_or(PriParseError::Truncated { context })?;
-    let indices = index_table
-        .get(start..end)
-        .ok_or(PriParseError::Truncated { context })?;
+    let end = start.checked_add(count as usize)?;
+    let indices = index_table.get(start..end)?;
     indices
         .iter()
-        .map(|&i| {
-            table
-                .get(i as usize)
-                .cloned()
-                .ok_or(PriParseError::Truncated { context })
-        })
+        .map(|&i| table.get(i as usize).cloned())
         .collect()
 }
 
 pub(crate) fn build(data: &Bytes) -> Result<DecisionInfo, PriParseError> {
     let mut cursor = Cursor::new(data, 0);
-    let header = cursor.read::<DecisionInfoHeader>("decision info header")?;
+    let header = cursor
+        .read::<DecisionInfoHeader>()
+        .ok_or(PriParseError::truncated("decision info header"))?;
 
     let decision_entries = (0..header.number_of_decisions)
-        .map(|_| cursor.read::<DecisionEntry>("decision entry"))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|_| cursor.read::<DecisionEntry>())
+        .collect::<Option<Vec<_>>>()
+        .ok_or(PriParseError::truncated("decision entry"))?;
     let qualifier_set_entries = (0..header.number_of_qualifier_sets)
-        .map(|_| cursor.read::<QualifierSetEntry>("qualifier set entry"))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|_| cursor.read::<QualifierSetEntry>())
+        .collect::<Option<Vec<_>>>()
+        .ok_or(PriParseError::truncated("qualifier set entry"))?;
     let qualifier_entries = (0..header.number_of_qualifiers)
-        .map(|_| cursor.read::<QualifierEntry>("qualifier entry"))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|_| cursor.read::<QualifierEntry>())
+        .collect::<Option<Vec<_>>>()
+        .ok_or(PriParseError::truncated("qualifier entry"))?;
     let distinct_qualifier_entries = (0..header.number_of_distinct_qualifiers)
         .map(|_| cursor.try_read::<DistinctQualifierEntry>("distinct qualifier entry"))
         .collect::<Result<Vec<_>, _>>()?;
-    let index_table =
-        cursor.read_u16_array(header.number_of_index_table_entries as usize, "index table")?;
-    let value_block = cursor.take(
-        header.qualifier_value_block_length as usize * 2,
-        "qualifier value block",
-    )?;
+    let index_table = cursor
+        .read_u16_array(header.number_of_index_table_entries as usize)
+        .ok_or(PriParseError::truncated("index table"))?;
+    let value_block = cursor
+        .take(header.qualifier_value_block_length as usize * 2)
+        .ok_or(PriParseError::truncated("qualifier value block"))?;
 
     let distinct_qualifiers: Vec<(QualifierType, Arc<str>)> = distinct_qualifier_entries
         .iter()
@@ -108,9 +103,9 @@ pub(crate) fn build(data: &Bytes) -> Result<DecisionInfo, PriParseError> {
             let (qualifier_type, value) = distinct_qualifiers
                 .get(q.distinct_qualifier_index as usize)
                 .cloned()
-                .ok_or(PriParseError::Truncated {
-                    context: "qualifier's distinct qualifier index",
-                })?;
+                .ok_or(PriParseError::truncated(
+                    "qualifier's distinct qualifier index",
+                ))?;
             Ok(Qualifier {
                 qualifier_type,
                 value,
@@ -128,8 +123,8 @@ pub(crate) fn build(data: &Bytes) -> Result<DecisionInfo, PriParseError> {
                 set.first_qualifier_index,
                 set.number_of_qualifiers,
                 &qualifiers,
-                "qualifier set's qualifier range",
-            )?;
+            )
+            .ok_or(PriParseError::truncated("qualifier set's qualifier range"))?;
             Ok(QualifierSet { qualifiers })
         })
         .collect::<Result<Vec<_>, PriParseError>>()?;
@@ -142,8 +137,8 @@ pub(crate) fn build(data: &Bytes) -> Result<DecisionInfo, PriParseError> {
                 decision.first_qualifier_set_index,
                 decision.number_of_qualifier_sets,
                 &qualifier_sets,
-                "decision's qualifier set range",
-            )?;
+            )
+            .ok_or(PriParseError::truncated("decision's qualifier set range"))?;
             Ok(Decision { qualifier_sets })
         })
         .collect::<Result<Vec<_>, PriParseError>>()?;
