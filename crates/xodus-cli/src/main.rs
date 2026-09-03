@@ -41,6 +41,15 @@ enum SubCommand {
         #[arg(short, long)]
         market: Option<String>,
     },
+    #[command(
+        about = "Extract a locally stored EAppx/EMSIX package (research task, see issue #91)"
+    )]
+    ExtractEappx {
+        path: String,
+        destination: String,
+        #[arg(short, long, help = "Path to a keyfile with content decryption keys")]
+        key_file: Option<String>,
+    },
     Login,
     Logout {
         #[arg(long, default_value_t = false, help = "Remove device license")]
@@ -194,6 +203,11 @@ async fn main() -> ExitCode {
             )
             .await
         }
+        SubCommand::ExtractEappx {
+            path,
+            destination,
+            key_file,
+        } => commands::extract_eappx::run(path, destination, key_file).await,
         SubCommand::Streaming {
             source,
             destination,

@@ -1,0 +1,52 @@
+name: Wiki sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+
+permissions:
+  contents: write
+
+jobs:
+  wiki:
+    runs-on: ubuntu-slim
+    steps:
+      - name: Checkout repo docs
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            docs
+          sparse-checkout-cone-mode: false
+          path: repo
+
+      - name: Checkout wiki
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository }}.wiki
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: wiki
+
+      - name: Sync docs into wiki
+        run: |
+          rsync -a --delete --exclude='.git' repo/docs/ wiki/
+
+      - name: Commit and push
+        working-directory: wiki
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes to publish"
+            exit 0
+          fi
+
+          git add -A
+          git commit -m "Sync wiki from ${{ github.repository }}@${{ github.sha }}
+
+          Triggered by ${{ github.event_name }} from ${{ github.actor }} on ${{ github.ref_name }}
+          Source commit: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+          git push

@@ -2,6 +2,7 @@
 name = "xodus"
 version = "0.1.0"
 edition = "2024"
+rust-version = { workspace = true }
 
 [dependencies]
 xal = { git = "https://github.com/xodus-gaming/xal-rs", rev = "6aa2420f8f0d5e6f7460ff13f399037583a942f4", version = "0.1.3" }
