@@ -15,8 +15,8 @@ use crate::parse::{BinaryParse, BinaryTryParse};
 use crate::resources::error::PriParseError;
 
 /// Borrows `len` bytes starting at `offset` out of `data`, or a
-/// [`None] if the requested range falls outside of `data`.
-pub(crate) fn slice_range<'a>(data: &'a [u8], offset: usize, len: usize) -> Option<&'a [u8]> {
+/// [`None`] if the requested range falls outside of `data`.
+pub(crate) fn slice_range(data: &[u8], offset: usize, len: usize) -> Option<&[u8]> {
     let end = offset.checked_add(len)?;
     data.get(offset..end)
 }
