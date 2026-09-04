@@ -150,13 +150,73 @@ fn load_raw_smbios() -> io::Result<Vec<u8>> {
     raw_smbios_from_device()
 }
 
+// Common polkit authentication agent binaries across desktop environments.
+// pkexec needs one of these (or an equivalent) registered on the session bus
+// to ever show a prompt; without one it blocks in `pkexec` forever with no
+// error (confirmed live - `pstree` on the stuck tree shows `pkexec` sitting
+// idle on `do_wait`). This list isn't exhaustive (a custom/rare agent won't
+// match), but it covers the desktop environments this is actually likely to
+// run under; an unmatched-but-present agent just means the fallback below
+// (attempt pkexec anyway) is safe, since a real agent showing a prompt means
+// pkexec correctly returns once the user answers it, one way or another.
+#[cfg(target_os = "linux")]
+const KNOWN_POLKIT_AGENTS: &[&str] = &[
+    "polkit-gnome-authentication-agent-1",
+    "polkit-kde-authentication-agent-1",
+    "lxqt-policykit-agent",
+    "lxpolkit",
+    "mate-polkit",
+    "xfce-polkit",
+    "ukui-polkit",
+];
+
+#[cfg(target_os = "linux")]
+fn polkit_agent_running() -> bool {
+    // -f (match against the full command line) rather than -x (match against
+    // `comm`, which the kernel truncates to 15 characters): several agent
+    // binary names exceed that, e.g. polkit-kde-authentication-agent-1 (34
+    // chars, truncated to "polkit-kde-auth" in /proc/<pid>/comm), so -x would
+    // silently never match them and always report no agent present.
+    //
+    // The pattern anchors the name to a path component (leading `/`) and
+    // requires it be followed by whitespace or end-of-string, so it only
+    // matches the agent binary actually being invoked, not an unrelated
+    // process whose arguments merely happen to contain the name as a
+    // substring - a false positive here would reintroduce the original
+    // infinite-hang bug by making a real pkexec call with no agent present.
+    KNOWN_POLKIT_AGENTS.iter().any(|name| {
+        Command::new("pgrep")
+            .args(["-f", &format!("/{name}([[:space:]]|$)")])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+    })
+}
+
 #[cfg(target_os = "linux")]
 fn load_raw_smbios() -> io::Result<Vec<u8>> {
-    let cmd = Command::new("pkexec")
+    // If no authentication agent is registered, pkexec cannot ever prompt for
+    // a password and will hang forever waiting on one that will never appear
+    // (see KNOWN_POLKIT_AGENTS doc comment) - fail immediately instead of
+    // guessing at a timeout that's either too short for a real password
+    // prompt or still an arbitrarily long hang for the no-agent case.
+    if !polkit_agent_running() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "no polkit authentication agent detected for this session; unable to probe SMBIOS data",
+        ));
+    }
+
+    // An agent is present, so this is a real, human-driven authentication
+    // prompt - pkexec will return on its own once the user answers it
+    // (success, wrong password exhausting retries, or the dialog is
+    // dismissed/canceled), so there's no good arbitrary timeout to apply
+    // here without cutting off a legitimately slow person mid-prompt.
+    let output = Command::new("pkexec")
         .args(["cat", "/sys/firmware/dmi/entries/1-0/raw"])
         .stdout(Stdio::piped())
-        .spawn()?;
-    let output = cmd.wait_with_output()?;
+        .output()?;
 
     if output.status.success() {
         Ok(output.stdout)
