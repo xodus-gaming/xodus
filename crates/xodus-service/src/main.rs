@@ -10,9 +10,9 @@ use tracing_subscriber::util::SubscriberInitExt;
 use xodus::tokens::TokenManager;
 
 mod connection;
+pub mod handlers;
 mod simple_context;
 mod utils;
-
 const XML_MAGIC: u32 = 0x58445358;
 const PROTO_MAGIC: u32 = 0x58445350;
 
