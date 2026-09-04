@@ -1,0 +1,30 @@
+/* definitions of container requests and responses and shared enums */
+
+syntax = "proto3";
+package xodus;
+
+import "xuser.proto";
+
+/* Request to Xodus from a client (i.e Wine) */
+message XodusRequest {
+  uint64 request_id = 1;
+  oneof payload {
+    XUserAddRequest xuser_add_req = 10;
+  }
+}
+
+/* Response from Xodus to a client */
+message XodusResponse {
+  uint64 request_id = 1;
+  HRESULT status_code = 2;
+  oneof payload {
+    XUserAddResponse xuser_add_res = 10;
+  }
+}
+
+/* hresult, only some response codes */
+/* full codes: https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/live/xbl-hresult-error-codes?view=gdk-2604 */
+enum HRESULT {
+    HRESULT_UNSPECIFIED = 0;
+    HRESULT_S_OK = 1;
+}
