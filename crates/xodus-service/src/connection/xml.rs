@@ -124,7 +124,7 @@ pub async fn parse_message(
                     let payload = quick_xml::se::to_string(&payload)?;
                     Ok(payload.as_bytes().to_vec())
                 }
-                _ => todo!("Error handling sill sucks"),
+                _ => Err("Failed to exchange user token".into()),
             }
         }
         _ => Err("Unimplemented".into()),
