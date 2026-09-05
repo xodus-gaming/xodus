@@ -25,6 +25,7 @@ pub async fn handle(
     let request_id = request.request_id;
     let payload = request.payload;
 
+    // get the response payload from handler
     let response_payload = match payload {
         Some(ReqType::XuserAddReq(req)) => {
             let response =
@@ -33,6 +34,19 @@ pub async fn handle(
         }
         _ => todo!("Error handling sill sucks"),
     };
+
+
+    let response = XodusResponse {
+        request_id,
+        status_code: Hresult::SOk as i32,
+        payload: Some(response_payload)
+    };
+
+    let mut response_buf = Vec::new();
+    response.encode(&mut response_buf)?;
+    let len_bytes = (response_buf.len() as u32).to_be_bytes();
+    socket.write_all(&len_bytes).await?;
+    socket.write_all(&response_buf).await?;
 
     // respond here
     Ok(())
