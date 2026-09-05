@@ -11,7 +11,8 @@ pub async fn handle(
     socket: &mut tokio::net::UnixStream,
     context: &mut SimpleContext,
 ) -> tokio::io::Result<()> {
-    // header
+    // header, I believe the magic at this point as already been read, so just focus on getting
+    // message size
     let mut len_buf = [0u8; 4];
     socket.read_exact(&mut len_buf).await?;
 
@@ -35,19 +36,20 @@ pub async fn handle(
         _ => todo!("Error handling sill sucks"),
     };
 
-
+    // build out response using the created payload from handler
     let response = XodusResponse {
         request_id,
         status_code: Hresult::SOk as i32,
-        payload: Some(response_payload)
+        payload: Some(response_payload),
     };
 
+    // write back
     let mut response_buf = Vec::new();
     response.encode(&mut response_buf)?;
     let len_bytes = (response_buf.len() as u32).to_be_bytes();
     socket.write_all(&len_bytes).await?;
     socket.write_all(&response_buf).await?;
 
-    // respond here
+    // better return values here
     Ok(())
 }
