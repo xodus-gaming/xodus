@@ -1,0 +1,13 @@
+syntax = "proto3";
+package xodus_proto;
+
+/* XUserAddAsync - https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/system/xuser/functions/xuseraddasync?view=gdk-2604 */
+message XUserAddRequest {
+    int32 options = 1;
+}
+
+/* XUserAddResult - https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/system/xuser/functions/xuseraddresult?view=gdk-2604 */
+/* hresult is provided as part of the XodusResponse definition */
+message XUserAddResponse {
+    uint64 user_handle = 1;
+}
