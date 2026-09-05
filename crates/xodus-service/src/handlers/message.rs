@@ -1,14 +1,16 @@
 use crate::simple_context::SimpleContext;
 use crate::xodus_proto::{
-    XodusRequest, xodus_request::Payload as ReqType, xodus_response::Payload as ResType,
+    Hresult, XodusRequest, XodusResponse, xodus_request::Payload as ReqType,
+    xodus_response::Payload as ResType,
 };
-use crate::xruntime::user;
+use prost::Message;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 // Generic message handler - read from socket and redirect message to specific handler.
 pub async fn handle(
     socket: &mut tokio::net::UnixStream,
     context: &mut SimpleContext,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> tokio::io::Result<()> {
     // header
     let mut len_buf = [0u8; 4];
     socket.read_exact(&mut len_buf).await?;
@@ -24,12 +26,14 @@ pub async fn handle(
     let payload = request.payload;
 
     let response_payload = match payload {
-        ReqType::XUserAddRequest(req) => {
+        Some(ReqType::XuserAddReq(req)) => {
             let response =
                 crate::handlers::user::handle_xuseradd(req, context.tokens().clone()).await;
-            ResType::XUserAddResponse(response)
+            ResType::XuserAddRes(response)
         }
-        _ => return Err("Unhandled request payload type".into()),
+        _ => todo!("Error handling sill sucks"),
     };
+
+    // respond here
     Ok(())
 }

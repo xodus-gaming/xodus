@@ -1,7 +1,7 @@
 /* definitions of container requests and responses and shared enums */
 
 syntax = "proto3";
-package xodus;
+package xodus_proto;
 
 import "xuser.proto";
 
