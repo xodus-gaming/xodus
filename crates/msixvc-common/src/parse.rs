@@ -162,7 +162,7 @@ pub trait BinaryParse {
     /// Parse from an array.
     #[inline]
     fn from_array(array: &GenericArray<u8, Self::Size>) -> Self::Output {
-        parse(array, Self::parse)
+        Self::parse(BytesReader(array)).0
     }
 
     /// Parse from a slice.
@@ -199,7 +199,7 @@ pub trait BinaryTryParse {
     /// Parse from an array.
     #[inline]
     fn try_from_array(array: &GenericArray<u8, Self::Size>) -> Result<Self::Output, Self::Error> {
-        try_parse(array, Self::try_parse)
+        Self::try_parse(BytesReader(array)).map(|(t, _reader)| t)
     }
 
     /// Parse from a slice.
@@ -369,21 +369,35 @@ mod tests {
 
     #[test]
     fn test_implements_binary_parse() {
-        const fn requires_binary_parse<T: BinaryParse>() {}
+        fn requires_binary_parse<T: BinaryParse>() {}
 
         // Zero-sized types should be able to implement `BinaryParse`, too.
 
         requires_binary_parse::<()>();
-        requires_binary_parse::<[(); 0]>();
-        requires_binary_parse::<[(); 1]>();
-
         requires_binary_parse::<u8>();
-        requires_binary_parse::<[u8; 0]>();
-        requires_binary_parse::<[u8; 1]>();
-
         requires_binary_parse::<i8>();
-        requires_binary_parse::<[i8; 0]>();
-        requires_binary_parse::<[i8; 1]>();
+
+        // Nested arrays should also be able to implement `BinaryParse`.
+
+        requires_binary_parse::<[[[(); 1]; 0]; 1]>();
+        requires_binary_parse::<[[[u8; 1]; 0]; 1]>();
+        requires_binary_parse::<[[[i8; 1]; 0]; 1]>();
+    }
+
+    #[test]
+    fn test_deep_array_nesting() {
+        // A very deep nested array should also implement `BinaryParse`.
+
+        type DeepArray<T> = [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[T; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1];
+            1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1];
+            1]; 1]; 1]; 1];
+
+        let int: u8 = 53;
+        let arr = DeepArray::<u8>::from_array(&[int].into());
+        let int_new: u8 = arr[0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0]
+            [0][0][0][0][0][0][0][0][0];
+
+        assert_eq!(int, int_new);
     }
 
     #[test]
