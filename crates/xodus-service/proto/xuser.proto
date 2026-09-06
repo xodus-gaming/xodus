@@ -1,0 +1,160 @@
+syntax = "proto3";
+package xodus_proto;
+
+message XUserAddRequest {
+  XUserAddOptions options = 1;
+}
+message XUserAddResponse {
+  uint64 user_handle = 1;
+}
+
+message XUserAddByIdWithUiRequest {
+  uint64 user_id = 1;
+}
+message XUserAddByIdWithUiResponse {
+  uint64 user_handle = 1;
+}
+
+message XUserChangeEventCallback {}
+
+message XUserCheckPrivilegeRequest {
+  uint64 user = 1;
+  XUserPrivilegeOptions options = 2;
+  XUserPrivilege privilege = 3;
+}
+message XUserCheckPrivilegeResponse {
+  bool has_privilege = 1;
+  XUserPrivilegeDenyReason reason = 2;
+}
+
+message XUserCloseHandleRequest {}
+
+message XUserCloseSignOutDeferralHandleRequest {}
+
+message XUserCompareRequest {
+  uint64 user1 = 1;
+  uint64 user2 = 2;
+}
+message XUserCompareResponse {
+  int32 equal = 1;
+}
+
+message XUserDefaultAudioEndpointUtf16ChangedCallbackRequest {}
+
+message XUserDeviceAssociationChangedCallbackRequest {}
+
+message XUserDuplicateHandleRequest {
+  int64 user1 = 1;
+}
+message XUserDuplicateHandleResponse {
+  int64 duplicated_handle = 1;
+}
+
+message XUserFindControllerForUserWithUiRequest {}
+
+message XUserFindForDeviceRequest {}
+
+message XUserFindUserByIdRequest {
+  int64 user_id = 1;
+}
+message XUserFindUserByIdResponse {
+  int64 handle = 1;
+}
+
+message XUserFindUserByLocalIdRequest {
+  int64 user_local_id = 1;
+}
+message XUserFindUserByLocalIdResponse {
+  int64 handle = 1;
+}
+
+message XUserGetAgeGroupRequest {
+  int64 user = 1;
+}
+message XUserGetAgeGroupResponse {
+  XUserAgeGroup age_group = 1;
+}
+
+message XUserGetDefaultAudioEndpointUtf16 {}
+
+message XUserGetGamerPictureRequest {}
+message XUserGetGamerPictureResponse {}
+
+message XUserGetGamerPictureResultSizeRequest {}
+
+message XUserGetGamertagRequest {}
+
+message XUserGetIdRequest {}
+
+message XUserGetIsGuestRequest {}
+
+message XUserGetLocalIdRequest {}
+
+message XUserGetMaxUsersRequest {}
+
+message XUserGetMsaTokenSilentlyAsyncRequest {}
+message XUserGetMsaTokenSilentlyAsyncResponse {}
+
+message XUserGetSignOutDeferralRequest {}
+
+message XUserGetStateRequest {}
+
+message XUserGetTokenAndSignatureRequest {}
+message XUserGetTokenAndSignatureResponse {}
+
+message XUserIsStoreUserRequest {}
+
+message XUserRegisterForChangeEventRequest {}
+
+/* enumerations */
+
+enum XUserAddOptions {
+  X_USER_ADD_OPTIONS_UNSPECIFIED = 0;
+  X_USER_ADD_OPTIONS_ADD_DEFAULT_USER_SILENTLY = 1;
+  X_USER_ADD_OPTIONS_ALLOW_GUESTS = 2;
+  X_USER_ADD_OPTIONS_ADD_DEFAULT_USER_ALLOWING_UI = 4;
+}
+
+enum XUserAgeGroup {
+  X_USER_AGE_GROUP_UNSPECIFIED = 0;
+  X_USER_AGE_GROUP_CHILD = 1;
+  X_USER_AGE_GROUP_TEEN = 2;
+  X_USER_AGE_GROUP_ADULT = 3;
+}
+
+enum XUserPrivilegeOptions {
+  X_USER_PRIVILEGE_OPTIONS_UNSPECIFIED = 0;
+  X_USER_PRIVILEGE_OPTIONS_ALL_USERS = 1;
+}
+
+enum XUserState {
+  X_USER_STATE_UNSPECIFIED = 0;
+  X_USER_STATE_SIGNING_OUT = 1;
+  X_USER_STATE_SIGNED_OUT = 2;
+}
+
+enum XUserPrivilege {
+  X_USER_PRIVILEGE_UNSPECIFIED = 0;
+  X_USER_PRIVILEGE_CROSS_PLAY = 185;
+  X_USER_PRIVILEGE_CLUBS = 188;
+  X_USER_PRIVILEGE_SESSIONS = 189;
+  X_USER_PRIVILEGE_BROADCAST = 190;
+  X_USER_PRIVILEGE_MANAGE_PROFILE_PRIVACY = 196;
+  X_USER_PRIVILEGE_GAME_DVR = 198;
+  X_USER_PRIVILEGE_MULTIPLAYER_PARTIES = 203;
+  X_USER_PRIVILEGE_CLOUD_MANAGE_SESSION = 207;
+  X_USER_PRIVILEGE_CLOUD_JOIN_SESSION = 208;
+  X_USER_PRIVILEGE_CLOUD_SAVED_GAMES = 209;
+  X_USER_PRIVILEGE_SOCIAL_NETWORK_SHARING = 220;
+  X_USER_PRIVILEGE_USER_GENERATED_CONTENT = 247;
+  X_USER_PRIVILEGE_COMMUNICATIONS = 252;
+  X_USER_PRIVILEGE_MULTIPLAYER = 254;
+  X_USER_PRIVILEGE_ADD_FRIENDS = 255;
+}
+
+enum XUserPrivilegeDenyReason {
+  X_USER_PRIVILEGE_DENY_REASON_UNSPECIFIED = 0;
+  X_USER_PRIVILEGE_DENY_REASON_PURCHASE_REQUIRED = 1;
+  X_USER_PRIVILEGE_DENY_REASON_RESTRICTED = 2;
+  X_USER_PRIVILEGE_DENY_REASON_BANNED = 3;
+}
