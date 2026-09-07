@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::os::fd::{AsFd, IntoRawFd};
+use std::os::fd::{AsFd, AsRawFd, IntoRawFd};
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -190,6 +190,7 @@ pub async fn run(
             continue;
         }
         let mut game_exe = File::from_std(make_temp_file(&mount_dir).unwrap());
+        println!("Mounting {} to {}", file.0, game_exe.as_fd().as_raw_fd());
 
         let source_path = out.join(file.0.replace("\\", "/"));
 
@@ -236,6 +237,8 @@ pub async fn run(
         eprintln!("Could not find .exe");
         return ExitCode::FAILURE;
     };
+
+    println!("Running {} with WINE_DLL_FILE_MAP={}", nt_entry, env_value);
 
     let mut wn = Command::new(wine)
         .arg(nt_entry)
