@@ -8,6 +8,7 @@ use xodus::tokens::TokenManager;
 
 mod commands;
 mod license;
+mod manifest;
 mod package;
 mod webview;
 
