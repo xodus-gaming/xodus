@@ -80,6 +80,12 @@ enum SubCommand {
         #[arg(short, long)]
         market: Option<String>,
     },
+    #[command(about = "Add or remove friends and followers")]
+    Friend  {
+        #[command(subcommand)]
+        action: FriendAction,
+        xuid: String,
+    },
     #[command(about = "Generate or decrypt base64-encoded CLEP challenge data")]
     Clep {
         #[command(subcommand)]
@@ -89,6 +95,17 @@ enum SubCommand {
     SpLicense {
         block: String,
     },
+}
+
+#[derive(Subcommand)]
+enum FriendAction {
+    #[command(about = "Offer or accept a friend request")]
+    Add,
+    #[command(about = "Cancel a friend request or remove friend")]
+    Remove,
+    Follow,
+    Unfollow,
+    RemoveFollower,
 }
 
 #[derive(Subcommand)]
@@ -233,6 +250,13 @@ async fn main() -> ExitCode {
             exe,
             market,
         } => commands::run::run(&client, &tokens, source, wine, exe, market).await,
+        SubCommand::Friend { action, xuid } => match action {
+            FriendAction::Add => commands::friend::add(&client, &tokens, xuid).await,
+            FriendAction::Remove => commands::friend::remove(&client, &tokens, xuid).await,
+            FriendAction::Follow => commands::friend::follow(&client, &tokens, xuid).await,
+            FriendAction::Unfollow => commands::friend::unfollow(&client, &tokens, xuid).await,
+            FriendAction::RemoveFollower => commands::friend::remove_follower(&client, &tokens, xuid).await,
+        },
         SubCommand::Clep { action } => match action {
             ClepAction::Generate {
                 smbios,
