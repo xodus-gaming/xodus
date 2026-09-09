@@ -33,6 +33,21 @@ jobs:
         run: |
           rsync -a --delete --exclude='.git' repo/docs/ wiki/
 
+      - name: Generate sidebar
+        run: |
+            echo "[Home](Home)" > wiki/_Sidebar.md
+            for dir in wiki/*/; do
+              DIRNAME=$(basename $dir)
+              echo "* [${DIRNAME}](${DIRNAME})" >> wiki/_Sidebar.md
+              for filename in $dir*; do
+                NAME=$(basename $filename .md)
+                if [ "${DIRNAME,,}" != "${NAME,,}" ]; then
+                  echo "  * [${NAME}](${NAME})" >> wiki/_Sidebar.md;
+                fi
+              done
+            done
+
+
       - name: Commit and push
         working-directory: wiki
         run: |
