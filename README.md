@@ -61,7 +61,25 @@ The project structure is as follows.
 
 - Rust version 1.98 or later
 - Right now CLI relies on wry and tao to show a login page. Consult https://docs.rs/wry/latest/wry/#platform-considerations
-- xodus-service relies on `protoc` to compile `proto/` definitions make sure to install it for your platform
+- The `xodus` crate relies on `protoc` to compile `proto/` definitions; make sure to install it for your platform.
+
+#### Linux native build dependencies
+
+Ubuntu 24.04:
+
+```sh
+sudo apt install build-essential cmake pkg-config libwebkit2gtk-4.1-dev libdbus-1-dev libssl-dev protobuf-compiler
+```
+
+Arch Linux / CachyOS / Manjaro:
+
+```sh
+sudo pacman -S --needed base-devel cmake webkit2gtk-4.1 dbus openssl protobuf
+```
+
+These packages provide or pull in the GTK, GLib, libsoup, JavaScriptCore and WebKitGTK development dependencies used by the login webview. D-Bus and OpenSSL are required by the keyring backend. The protobuf compiler (`protoc`) is used by the `xodus` crate's build script.
+
+Español: instala las dependencias nativas con el comando de tu distribución mostrado arriba. Estos paquetes proporcionan o incluyen como dependencias las bibliotecas de desarrollo GTK, GLib, libsoup, JavaScriptCore y WebKitGTK usadas por la ventana de login. El backend de keyring requiere D-Bus y OpenSSL. El build script de `xodus` utiliza el compilador protobuf (`protoc`).
 
 ### Running
 
