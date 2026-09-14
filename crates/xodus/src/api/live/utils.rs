@@ -13,11 +13,12 @@ use crate::api::live::rst;
 use crate::models::soap;
 
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
-type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 
 #[cfg(test)]
 mod tests {
-    use aes::cipher::{block_padding::Pkcs7, BlockEncryptMut, KeyIvInit};
+    use aes::cipher::{BlockModeEncrypt, KeyIvInit, block_padding::Pkcs7};
+
+    type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 
     use super::decrypt_cipher_value;
 
@@ -25,7 +26,10 @@ mod tests {
     fn rejects_a_payload_without_an_iv() {
         let error = decrypt_cipher_value(&[0; 15], &[0; 32]).unwrap_err();
 
-        assert!(matches!(error, crate::api::live::rst::RSTError::InvalidEncryptedPayload));
+        assert!(matches!(
+            error,
+            crate::api::live::rst::RSTError::InvalidEncryptedPayload
+        ));
     }
 
     #[test]
@@ -33,12 +37,15 @@ mod tests {
         let plaintext = vec![b'x'; 8192];
         let mut encrypted = vec![0; plaintext.len() + 16];
         let encrypted = Aes256CbcEnc::new((&[0; 32]).into(), (&[0; 16]).into())
-            .encrypt_padded_b2b_mut::<Pkcs7>(&plaintext, &mut encrypted)
+            .encrypt_padded_b2b::<Pkcs7>(&plaintext, &mut encrypted)
             .unwrap();
         let mut cipher_value = vec![0; 16];
         cipher_value.extend_from_slice(encrypted);
 
-        assert_eq!(decrypt_cipher_value(&cipher_value, &[0; 32]).unwrap(), plaintext);
+        assert_eq!(
+            decrypt_cipher_value(&cipher_value, &[0; 32]).unwrap(),
+            plaintext
+        );
     }
 }
 
