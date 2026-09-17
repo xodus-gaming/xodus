@@ -5,7 +5,10 @@ use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use inquire::MultiSelect;
 use inquire::validator::Validation;
-use reqwest::{Client, StatusCode, header::RANGE};
+use reqwest::{
+    Client, StatusCode,
+    header::{CONTENT_RANGE, ETAG, IF_RANGE, LAST_MODIFIED, RANGE},
+};
 use tokio::io::AsyncWriteExt;
 use xodus::models::packagespc::PackageFile;
 use xodus::tokens::TokenManager;
@@ -19,20 +22,59 @@ async fn download_file(
     expected_size: u64,
     progress: &ProgressBar,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let existing_size = match tokio::fs::metadata(destination).await {
+    if let Ok(metadata) = tokio::fs::metadata(destination).await {
+        if metadata.len() == expected_size {
+            progress.set_position(expected_size);
+            progress.finish();
+            return Ok(());
+        }
+    }
+
+    let partial_path = destination.with_file_name(format!(
+        "{}.xodusdownload",
+        destination
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("download")
+    ));
+    let validator_path = destination.with_file_name(format!(
+        "{}.validator",
+        partial_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("download.xodusdownload")
+    ));
+    let existing_size = match tokio::fs::metadata(&partial_path).await {
         Ok(metadata) => metadata.len(),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            match tokio::fs::metadata(destination).await {
+                Ok(metadata) if metadata.len() < expected_size => {
+                    tokio::fs::rename(destination, &partial_path).await?;
+                    metadata.len()
+                }
+                Ok(metadata) if metadata.len() > expected_size => {
+                    return Err(format!(
+                        "local file is larger than expected: {} > {} bytes",
+                        metadata.len(),
+                        expected_size
+                    )
+                    .into());
+                }
+                _ => 0,
+            }
+        }
         Err(error) => return Err(error.into()),
     };
 
-    if existing_size > expected_size {
-        return Err(format!(
-            "local file is larger than expected: {} > {} bytes",
-            existing_size, expected_size
-        )
-        .into());
-    }
+    let existing_size = if existing_size > expected_size {
+        tokio::fs::remove_file(&partial_path).await?;
+        0
+    } else {
+        existing_size
+    };
     if existing_size == expected_size {
+        tokio::fs::rename(&partial_path, destination).await?;
+        let _ = tokio::fs::remove_file(&validator_path).await;
         progress.set_position(existing_size);
         progress.finish();
         return Ok(());
@@ -41,22 +83,49 @@ async fn download_file(
     let mut request = client.get(url);
     if existing_size > 0 {
         request = request.header(RANGE, format!("bytes={existing_size}-"));
+        if let Ok(validator) = tokio::fs::read_to_string(&validator_path).await {
+            request = request.header(IF_RANGE, validator);
+        }
     }
     let response = request.send().await?;
+    if let Some(validator) = response
+        .headers()
+        .get(ETAG)
+        .or_else(|| response.headers().get(LAST_MODIFIED))
+    {
+        tokio::fs::write(&validator_path, validator.as_bytes()).await?;
+    }
     let resume = existing_size > 0 && response.status() == StatusCode::PARTIAL_CONTENT;
 
-    if existing_size > 0 && response.status() == StatusCode::PARTIAL_CONTENT {
-        let expected_prefix = format!("bytes {existing_size}-");
+    if response.status() == StatusCode::RANGE_NOT_SATISFIABLE && existing_size > 0 {
+        tokio::fs::remove_file(&partial_path).await?;
+        let _ = tokio::fs::remove_file(&validator_path).await;
+        return Box::pin(download_file(
+            client,
+            url,
+            destination,
+            expected_size,
+            progress,
+        ))
+        .await;
+    }
+    if resume {
         let content_range = response
             .headers()
-            .get("content-range")
+            .get(CONTENT_RANGE)
             .and_then(|value| value.to_str().ok())
             .ok_or("resume response is missing Content-Range")?;
-        if !content_range.starts_with(&expected_prefix) {
-            return Err(format!(
-                "resume response has invalid Content-Range: expected prefix {expected_prefix:?}, got {content_range:?}"
-            )
-            .into());
+        let Some((range, total)) = content_range
+            .strip_prefix("bytes ")
+            .and_then(|value| value.split_once('/'))
+        else {
+            return Err(format!("invalid Content-Range: {content_range}").into());
+        };
+        let Some((start, _)) = range.split_once('-') else {
+            return Err(format!("invalid Content-Range: {content_range}").into());
+        };
+        if start.parse::<u64>()? != existing_size || total.parse::<u64>()? != expected_size {
+            return Err(format!("invalid Content-Range for resume: {content_range}").into());
         }
     } else if !response.status().is_success() {
         return Err(format!("download failed with HTTP status {}", response.status()).into());
@@ -70,7 +139,7 @@ async fn download_file(
     } else {
         output.truncate(true);
     }
-    let mut output = output.open(destination).await?;
+    let mut output = output.open(&partial_path).await?;
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
@@ -80,12 +149,14 @@ async fn download_file(
     output.flush().await?;
     drop(output);
 
-    let actual_size = tokio::fs::metadata(destination).await?.len();
+    let actual_size = tokio::fs::metadata(&partial_path).await?.len();
     if actual_size != expected_size {
         return Err(
             format!("download ended with {actual_size} bytes; expected {expected_size}").into(),
         );
     }
+    tokio::fs::rename(&partial_path, destination).await?;
+    let _ = tokio::fs::remove_file(&validator_path).await;
     progress.finish();
     Ok(())
 }
@@ -243,7 +314,7 @@ mod tests {
         let (url, server) = serve_once(
             data[split..].to_vec(),
             "206 Partial Content",
-            Some(format!("bytes {split}-{}", data.len() - 1)),
+            Some(format!("bytes {split}-{}/{}", data.len() - 1, data.len())),
         )
         .await;
         let dir = tempdir().unwrap();
@@ -328,7 +399,12 @@ mod tests {
         .await
         .unwrap_err();
         assert!(error.to_string().contains("Content-Range"));
-        assert_eq!(tokio::fs::read(path).await.unwrap(), original);
+        assert_eq!(
+            tokio::fs::read(path.with_file_name("file.xodusdownload"))
+                .await
+                .unwrap(),
+            original
+        );
         server.await.unwrap();
     }
 
@@ -342,7 +418,12 @@ mod tests {
             .await
             .unwrap_err();
         assert!(error.to_string().contains("expected 10"));
-        assert_eq!(tokio::fs::read(path).await.unwrap(), b"short");
+        assert_eq!(
+            tokio::fs::read(path.with_file_name("file.xodusdownload"))
+                .await
+                .unwrap(),
+            b"short"
+        );
         server.await.unwrap();
     }
 }
