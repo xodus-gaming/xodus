@@ -63,7 +63,7 @@ impl PageVerifier {
         let expected_hash = self.hashes[page_index];
         let hash: HashEntry = *Sha256::digest(page)
             .first_chunk::<HASH_ENTRY_LENGTH>()
-            .unwrap();
+            .expect("obtaining the first 24 bytes from a 32-byte array is infallible");
 
         if expected_hash != hash {
             hint::cold_path();
@@ -253,7 +253,9 @@ where
         *this.remaining_hashes -= 1;
         *this.next_entry_in_page = 1;
 
-        Poll::Ready(Some(Ok(*buf.first_chunk::<HASH_ENTRY_LENGTH>().unwrap())))
+        Poll::Ready(Some(Ok(*buf.first_chunk::<HASH_ENTRY_LENGTH>().expect(
+            "obtaining the first 24 bytes from a 4096-byte page is infallible",
+        ))))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
