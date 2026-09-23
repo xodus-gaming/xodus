@@ -14,6 +14,57 @@ use crate::models::soap;
 
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
+#[cfg(test)]
+mod tests {
+    use aes::cipher::{BlockModeEncrypt, KeyIvInit, block_padding::Pkcs7};
+
+    type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
+
+    use super::decrypt_cipher_value;
+
+    #[test]
+    fn rejects_a_payload_without_an_iv() {
+        let error = decrypt_cipher_value(&[0; 15], &[0; 32]).unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::api::live::rst::RSTError::InvalidEncryptedPayload
+        ));
+    }
+
+    #[test]
+    fn decrypts_plaintext_larger_than_the_old_eight_kib_limit() {
+        let plaintext = vec![b'x'; 8192];
+        let mut encrypted = vec![0; plaintext.len() + 16];
+        let encrypted = Aes256CbcEnc::new((&[0; 32]).into(), (&[0; 16]).into())
+            .encrypt_padded_b2b::<Pkcs7>(&plaintext, &mut encrypted)
+            .unwrap();
+        let mut cipher_value = vec![0; 16];
+        cipher_value.extend_from_slice(encrypted);
+
+        assert_eq!(
+            decrypt_cipher_value(&cipher_value, &[0; 32]).unwrap(),
+            plaintext
+        );
+    }
+}
+
+fn decrypt_cipher_value(cipher_value: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, rst::RSTError> {
+    let (iv, encrypted) = cipher_value
+        .split_at_checked(16)
+        .ok_or(rst::RSTError::InvalidEncryptedPayload)?;
+    let iv: &[u8; 16] = iv
+        .try_into()
+        .map_err(|_| rst::RSTError::InvalidEncryptedPayload)?;
+    let decryptor = Aes256CbcDec::new(key.into(), iv.into());
+    let mut plaintext = vec![0; encrypted.len()];
+    let plaintext = decryptor
+        .decrypt_padded_b2b::<Pkcs7>(encrypted, &mut plaintext)
+        .map_err(|_| rst::RSTError::Decryption)?;
+
+    Ok(plaintext.to_vec())
+}
+
 /// SP800_108 HMAC with counter
 /// - key_usage - KDF_LABEL
 /// - context - KDF_CONTEXT
@@ -113,15 +164,8 @@ pub fn decrypt_soap_encrypted_data<T: serde::de::DeserializeOwned>(
     let key = signature.hmac_key(&nonce).ok_or(rst::RSTError::HmacKey)?;
     let cipher_value = BASE64_STANDARD.decode(encrypted_data.cipher_data.cipher_value)?;
 
-    let (iv, encrypted) = cipher_value.split_at(16);
-    let iv: &[u8; 16] = iv.try_into().unwrap();
-    let decryptor = Aes256CbcDec::new(&key.into(), iv.into());
-    let mut block = [0; 8192];
-
-    decryptor
-        .decrypt_padded_b2b::<Pkcs7>(encrypted, &mut block)
-        .expect("Failed");
-    let result = std::str::from_utf8(&block).unwrap();
+    let plaintext = decrypt_cipher_value(&cipher_value, &key)?;
+    let result = std::str::from_utf8(&plaintext)?;
     let data = quick_xml::de::from_str::<T>(result)?;
 
     Ok(data)
