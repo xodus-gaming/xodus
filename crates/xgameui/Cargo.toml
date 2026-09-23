@@ -1,0 +1,26 @@
+[package]
+name = "xgameui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.35.0"
+egui = "0.35.0"
+egui_extras = { version = "0.35.0", features = ["all_loaders"] }
+serde = "1.0.229"
+tokio = { workspace = true }
+reqwest = { workspace = true }
+xodus = { path = "../xodus", optional = true }
+
+[features]
+tests = ["dep:xodus"]
+
+[[bin]]
+name = "player_picker_test"
+path = "src/bin/player_picker_test.rs"
+required-features = ["tests"]
+
+[[bin]]
+name = "achievements_picker_test"
+path = "src/bin/achievements_picker_test.rs"
+required-features = ["tests"]
