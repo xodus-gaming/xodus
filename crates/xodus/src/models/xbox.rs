@@ -1,6 +1,9 @@
+pub mod social;
 pub mod subscriptions;
 
 use serde::{Deserialize, Serialize};
+
+pub struct Xuid(String);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
