@@ -303,6 +303,15 @@ pub struct SegmentFile {
     pub keep_encrypted: bool,
 }
 
+/// Decodes a fixed-size, NUL-terminated UTF-16 field (as used by
+/// `XvdUserDataPackageFileEntry::file_path`) into a `String`. A corrupted or
+/// truncated download can produce an unpaired surrogate here, which is a
+/// decode error to report, not a panic.
+fn decode_nul_terminated_utf16(units: &[u16]) -> Result<String, std::string::FromUtf16Error> {
+    let end = units.iter().position(|&c| c == 0).unwrap_or(units.len());
+    String::from_utf16(&units[..end])
+}
+
 impl XvdFile {
     pub fn content_id(&self) -> uuid::Uuid {
         self.header.vduid
@@ -355,8 +364,7 @@ impl XvdFile {
         // TODO: Check if we have proper content type
         if layout.xvc_info.len > Bytes(0) {
             file.seek(std::io::SeekFrom::Start(layout.xvc_info.start.to_bytes().0))
-                .await
-                .expect("Unable to seek");
+                .await?;
 
             let xvc_info = {
                 let mut buf = XvcInfo::buffer();
@@ -472,12 +480,8 @@ impl XvdFile {
                 off += XvdUserDataPackageFileEntry::SIZE as u64;
                 let o = user_data_package_file_entry.offset;
                 let s: u32 = user_data_package_file_entry.size;
-                let fullname = user_data_package_file_entry.file_path;
-                let end = fullname
-                    .iter()
-                    .position(|&c| c == 0)
-                    .unwrap_or(fullname.len());
-                let pfull_name: String = String::from_utf16(&fullname[..end]).unwrap();
+                let pfull_name =
+                    decode_nul_terminated_utf16(&user_data_package_file_entry.file_path)?;
 
                 files.insert(
                     pfull_name,
@@ -532,7 +536,7 @@ impl XvdFile {
                 ))
                 .await?;
                 file.read_exact(buf.as_mut_bytes()).await?;
-                let file_name: String = String::from_utf16(buf.as_slice()).unwrap();
+                let file_name: String = String::from_utf16(buf.as_slice())?;
                 let page_length = if segment.filesize == 0 {
                     1
                 } else {
@@ -674,8 +678,8 @@ impl XvdFile {
                     io::Error::new(ErrorKind::NotFound, "no used GPT partition found")
                 })?;
 
-            let part_start = part.bytes_start(*gp.logical_block_size()).unwrap();
-            let part_len = part.bytes_len(*gp.logical_block_size()).unwrap();
+            let part_start = part.bytes_start(*gp.logical_block_size())?;
+            let part_len = part.bytes_len(*gp.logical_block_size())?;
 
             let bridge = gp.take_device().into_inner().into_inner();
             let partition_offset = drive_data_offset + part_start;
@@ -1042,5 +1046,42 @@ impl XvdFile {
     {
         self.extract_file_ex(i, out, sfile, full_key, progress, true)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_nul_terminated_utf16_stops_at_the_nul() {
+        // "abc" followed by NUL and then trailing garbage past it, as a
+        // fixed-size on-disk field would look after the real filename.
+        let mut field = [0u16; 8];
+        field[..4].copy_from_slice(&[b'a' as u16, b'b' as u16, b'c' as u16, 0]);
+        field[4..].copy_from_slice(&[0xFFFF; 4]);
+
+        assert_eq!(
+            decode_nul_terminated_utf16(&field).expect("should decode"),
+            "abc"
+        );
+    }
+
+    #[test]
+    fn decode_nul_terminated_utf16_with_no_nul_uses_the_whole_slice() {
+        let units: Vec<u16> = "xyz".encode_utf16().collect();
+        assert_eq!(
+            decode_nul_terminated_utf16(&units).expect("should decode"),
+            "xyz"
+        );
+    }
+
+    #[test]
+    fn decode_nul_terminated_utf16_errors_cleanly_on_an_unpaired_surrogate() {
+        // 0xD800 is a lone high surrogate with no following low surrogate -
+        // invalid UTF-16. A corrupted/truncated download can produce exactly
+        // this in an on-disk filename field.
+        let field = [0xD800u16, 0];
+        assert!(decode_nul_terminated_utf16(&field).is_err());
     }
 }
