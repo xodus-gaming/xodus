@@ -6,6 +6,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use xodus::tokens::TokenManager;
 
+use crate::commands::connected_storage::ConnectedStorageIdentity;
+
 mod commands;
 mod license;
 mod package;
@@ -89,6 +91,11 @@ enum SubCommand {
     SpLicense {
         block: String,
     },
+    #[command(about = "Connected Storage")]
+    ConnectedStorage {
+        #[command(subcommand)]
+        action: ConnectedStorageAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -112,6 +119,32 @@ enum ClepAction {
     Decrypt {
         #[clap(help = "Base64-encoded, obfuscated CLEP challenge data (2048 bytes)")]
         data: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConnectedStorageAction {
+    #[command(about = "Download Connected Storage")]
+    Download {
+        msa_id: String,
+        title_id: i64,
+        pfn: String,
+        out: String,
+        scid: Option<String>,
+    },
+    #[command(about = "Upload Connected Storage")]
+    Upload {
+        msa_id: String,
+        title_id: i64,
+        pfn: String,
+        input: String,
+        scid: Option<String>,
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Do not delete files not part of the input xml"
+        )]
+        keep_existing: bool,
     },
 }
 
@@ -241,6 +274,50 @@ async fn main() -> ExitCode {
             ClepAction::Decrypt { data } => commands::clep::decrypt(data),
         },
         SubCommand::SpLicense { block } => commands::splicense::run(block),
+        SubCommand::ConnectedStorage { action } => match action {
+            ConnectedStorageAction::Download {
+                msa_id,
+                title_id,
+                pfn,
+                out,
+                scid,
+            } => {
+                commands::connected_storage::download(
+                    &client,
+                    &tokens,
+                    &ConnectedStorageIdentity {
+                        msa_id: &msa_id,
+                        title_id,
+                        pfn: &pfn,
+                        file: &out,
+                        scid: scid.as_deref(),
+                    },
+                )
+                .await
+            }
+            ConnectedStorageAction::Upload {
+                msa_id,
+                title_id,
+                pfn,
+                input,
+                scid,
+                keep_existing,
+            } => {
+                commands::connected_storage::upload(
+                    &client,
+                    &tokens,
+                    &ConnectedStorageIdentity {
+                        msa_id: &msa_id,
+                        title_id,
+                        pfn: &pfn,
+                        file: &input,
+                        scid: scid.as_deref(),
+                    },
+                    keep_existing,
+                )
+                .await
+            }
+        },
     };
 
     xodus::secrets::destroy_secrets();
