@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package xodus.download;
+
+message ProgressRequest {
+    string id = 1;
+}
+
+message ProgressResponse {
+    uint64 total = 1;
+    uint64 downloaded = 2;
+}
+
+service DownloadService {
+    rpc GetProgress(ProgressRequest) returns (ProgressResponse);
+}

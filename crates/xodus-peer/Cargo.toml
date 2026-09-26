@@ -1,0 +1,19 @@
+[package]
+name = "xodus-peer"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+prost = "0.14"
+prost-types = "0.14"
+async-trait = "0.1"
+
+[build-dependencies]
+prost-build = "0.14"
+quote = "1.0"
+syn = "3"
+
+[features]
+service = []

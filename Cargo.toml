@@ -18,3 +18,7 @@ console-subscriber = "0.5"
 
 [patch.crates-io]
 ntfs = { git = "https://github.com/xodus-gaming/ntfs.git" }
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
