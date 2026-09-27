@@ -20,7 +20,7 @@ All verified September 2026 with `market=US` unless noted.
 | `CFQ7TTC0KGQ8` | PC Game Pass |
 | `CFQ7TTC0K6L8` | Xbox Game Pass for Console (retired) |
 | `CFQ7TTC10QFD` | Xbox Game Pass (Starter Edition) |
-| `CFQ7TTC0HXBN` | unknown, not in displaycatalog |
+| `CFQ7TTC0HXBN` | Unknown, returned with entitlements |
 
 ## Catalog lists
 
@@ -130,20 +130,58 @@ Used by the Xbox PC app to check the user's Game Pass subscriptions.
 ```
 POST https://beige.xboxservices.com/PCGAFD/entitlements/subscriptions?market={MARKET}&language={LANGUAGE}
 x-ms-api-version: 1.1
-authorization: t={MSA_TICKET}
+authorization: {MSA_TICKET}
 ms-cv: {CORRELATION_VECTOR}
 Content-Type: application/json
 
-{"productIds":["CFQ7TTC0K6L8","CFQ7TTC0K5DJ","CFQ7TTC0KGQ8","CFQ7TTC0P85B","CFQ7TTC0KHS0","CFQ7TTC10QFD","CFQ7TTC0HXBN"]}
+{"productIds":["CFQ7TTC0K6L8","CFQ7TTC0K5DJ","CFQ7TTC0KGQ8","CFQ7TTC0P85B","CFQ7TTC0KHS0","CFQ7TTC10QFD", "CFQ7TTC0HXBN"]}
 ```
 
-- `authorization` is a compact MSA user ticket for `www.microsoft.com` with `MBI_SSL` policy, same as for `licensing.mp.microsoft.com`
+- `authorization` is a compact MSA user ticket for `www.microsoft.com` with `MBI_SSL` policy, same as for `licensing.mp.microsoft.com`.
+- `ms-cv` is required. Without it: `400 {"MissingHeader":["Header MS-CV is missing"]}`
 - The Xbox app also sends `x-ms-authorization-social: XBL3.0 x=...`, `usersegments` and `appVersion={APP_VERSION}`, none are required
 - `productIds` are [subscription IDs](#subscription-ids)
+- Note: `CFQ7TTC0HXBN` returns here, but is not a valid subscriptionContext per the SIGL lists. Returns with `"Invalid subscription 'CFQ7TTC0HXBN' in SubscriptionContextParameter."`
 
 Without an active subscription:
 ```json
 {"entitlements":{}}
 ```
 
-Response with an active subscription is unknown.
+With an active subscription, keyed by subscription ID:
+```json
+{"entitlements":{
+  "CFQ7TTC0KHS0":{"autoRenew":<bool>,"endDate":"<ISO 8601 UTC>","isTrial":<bool>,"recurrenceSkuId":"<account-specific>","status":"Active","sharingSource":"None"},
+  ...
+}}
+```
+
+- Ultimate returns entries for Ultimate, PC Game Pass, Premium, Essential and Game Pass for Console (`CFQ7TTC0KHS0`, `CFQ7TTC0KGQ8`, `CFQ7TTC0P85B`, `CFQ7TTC0K5DJ`, `CFQ7TTC0K6L8`)
+- All entries share the same `endDate` and `recurrenceSkuId`, so they come from one subscription
+- `CFQ7TTC10QFD` and `CFQ7TTC0HXBN` are not returned for Ultimate
+
+## Affirmations
+
+```
+GET https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds={ID1},{ID2}&market={MARKET}&languages={LANGUAGES}
+```
+
+Each product lists the subscriptions that include it in `LocalizedProperties[].EligibilityProperties.Affirmations`:
+
+```json
+"Affirmations":[
+  {"AffirmationId":"9WNZS2ZC9L74","AffirmationProductId":"CFQ7TTC0K6L8","Description":"with your Xbox Game Pass membership"},
+  {"AffirmationId":"B1FFW2F7JKV0","AffirmationProductId":"CFQ7TTC0KGQ8","Description":"with your Game Pass membership"}
+]
+```
+
+- `AffirmationProductId` is a [subscription ID](#subscription-ids), same value as `subscriptionContext`
+- `AffirmationId` is not unique per subscription, so probably only want to match AffirmationProductId's.
+- Ultimate is not listed. An Ultimate account also holds the PC Game Pass, Premium and Game Pass for Console [entitlements](#subscription-entitlements), so affirmations are checked against every entitlement the user has
+- Game Pass for Console (`CFQ7TTC0K6L8`) still appears although retired
+
+| Product | Kind | Affirmations |
+|---|---|---|
+| `9MSVBF0KZFVW` Blood Dungeon | Game | Game Pass for Console, PC Game Pass |
+| `9MSMN2PJ6HQN` AoE III: DE - Mexico Civilization | Durable | Premium, PC Game Pass |
+| `9NWQ686JB33G` Wartales | Game | Premium, Game Pass for Console, PC Game Pass |
