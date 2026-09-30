@@ -7152,7 +7152,6 @@ dependencies = [
  "num-integer",
  "num_enum",
  "prost",
- "prost-build",
  "quick-xml 0.42.0",
  "rand 0.10.2",
  "reqwest 0.13.4",
@@ -7201,19 +7200,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "xodus-peer"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bitflags 2.13.1",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "quote",
+ "rustix",
+ "syn 3.0.4",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "xodus-service"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "console-subscriber",
+ "msixvc",
  "quick-xml 0.42.0",
  "reqwest 0.13.4",
  "serde_json",
  "tokio",
  "tokio-util",
+ "tower",
  "tracing",
  "tracing-subscriber",
  "xodus",
+ "xodus-peer",
 ]
 
 [[package]]
