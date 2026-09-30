@@ -14,7 +14,7 @@
 
 The project can now login, download packages and obtain licenses for games.
 
-These parts are still quite scattered arround.
+These parts are still quite scattered around.
 
 - [x] Device login
 - [x] User login
@@ -103,7 +103,7 @@ RUSTFLAGS="--cfg tokio_unstable" cargo run --features tokio_console
 Usage: xodus-cli <COMMAND>
 
 Commands:
-  download    Download msixvc or xsp files fo given game
+  download    Download msixvc or xsp files for a given game
   license     Dump CIKs for use with XvdTool
   extract     Extract locally stored msixvc file
   login       
