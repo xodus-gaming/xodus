@@ -13,6 +13,7 @@ impl ServiceGenerator for Generator {
 
         let methods = service.methods.iter().map(|m| {
             let name = format_ident!("{}", m.name);
+            assert!(!m.client_streaming && !m.server_streaming, "{name}: streaming is unsupported");
             let input: syn::Path = syn::parse_str(&m.input_type).unwrap();
             let output: syn::Path = syn::parse_str(&m.output_type).unwrap();
             quote! {
@@ -33,6 +34,7 @@ impl ServiceGenerator for Generator {
 }
 
 fn main() -> Result<()> {
+    println!("cargo:rerun-if-changed=proto");
     let mut config = prost_build::Config::new();
     #[cfg(feature = "service")]
     {
@@ -43,6 +45,7 @@ fn main() -> Result<()> {
             "./proto/xodus/auth.proto",
             "./proto/xodus/catalog.proto",
             "./proto/xodus/download.proto",
+            "./proto/xodus/common.proto",
         ],
         &["./proto"],
     )?;

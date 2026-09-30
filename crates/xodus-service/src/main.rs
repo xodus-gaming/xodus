@@ -1,6 +1,5 @@
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
-use std::sync::Arc;
 
 use tokio::net::UnixListener;
 use tokio_util::sync::CancellationToken;
@@ -10,6 +9,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use xodus::tokens::TokenManager;
 
+mod services;
 
 #[tokio::main]
 async fn main() {
@@ -49,14 +49,17 @@ async fn main() {
         let perms = Permissions::from_mode(mode);
         _ = tokio::fs::set_permissions(&socket_path, perms).await;
         loop {
-            let accept = tokio::select! {
+            let (stream, _) = tokio::select! {
                 r = listener.accept() => r,
                 _ = cancellation.cancelled() => break,
             }
             .expect("Failed to accept");
+
+            tokio::task::spawn(serve_connection(stream));
         }
     }
 
-
     _ = tokio::fs::remove_file(socket_path).await;
 }
+
+async fn serve_connection(stream: tokio::net::UnixStream) {}

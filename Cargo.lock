@@ -7202,18 +7202,22 @@ name = "xodus-peer"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bitflags 2.13.1",
  "prost",
  "prost-build",
  "prost-types",
  "quote",
+ "rustix",
  "syn 3.0.4",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
 name = "xodus-service"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "console-subscriber",
  "msixvc",

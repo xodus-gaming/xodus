@@ -6,9 +6,12 @@ rust-version.workspace = true
 
 [dependencies]
 tokio = { workspace = true }
+tracing = { workspace = true }
 prost = "0.14"
 prost-types = "0.14"
 async-trait = "0.1"
+bitflags = "2.13"
+rustix = { version = "1.1.4", features = ["net"] }
 
 [build-dependencies]
 prost-build = "0.14"

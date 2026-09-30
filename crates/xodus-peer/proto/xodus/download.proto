@@ -2,6 +2,11 @@ syntax = "proto3";
 
 package xodus.download;
 
+enum DownloadServiceMessage {
+    DOWNLOAD_SERVICE_MESSAGE_UNDEFINED = 0;
+    DOWNLOAD_SERVICE_MESSAGE_GET_PROGRESS = 1;
+}
+
 message ProgressRequest {
     string id = 1;
 }

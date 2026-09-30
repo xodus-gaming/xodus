@@ -21,5 +21,8 @@ pub mod proto {
         pub mod download {
             include!(concat!(env!("OUT_DIR"), "/xodus.download.rs"));
         }
+        pub mod common {
+            include!(concat!(env!("OUT_DIR"), "/xodus.common.rs"));
+        }
     }
 }
