@@ -7,5 +7,6 @@ pub mod login;
 pub mod logout;
 #[cfg(unix)]
 pub mod run;
+pub mod friend;
 pub mod splicense;
 pub mod streaming;
