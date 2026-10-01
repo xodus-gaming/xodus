@@ -83,7 +83,11 @@ pub async fn get_packages(
     let Token::Legacy(dev_token) = dev_token else {
         return Err(Box::new(std::io::Error::other("Invalid STS token")));
     };
-    let user_token = tokens.get_user_sts_token().unwrap();
+    let user_token = tokens.get_user_sts_token().map_err(|_| {
+        Box::new(std::io::Error::other(
+            "Not logged in - run `xodus-cli login` first",
+        )) as Box<dyn std::error::Error>
+    })?;
     let Token::Legacy(legacy) = user_token else {
         return Err(Box::new(std::io::Error::other("Unsupported user token")));
     };
@@ -112,4 +116,46 @@ pub async fn get_packages(
         )));
     };
     Ok(package)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use xodus::models::secrets::LegacyToken;
+    use xodus::models::soap::Timestamp;
+    use xodus::tokens::PASSPORT_STS;
+
+    fn dummy_legacy_token() -> Token {
+        Token::Legacy(LegacyToken {
+            key_name: None,
+            token: "dummy".to_string(),
+            binary_secret: None,
+            tpm_key: None,
+            lifetime: Timestamp {
+                id: None,
+                created: "2026-01-01T00:00:00Z".to_string(),
+                expires: "2099-01-01T00:00:00Z".to_string(),
+            },
+        })
+    }
+
+    #[tokio::test]
+    async fn get_packages_gives_a_clean_error_when_not_logged_in() {
+        let tokens = TokenManager::with_memory();
+        // A device token is always present in real usage (ensure_device_credentials
+        // runs at binary startup), but deliberately no user token here - this
+        // simulates a session that has never run `xodus-cli login`.
+        tokens
+            .save_device_token(PASSPORT_STS.to_string(), dummy_legacy_token())
+            .unwrap();
+
+        let client = reqwest::Client::new();
+        let result = get_packages(&client, &tokens, "unused-content-id".to_string()).await;
+
+        let err = result.expect_err("expected a clean error, not a panic, when not logged in");
+        assert!(
+            err.to_string().contains("run `xodus-cli login` first"),
+            "unexpected error message: {err}"
+        );
+    }
 }

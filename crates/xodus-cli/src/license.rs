@@ -14,8 +14,12 @@ pub async fn get_license(
     let Token::Legacy(dev_token) = dev_token else {
         return Err("Invalid STS token".to_string());
     };
-    let user = tokens.get_user().unwrap();
-    let user_token = tokens.get_user_sts_token().unwrap();
+    let user = tokens
+        .get_user()
+        .map_err(|_| "Not logged in - run `xodus-cli login` first".to_string())?;
+    let user_token = tokens
+        .get_user_sts_token()
+        .map_err(|_| "Not logged in - run `xodus-cli login` first".to_string())?;
     let Token::Legacy(legacy) = user_token else {
         return Err("Unspported user token".to_string());
     };
@@ -92,4 +96,53 @@ pub async fn get_license(
         .unwrap()
         .derive_device_key();
     Ok((key, game_splicense))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use xodus::models::secrets::LegacyToken;
+    use xodus::tokens::PASSPORT_STS;
+
+    fn dummy_legacy_token() -> Token {
+        Token::Legacy(LegacyToken {
+            key_name: None,
+            token: "dummy".to_string(),
+            binary_secret: None,
+            tpm_key: None,
+            lifetime: soap::Timestamp {
+                id: None,
+                created: "2026-01-01T00:00:00Z".to_string(),
+                expires: "2099-01-01T00:00:00Z".to_string(),
+            },
+        })
+    }
+
+    #[tokio::test]
+    async fn get_license_gives_a_clean_error_when_not_logged_in() {
+        let tokens = TokenManager::with_memory();
+        // A device token is always present in real usage (ensure_device_credentials
+        // runs at binary startup), but deliberately no user/user-token here -
+        // this simulates a session that has never run `xodus-cli login`.
+        tokens
+            .save_device_token(PASSPORT_STS.to_string(), dummy_legacy_token())
+            .unwrap();
+
+        let client = reqwest::Client::new();
+        let result = get_license(
+            &client,
+            &tokens,
+            "unused-content-id".to_string(),
+            "US".to_string(),
+        )
+        .await;
+
+        let Err(err) = result else {
+            panic!("expected a clean error, not a panic, when not logged in");
+        };
+        assert!(
+            err.contains("run `xodus-cli login` first"),
+            "unexpected error message: {err}"
+        );
+    }
 }
