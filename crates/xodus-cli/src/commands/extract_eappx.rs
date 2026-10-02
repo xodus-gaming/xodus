@@ -60,11 +60,11 @@ pub async fn run(path: String, destination: String, key_file: Option<String>) ->
         return ExitCode::FAILURE;
     }
 
-    if !outdir.exists() {
-        if let Err(e) = std::fs::create_dir_all(&outdir) {
-            eprintln!("Failed to create output directory {:?}: {e}", outdir);
-            return ExitCode::FAILURE;
-        }
+    if !outdir.exists()
+        && let Err(e) = std::fs::create_dir_all(&outdir)
+    {
+        eprintln!("Failed to create output directory {:?}: {e}", outdir);
+        return ExitCode::FAILURE;
     }
 
     match eappx.extract(&mut reader, &outdir) {
