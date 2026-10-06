@@ -7201,14 +7201,15 @@ dependencies = [
 name = "xodus-peer"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "bitflags 2.13.1",
+ "heck 0.5.0",
  "prost",
  "prost-build",
  "prost-types",
  "quote",
  "rustix",
  "syn 3.0.4",
+ "thiserror 2.0.20",
  "tokio",
  "tracing",
 ]
@@ -7221,12 +7222,12 @@ dependencies = [
  "chrono",
  "console-subscriber",
  "msixvc",
+ "prost",
  "quick-xml 0.42.0",
  "reqwest 0.13.4",
  "serde_json",
  "tokio",
  "tokio-util",
- "tower",
  "tracing",
  "tracing-subscriber",
  "xodus",

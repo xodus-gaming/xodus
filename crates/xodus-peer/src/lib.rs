@@ -10,6 +10,19 @@ pub fn get_runtime_dir() -> String {
     return "/tmp/".to_string();
 }
 
+#[cfg(feature = "service")]
+#[derive(Debug, thiserror::Error)]
+pub enum DispatchError {
+    #[error("unknown service {0}")]
+    UnknownService(u8),
+    #[error("unknown message {0}")]
+    UnknownMessage(u8),
+    #[error(transparent)]
+    Decode(#[from] prost::DecodeError),
+    #[error(transparent)]
+    Handler(Box<dyn std::error::Error + Send + Sync>),
+}
+
 pub mod proto {
     pub mod xodus {
         // pub mod auth {
@@ -23,6 +36,9 @@ pub mod proto {
         }
         pub mod common {
             include!(concat!(env!("OUT_DIR"), "/xodus.common.rs"));
+        }
+        pub mod stub {
+            include!(concat!(env!("OUT_DIR"), "/xodus.stub.rs"));
         }
     }
 }

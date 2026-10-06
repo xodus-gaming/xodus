@@ -44,8 +44,6 @@ pub struct PeerMessage {
 }
 
 /// Receive PeerMessage from tokio UnixStream
-/// ## Panics
-/// If number of fds sent is bigger than 16
 pub async fn recv_message(
     stream: &mut tokio::net::UnixStream,
 ) -> Result<(PeerMessage, Vec<OwnedFd>), std::io::Error> {
@@ -71,7 +69,7 @@ pub async fn recv_message(
                     &stream,
                     &mut [IoSliceMut::new(&mut peer_msg.protobuf)],
                     &mut anc,
-                    RecvFlags::CMSG_CLOEXEC,
+                    RecvFlags::empty(),
                 )?;
                 for msg in anc.drain() {
                     if let RecvAncillaryMessage::ScmRights(fd) = msg {
@@ -88,7 +86,7 @@ pub async fn recv_message(
             .await?;
         if bytes == 0 {
             tracing::error!("Unable to receive a message - buffer empty");
-            return Err(std::io::Error::other("Unable to receive a message - buffer empty").into());
+            return Err(std::io::ErrorKind::UnexpectedEof.into());
         }
     } else {
         stream.read_exact(&mut peer_msg.protobuf).await?;
@@ -131,10 +129,10 @@ pub async fn send_message(
                     &stream,
                     &[IoSlice::new(&message.protobuf)],
                     &mut anc,
-                    SendFlags::NOSIGNAL,
+                    SendFlags::empty(),
                 )?;
                 while sent < message.protobuf.len() {
-                    sent += send(&stream, &message.protobuf[sent..], SendFlags::NOSIGNAL)?;
+                    sent += send(&stream, &message.protobuf[sent..], SendFlags::empty())?;
                 }
                 Ok(())
             })

@@ -7,9 +7,9 @@ rust-version.workspace = true
 [dependencies]
 tokio = { workspace = true }
 tracing = { workspace = true }
+thiserror = { workspace = true }
 prost = "0.14"
 prost-types = "0.14"
-async-trait = "0.1"
 bitflags = "2.13"
 rustix = { version = "1.1.4", features = ["net"] }
 
@@ -17,6 +17,7 @@ rustix = { version = "1.1.4", features = ["net"] }
 prost-build = "0.14"
 quote = "1.0"
 syn = "3"
+heck = "0.5"
 
 [features]
 service = []

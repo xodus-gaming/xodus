@@ -3,11 +3,9 @@ use std::os::unix::fs::PermissionsExt;
 
 use tokio::net::UnixListener;
 use tokio_util::sync::CancellationToken;
-use tower::ServiceBuilder;
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use xodus::tokens::TokenManager;
 
 mod services;
 
