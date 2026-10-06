@@ -4,3 +4,4 @@
 - [Login Flow](./login.md)
 - [Licenses](./licenses.md)
 - [CLEP secrets](./clep.md)
+- [Downloads](./downloads.md)
