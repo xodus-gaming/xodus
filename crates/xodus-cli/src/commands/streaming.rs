@@ -105,11 +105,11 @@ pub async fn run(
                 eprintln!("No .msixvc file found");
                 return ExitCode::FAILURE;
             };
-            format!(
-                "{}{}",
-                file.cdn_root_paths.first().unwrap(),
-                file.relative_url
-            )
+            let Some(url) = file.download_urls().into_iter().next() else {
+                eprintln!("The server returned no CDN for {}", file.file_name);
+                return ExitCode::FAILURE;
+            };
+            url
         };
         let url = &vurl;
         let mut pos = 0;

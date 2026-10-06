@@ -43,6 +43,17 @@ pub struct PackageFile {
     pub modified_date: String,
 }
 
+impl PackageFile {
+    /// Every CDN URL for this file in the server's order, so a caller can fall back to the next
+    /// host (assets1 -> assets2) when one fails.
+    pub fn download_urls(&self) -> Vec<String> {
+        self.cdn_root_paths
+            .iter()
+            .map(|root| format!("{root}{}", self.relative_url))
+            .collect()
+    }
+}
+
 impl Display for PackageFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{} - {}", self.file_name, self.file_size))
@@ -65,4 +76,47 @@ pub struct MetadataFile {
     pub size: i64,
     pub relative_url: String,
     pub license: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(roots: &[&str]) -> PackageFile {
+        PackageFile {
+            content_id: String::new(),
+            version_id: String::new(),
+            file_name: "game.msixvc".into(),
+            file_size: 1,
+            file_hash: String::new(),
+            key_blob: String::new(),
+            cdn_root_paths: roots.iter().map(|r| r.to_string()).collect(),
+            background_cdn_root_paths: Vec::new(),
+            relative_url: "abc/game.msixvc".into(),
+            update_type: 0,
+            delta_version_id: None,
+            license_usage_type: 0,
+            modified_date: String::new(),
+        }
+    }
+
+    #[test]
+    fn download_urls_keep_cdn_order() {
+        let f = file(&[
+            "http://assets1.xboxlive.com/x/",
+            "http://assets2.xboxlive.com/x/",
+        ]);
+        assert_eq!(
+            f.download_urls(),
+            [
+                "http://assets1.xboxlive.com/x/abc/game.msixvc",
+                "http://assets2.xboxlive.com/x/abc/game.msixvc"
+            ]
+        );
+    }
+
+    #[test]
+    fn download_urls_empty_without_cdn() {
+        assert!(file(&[]).download_urls().is_empty());
+    }
 }
