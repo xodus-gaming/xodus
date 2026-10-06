@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package xodus.common;
+
+enum ServiceIdentifier {
+    SERVICE_IDENTIFIER_NONE = 0;
+    SERIVCE_IDENTIFIER_AUTH = 1;
+    SERIVCE_IDENTIFIER_DOWNLOAD = 2;
+    SERIVCE_IDENTIFIER_CATALOG = 3;
+    SERIVCE_IDENTIFIER_STUB = 4;
+}
