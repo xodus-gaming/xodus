@@ -123,31 +123,63 @@ pub async fn run(
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();
 
     let out: &Path = Path::new(&source);
-    let out_absolute = std::fs::canonicalize(out).unwrap();
+    let out_absolute = match std::fs::canonicalize(out) {
+        Ok(path) => path,
+        Err(err) => {
+            eprintln!("Failed to resolve {:?}: {err}", out);
+            return ExitCode::FAILURE;
+        }
+    };
     let final_path = out.join(".xodus-streaming.msixvc");
 
-    let mut file = OpenOptions::new()
-        .read(true)
-        .open(final_path.to_owned())
-        .await
-        .unwrap();
+    let mut file = match OpenOptions::new().read(true).open(&final_path).await {
+        Ok(file) => file,
+        Err(err) => {
+            eprintln!("Failed to open {:?}: {err}", final_path);
+            return ExitCode::FAILURE;
+        }
+    };
 
-    let xvd = XvdFile::parse(&mut file).await.expect("no err");
+    let xvd = match XvdFile::parse(&mut file).await {
+        Ok(xvd) => xvd,
+        Err(err) => {
+            eprintln!("Failed to parse XVD header of {:?}: {err}", final_path);
+            return ExitCode::FAILURE;
+        }
+    };
 
-    let files = xvd.parse_user_package_files(&mut file).await.expect("ok");
+    let files = match xvd.parse_user_package_files(&mut file).await {
+        Ok(files) => files,
+        Err(err) => {
+            eprintln!("Failed to parse user package files: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
     for (k, v) in &files {
         if k == "SegmentMetadata.bin" {
-            let sfiles = xvd.parse_segment_metadata(&mut file, v).await.expect("ok");
+            let sfiles = match xvd.parse_segment_metadata(&mut file, v).await {
+                Ok(sfiles) => sfiles,
+                Err(err) => {
+                    eprintln!("Failed to parse segment metadata: {err}");
+                    return ExitCode::FAILURE;
+                }
+            };
             lfiles = sfiles;
         }
     }
 
     // Classic files
     if lfiles.is_empty() {
-        let sfiles = xvd
+        let sfiles = match xvd
             .parse_ntfs_segment_metadata(&mut file, !lfiles.is_empty())
             .await
-            .expect("ok");
+        {
+            Ok(sfiles) => sfiles,
+            Err(err) => {
+                eprintln!("Failed to parse NTFS segment metadata: {err}");
+                return ExitCode::FAILURE;
+            }
+        };
         for (n, sfile) in &sfiles {
             if sfile.length.div_ceil(PAGE_SIZE as u64) as usize != sfile.data_hashs.len() {
                 println!("{}: {} {}", n, sfile.offset, sfile.length);
@@ -179,7 +211,13 @@ pub async fn run(
         return ExitCode::FAILURE;
     };
 
-    let full_key = content_key.unpack(&key).expect("failed to unpack");
+    let full_key = match content_key.unpack(&key) {
+        Ok(full_key) => full_key,
+        Err(err) => {
+            eprintln!("Failed to unpack content key: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     let mut fds = vec![];
 
