@@ -9,7 +9,7 @@ use xodus::models::soap;
 use xodus::models::xbox::XstsResponse;
 use xodus::models::xgameruntime::xuser::{
     MSATokenRequest, MSATokenResponse, TokenAndSignatureRequest, TokenAndSignatureResponse,
-    UserIdentity,
+    UserIdentity, UserInfoRequest, UserInfoResponse,
 };
 use xodus::proto::xodus::XodusMessageType;
 
@@ -146,6 +146,17 @@ pub async fn parse_message(
             };
             Ok(quick_xml::se::to_string(&response)?.into_bytes())
         }
+        XodusMessageType::UserInfoRequest => {
+            let string_buf = std::str::from_utf8(&buffer)?;
+            let response = match quick_xml::de::from_str::<UserInfoRequest>(string_buf) {
+                Ok(req) => user_info(context, req).await,
+                Err(err) => UserInfoResponse::error(
+                    E_INVALIDARG,
+                    format!("malformed UserInfoRequest: {err}"),
+                ),
+            };
+            Ok(quick_xml::se::to_string(&response)?.into_bytes())
+        }
         _ => Err("Unimplemented".into()),
     }
 }
@@ -238,6 +249,37 @@ async fn token_and_signature(
         None => user_only_token(context, &resolved, req.force_refresh).await,
     };
     response.unwrap_or_else(|err| TokenAndSignatureResponse::error(err.hresult, err.message))
+}
+
+/// `XUserAddAsync`: who is signed in to xodus. The identity claims come from an XSTS token
+/// for the default relying party: title-bound with `ClientId` + `TitleId`, user-only without.
+/// Nobody signed in is not an error (`SignedIn` false); the game then keeps its offline user.
+async fn user_info(context: &SimpleContext, req: UserInfoRequest) -> UserInfoResponse {
+    if context.tokens().get_user_sts_token().is_err() {
+        return UserInfoResponse::signed_out();
+    }
+    let relying_party = title::DEFAULT_RELYING_PARTY;
+
+    let identity = match title_identity(&req.client_id, req.title_id) {
+        Some((client_id, title_id)) => title_xsts(
+            context,
+            client_id,
+            title_id,
+            relying_party,
+            req.force_refresh,
+        )
+        .await
+        .map(|t| t.identity),
+        None => user_only_xsts(context, relying_party, req.force_refresh)
+            .await
+            .and_then(|xsts| user_only_identity(&xsts)),
+    };
+    match identity {
+        Ok(identity) if identity.xuid.is_some() => UserInfoResponse::signed_in(identity),
+        Ok(_) => UserInfoResponse::error(E_FAIL, "XSTS token without xuid claim"),
+        Err(err) if err.hresult == E_GAMEUSER_SIGNED_OUT => UserInfoResponse::signed_out(),
+        Err(err) => UserInfoResponse::error(err.hresult, err.message),
+    }
 }
 
 /// The title identity of a request, when it carries a usable one.
@@ -511,6 +553,39 @@ mod test {
             .await
             .unwrap();
         String::from_utf8(out).unwrap()
+    }
+
+    #[tokio::test]
+    async fn user_info_request_signed_out() {
+        let mut context = signed_out_context();
+        let signed_out = "<UserInfoResponse><SignedIn>false</SignedIn></UserInfoResponse>";
+        let with_title = "<UserInfoRequest><ClientId>0000000049075E37</ClientId><TitleId>1792830437</TitleId><ForceRefresh>false</ForceRefresh></UserInfoRequest>";
+        assert_eq!(
+            reply(&mut context, XodusMessageType::UserInfoRequest, with_title).await,
+            signed_out
+        );
+        assert_eq!(
+            reply(
+                &mut context,
+                XodusMessageType::UserInfoRequest,
+                "<UserInfoRequest/>"
+            )
+            .await,
+            signed_out
+        );
+    }
+
+    #[tokio::test]
+    async fn user_info_request_malformed() {
+        let mut context = signed_out_context();
+        let out = reply(&mut context, XodusMessageType::UserInfoRequest, "<nope").await;
+        assert!(
+            out.starts_with(
+                "<UserInfoResponse><Error>0x80070057</Error><Message>malformed UserInfoRequest: "
+            ),
+            "{out}"
+        );
+        assert!(out.ends_with("</Message></UserInfoResponse>"), "{out}");
     }
 
     #[tokio::test]
