@@ -2,12 +2,14 @@ use base64::Engine;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use xodus::api::xbox::signing;
 use xodus::api::xbox::title::{self, ResolvedEndpoint};
-use xodus::auth::TitleSession;
+use xodus::auth::{ProofKey, TitleSession, XstsToken};
 use xodus::models::live::ExchangeUserTokenOutcome;
 use xodus::models::secrets::Token;
 use xodus::models::soap;
+use xodus::models::xbox::XstsResponse;
 use xodus::models::xgameruntime::xuser::{
     MSATokenRequest, MSATokenResponse, TokenAndSignatureRequest, TokenAndSignatureResponse,
+    UserIdentity,
 };
 use xodus::proto::xodus::XodusMessageType;
 
@@ -155,11 +157,27 @@ const E_GAMEUSER_SIGNED_OUT: u32 = 0x8924_5101;
 /// Xbox Live refused the sign-in (consent, ban, missing Game Pass, ...): user action needed.
 const E_GAMEUSER_RESOLVE_USER_ISSUE_REQUIRED: u32 = 0x8924_5102;
 
+/// Why no XSTS token could be issued, as the HRESULT the runtime reports to the game.
+#[derive(Debug)]
+struct TokenError {
+    hresult: u32,
+    message: String,
+}
+
+impl TokenError {
+    fn new(hresult: u32, message: impl Into<String>) -> Self {
+        Self {
+            hresult,
+            message: message.into(),
+        }
+    }
+}
+
 /// `XUserGetTokenAndSignatureAsync`: XSTS token for the request's relying party plus the
 /// request signature. With `ClientId` + `TitleId` the token is title-bound (sisu flow) and
 /// signed with that session's proof key; without them only an unsigned user token is possible.
 async fn token_and_signature(
-    context: &mut SimpleContext,
+    context: &SimpleContext,
     req: TokenAndSignatureRequest,
 ) -> TokenAndSignatureResponse {
     let Ok(url) = reqwest::Url::parse(&req.url) else {
@@ -203,11 +221,11 @@ async fn token_and_signature(
         resolved.signature_policy.is_some()
     );
 
-    match (req.client_id.as_deref(), req.title_id) {
-        (Some(client_id), Some(title_id)) if !client_id.trim().is_empty() => {
+    let response = match title_identity(&req.client_id, req.title_id) {
+        Some((client_id, title_id)) => {
             title_bound_token(
                 context,
-                client_id.trim(),
+                client_id,
                 title_id,
                 &resolved,
                 &url,
@@ -217,8 +235,15 @@ async fn token_and_signature(
             )
             .await
         }
-        _ => user_only_token(context, &resolved, req.force_refresh).await,
-    }
+        None => user_only_token(context, &resolved, req.force_refresh).await,
+    };
+    response.unwrap_or_else(|err| TokenAndSignatureResponse::error(err.hresult, err.message))
+}
+
+/// The title identity of a request, when it carries a usable one.
+fn title_identity(client_id: &Option<String>, title_id: Option<u32>) -> Option<(&str, u32)> {
+    let client_id = client_id.as_deref()?.trim();
+    (!client_id.is_empty()).then_some((client_id, title_id?))
 }
 
 /// Relying party and signature policy for a URL from the (cached) title endpoint table.
@@ -235,19 +260,34 @@ async fn resolve_endpoint(context: &SimpleContext, url: &str) -> Option<Resolved
         .and_then(|t| title::resolve_relying_party(url, t))
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn title_bound_token(
-    context: &mut SimpleContext,
+/// `XBL3.0 x=<uhs>;<token>`, the `Authorization` header value of an XSTS token.
+fn authorization_value(identity: &UserIdentity, token: &str) -> Result<String, TokenError> {
+    match identity.uhs.as_deref() {
+        Some(uhs) => Ok(format!("XBL3.0 x={uhs};{token}")),
+        None => Err(TokenError::new(E_FAIL, "XSTS token without user hash")),
+    }
+}
+
+/// A title-bound XSTS token with the claims it carries and the proof key that signs requests
+/// made with it.
+struct TitleXsts {
+    token: XstsToken,
+    identity: UserIdentity,
+    proof_key: ProofKey,
+}
+
+/// Title-bound XSTS token for `relying_party` from the session of `client_id`/`title_id`,
+/// established (sisu flow) when there is none yet or it expired. Sessions and tokens live in
+/// the state shared by all connections.
+async fn title_xsts(
+    context: &SimpleContext,
     client_id: &str,
     title_id: u32,
-    resolved: &ResolvedEndpoint,
-    url: &reqwest::Url,
-    method: &str,
-    body: &[u8],
+    relying_party: &str,
     force_refresh: bool,
-) -> TokenAndSignatureResponse {
+) -> Result<TitleXsts, TokenError> {
     let session_key = format!("{client_id}:{title_id}");
-    let xsts_key = format!("{session_key}:{}", resolved.relying_party);
+    let xsts_key = format!("{session_key}:{relying_party}");
 
     let mut sessions = context.shared.sessions.lock().await;
     if !sessions
@@ -269,10 +309,10 @@ async fn title_bound_token(
             }
             Err(err) => {
                 tracing::warn!("Xbox Live sign-in for title {title_id} failed: {err}");
-                return TokenAndSignatureResponse::error(
+                return Err(TokenError::new(
                     E_GAMEUSER_RESOLVE_USER_ISSUE_REQUIRED,
                     format!("Xbox Live sign-in failed: {err}"),
-                );
+                ));
             }
         }
     }
@@ -289,30 +329,56 @@ async fn title_bound_token(
             .filter(|t| t.check_validity().is_ok())
             .cloned()
     };
-    let xsts = match cached {
+    let token = match cached {
         Some(t) => t,
-        None => match session.get_xsts_token(&resolved.relying_party).await {
+        None => match session.get_xsts_token(relying_party).await {
             Ok(t) => {
                 cache.insert(xsts_key, t.clone());
                 t
             }
             Err(err) => {
-                tracing::warn!("XSTS request for {} failed: {err}", resolved.relying_party);
-                return TokenAndSignatureResponse::error(
+                tracing::warn!("XSTS request for {relying_party} failed: {err}");
+                return Err(TokenError::new(
                     E_FAIL,
                     format!("XSTS token request failed: {err}"),
-                );
+                ));
             }
         },
     };
-    if xsts.display_claims.is_none() {
-        return TokenAndSignatureResponse::error(E_FAIL, "XSTS token without display claims");
-    }
-    let authorization = xsts.authorization_header_value();
+    let identity = UserIdentity::from_xsts(&token)
+        .ok_or_else(|| TokenError::new(E_FAIL, "XSTS token without display claims"))?;
+
+    Ok(TitleXsts {
+        token,
+        identity,
+        proof_key: session.proof_key(),
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn title_bound_token(
+    context: &SimpleContext,
+    client_id: &str,
+    title_id: u32,
+    resolved: &ResolvedEndpoint,
+    url: &reqwest::Url,
+    method: &str,
+    body: &[u8],
+    force_refresh: bool,
+) -> Result<TokenAndSignatureResponse, TokenError> {
+    let xsts = title_xsts(
+        context,
+        client_id,
+        title_id,
+        &resolved.relying_party,
+        force_refresh,
+    )
+    .await?;
+    let authorization = authorization_value(&xsts.identity, &xsts.token.token)?;
 
     let signature = match &resolved.signature_policy {
-        Some(policy) => match signing::sign_request(
-            &session.proof_key(),
+        Some(policy) => signing::sign_request(
+            &xsts.proof_key,
             i32::from(policy.version),
             policy.max_body_bytes as usize,
             chrono::Utc::now(),
@@ -320,33 +386,27 @@ async fn title_bound_token(
             &signing::path_and_query(url),
             &authorization,
             body,
-        ) {
-            Ok(s) => s,
-            Err(err) => {
-                return TokenAndSignatureResponse::error(
-                    E_FAIL,
-                    format!("request signing failed: {err}"),
-                );
-            }
-        },
+        )
+        .map_err(|err| TokenError::new(E_FAIL, format!("request signing failed: {err}")))?,
         None => String::new(),
     };
 
-    TokenAndSignatureResponse {
+    Ok(TokenAndSignatureResponse {
         token: Some(authorization),
         signature: Some(signature),
-        expiry: Some(xsts.not_after.timestamp()),
+        expiry: Some(xsts.token.not_after.timestamp()),
         ..Default::default()
     }
+    .with_identity(xsts.identity))
 }
 
-/// Fallback without title identity: user-only XSTS token, never signed.
-async fn user_only_token(
-    context: &mut SimpleContext,
-    resolved: &ResolvedEndpoint,
+/// User-only XSTS token for `relying_party` (no device/title identity, so never signed):
+/// from the per-relying-party cache, else requested with the stored MSA tokens.
+async fn user_only_xsts(
+    context: &SimpleContext,
+    relying_party: &str,
     force_refresh: bool,
-) -> TokenAndSignatureResponse {
-    let relying_party = resolved.relying_party.as_str();
+) -> Result<XstsResponse, TokenError> {
     let cached = if force_refresh {
         None
     } else {
@@ -355,49 +415,172 @@ async fn user_only_token(
             .get_cached_xsts(relying_party)
             .filter(|t| t.not_after > chrono::Utc::now())
     };
-    let xsts = match cached {
-        Some(t) => t,
-        None => {
-            let (Some(device_token), Ok(Token::Legacy(user_token))) = (
-                context.device_token.clone(),
-                context.tokens().get_user_sts_token(),
-            ) else {
-                return TokenAndSignatureResponse::error(
-                    E_GAMEUSER_SIGNED_OUT,
-                    "no usable MSA tokens",
-                );
-            };
-            match xodus::api::xbox::xsts_user_only(
-                &context.client,
-                device_token,
-                user_token,
-                relying_party,
-            )
-            .await
-            {
-                Ok(t) => {
-                    context.tokens().cache_xsts(relying_party, &t);
-                    t
-                }
-                Err(err) => {
-                    tracing::warn!("user-only XSTS request for {relying_party} failed: {err}");
-                    return TokenAndSignatureResponse::error(
-                        E_GAMEUSER_RESOLVE_USER_ISSUE_REQUIRED,
-                        format!("XSTS token request failed: {err}"),
-                    );
-                }
-            }
+    if let Some(t) = cached {
+        return Ok(t);
+    }
+    let (Some(device_token), Ok(Token::Legacy(user_token))) = (
+        context.device_token.clone(),
+        context.tokens().get_user_sts_token(),
+    ) else {
+        return Err(TokenError::new(
+            E_GAMEUSER_SIGNED_OUT,
+            "no usable MSA tokens",
+        ));
+    };
+    match xodus::api::xbox::xsts_user_only(&context.client, device_token, user_token, relying_party)
+        .await
+    {
+        Ok(t) => {
+            context.tokens().cache_xsts(relying_party, &t);
+            Ok(t)
         }
-    };
-    let Some(uhs) = xsts.user_hash().map(str::to_owned) else {
-        return TokenAndSignatureResponse::error(E_FAIL, "XSTS token without user hash");
-    };
+        Err(err) => {
+            tracing::warn!("user-only XSTS request for {relying_party} failed: {err}");
+            Err(TokenError::new(
+                E_GAMEUSER_RESOLVE_USER_ISSUE_REQUIRED,
+                format!("XSTS token request failed: {err}"),
+            ))
+        }
+    }
+}
 
-    TokenAndSignatureResponse {
-        token: Some(format!("XBL3.0 x={uhs};{}", xsts.token)),
+fn user_only_identity(xsts: &XstsResponse) -> Result<UserIdentity, TokenError> {
+    xsts.xui()
+        .map(UserIdentity::from)
+        .ok_or_else(|| TokenError::new(E_FAIL, "XSTS token without user hash"))
+}
+
+/// Fallback without title identity: user-only XSTS token, never signed.
+async fn user_only_token(
+    context: &SimpleContext,
+    resolved: &ResolvedEndpoint,
+    force_refresh: bool,
+) -> Result<TokenAndSignatureResponse, TokenError> {
+    let relying_party = resolved.relying_party.as_str();
+    let xsts = user_only_xsts(context, relying_party, force_refresh).await?;
+    let identity = user_only_identity(&xsts)?;
+    let authorization = authorization_value(&identity, &xsts.token)?;
+
+    Ok(TokenAndSignatureResponse {
+        token: Some(authorization),
         signature: Some(String::new()),
         expiry: Some(xsts.not_after.timestamp()),
         message: Some("unsigned: no ClientId/TitleId in request".to_string()),
         ..Default::default()
+    }
+    .with_identity(identity))
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use xodus::models::secrets::LegacyToken;
+    use xodus::tokens::TokenManager;
+
+    use super::*;
+    use crate::simple_context::SharedState;
+
+    /// Context of a service nobody is signed in to (empty in-memory token store), so no
+    /// handler can get as far as the network.
+    fn signed_out_context() -> SimpleContext {
+        let device_token = LegacyToken {
+            key_name: None,
+            token: "<EncryptedData/>".to_string(),
+            binary_secret: None,
+            tpm_key: None,
+            lifetime: soap::Timestamp {
+                id: None,
+                created: "2026-01-01T00:00:00Z".to_string(),
+                expires: "2036-01-01T00:00:00Z".to_string(),
+            },
+        };
+        SimpleContext::new(
+            device_token,
+            Arc::new(TokenManager::with_memory()),
+            Arc::new(SharedState::default()),
+        )
+    }
+
+    async fn reply(
+        context: &mut SimpleContext,
+        message_type: XodusMessageType,
+        xml: &str,
+    ) -> String {
+        let out = parse_message(context, message_type, xml.as_bytes().to_vec())
+            .await
+            .unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    #[tokio::test]
+    async fn token_and_signature_request_signed_out() {
+        let mut context = signed_out_context();
+        let req = "<TokenAndSignatureRequest><ClientId>0000000049075E37</ClientId><TitleId>1792830437</TitleId><Url>https://profile.xboxlive.com/users/me/profile/settings</Url></TokenAndSignatureRequest>";
+        assert_eq!(
+            reply(
+                &mut context,
+                XodusMessageType::TokenAndSignatureRequest,
+                req
+            )
+            .await,
+            "<TokenAndSignatureResponse><Error>0x89245101</Error><Message>no user is signed in</Message></TokenAndSignatureResponse>"
+        );
+    }
+
+    #[tokio::test]
+    async fn token_and_signature_request_invalid() {
+        let mut context = signed_out_context();
+        // Url is required
+        let out = reply(
+            &mut context,
+            XodusMessageType::TokenAndSignatureRequest,
+            "<TokenAndSignatureRequest/>",
+        )
+        .await;
+        assert!(
+            out.starts_with("<TokenAndSignatureResponse><Error>0x80070057</Error>"),
+            "{out}"
+        );
+        // ... and must be a URL
+        let out = reply(
+            &mut context,
+            XodusMessageType::TokenAndSignatureRequest,
+            "<TokenAndSignatureRequest><Url>not a url</Url></TokenAndSignatureRequest>",
+        )
+        .await;
+        assert_eq!(
+            out,
+            "<TokenAndSignatureResponse><Error>0x80070057</Error><Message>Url is not a valid URL</Message></TokenAndSignatureResponse>"
+        );
+    }
+
+    #[tokio::test]
+    async fn unknown_message_type_is_rejected() {
+        let mut context = signed_out_context();
+        for message_type in [
+            XodusMessageType::Unknown,
+            XodusMessageType::UserInfoResponse,
+        ] {
+            assert!(
+                parse_message(&mut context, message_type, b"<x/>".to_vec())
+                    .await
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn title_identity_requires_both_ids() {
+        let id = Some("0000000049075E37".to_string());
+        assert_eq!(title_identity(&id, Some(1)), Some(("0000000049075E37", 1)));
+        assert_eq!(
+            title_identity(&Some("  0000000049075E37 ".to_string()), Some(1)),
+            Some(("0000000049075E37", 1))
+        );
+        assert_eq!(title_identity(&id, None), None);
+        assert_eq!(title_identity(&None, Some(1)), None);
+        assert_eq!(title_identity(&Some(String::new()), Some(1)), None);
+        assert_eq!(title_identity(&Some("  ".to_string()), Some(1)), None);
     }
 }
