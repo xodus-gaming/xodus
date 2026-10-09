@@ -186,6 +186,8 @@ pub async fn do_sisu(
 }
 
 pub type XstsToken = xal::response::XSTSToken;
+/// Proof key of a [`TitleSession`]: signs the Xbox Live requests made with its tokens.
+pub type ProofKey = p256::SecretKey;
 
 /// Title-bound Xbox Live session of one game: the authenticator whose proof key signed the
 /// device token (so it can sign service requests), plus the device/title/user tokens from the
@@ -237,7 +239,7 @@ impl TitleSession {
     }
 
     /// Proof key registered with the device token; signs requests made with its XSTS tokens.
-    pub fn proof_key(&self) -> p256::SecretKey {
+    pub fn proof_key(&self) -> ProofKey {
         self.authenticator.request_signer().keypair
     }
 }

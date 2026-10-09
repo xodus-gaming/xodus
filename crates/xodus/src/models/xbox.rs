@@ -34,13 +34,25 @@ struct DisplayClaims {
     xti: Vec<XtiClaim>,
 }
 
+/// Identity claims of one user in an XSTS token (`DisplayClaims.xui[n]`), as XSTS names them.
 #[derive(Debug, Deserialize, Serialize, Clone)]
-struct XuiClaim {
-    uhs: String,
-    gtg: Option<String>,
-    xid: Option<String>,
-    mgt: Option<String>,
-    agg: Option<String>,
+pub struct XuiClaim {
+    /// User hash: the `x=` part of the `XBL3.0` Authorization value.
+    pub uhs: String,
+    /// Classic gamertag.
+    pub gtg: Option<String>,
+    /// Xuid, decimal.
+    pub xid: Option<String>,
+    /// Modern gamertag.
+    pub mgt: Option<String>,
+    /// Age group: `Adult`, `Teen` or `Child`.
+    pub agg: Option<String>,
+    /// Modern gamertag suffix (empty when the modern gamertag is unique by itself).
+    #[serde(default)]
+    pub mgs: Option<String>,
+    /// Unique modern gamertag (modern gamertag plus `#suffix`).
+    #[serde(default)]
+    pub umg: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -50,10 +62,12 @@ struct XtiClaim {
 
 impl XstsResponse {
     pub fn user_hash(&self) -> Option<&str> {
-        self.display_claims
-            .xui
-            .first()
-            .map(|claim| claim.uhs.as_str())
+        self.xui().map(|claim| claim.uhs.as_str())
+    }
+
+    /// Claims of the user the token was issued for (`xui[0]`).
+    pub fn xui(&self) -> Option<&XuiClaim> {
+        self.display_claims.xui.first()
     }
 }
 
