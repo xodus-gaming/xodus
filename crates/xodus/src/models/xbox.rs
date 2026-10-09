@@ -100,6 +100,8 @@ pub struct TitleMgtEndPoint {
     #[serde(default)]
     pub host_type: Option<String>,
     #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
     pub relying_party: Option<String>,
     #[serde(default)]
     pub token_type: Option<String>,
@@ -107,7 +109,7 @@ pub struct TitleMgtEndPoint {
     pub signature_policy_index: Option<u8>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 pub struct TitleMgtSignaturePolicy {
     pub version: u16,
