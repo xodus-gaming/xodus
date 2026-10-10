@@ -61,7 +61,9 @@ pub async fn parse_message(
             } else {
                 "xboxlive.signin"
             };
-            let device_token = context.device_token.as_ref().unwrap();
+            let Some(device_token) = context.device_token.as_ref() else {
+                return Err("no device token is available for the MSA token exchange".into());
+            };
             let device_token_resp = xodus::api::live::exchange_device_token(
                 &context.client,
                 device_token.clone(),
@@ -132,7 +134,10 @@ pub async fn parse_message(
                     let payload = quick_xml::se::to_string(&payload)?;
                     Ok(payload.as_bytes().to_vec())
                 }
-                _ => todo!("Error handling sill sucks"),
+                other => {
+                    tracing::warn!("MSA token exchange did not issue a token: {other:?}");
+                    Err("MSA token exchange failed".into())
+                }
             }
         }
         XodusMessageType::TokenAndSignatureRequest => {
