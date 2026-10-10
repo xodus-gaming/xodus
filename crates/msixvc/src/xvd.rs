@@ -448,7 +448,7 @@ impl XvdFile {
     {
         let mut files = HashMap::new();
 
-        let user_data_offset = self.layout.user_data.start.0 as u64;
+        let user_data_offset = self.layout.user_data.start.to_bytes().0;
         file.seek(SeekFrom::Start(user_data_offset)).await?;
         let user_data_header = {
             let mut buf = XvdUserDataHeader::buffer();
