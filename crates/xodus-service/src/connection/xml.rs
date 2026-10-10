@@ -8,8 +8,8 @@ use xodus::models::secrets::Token;
 use xodus::models::soap;
 use xodus::models::xbox::XstsResponse;
 use xodus::models::xgameruntime::xuser::{
-    MSATokenRequest, MSATokenResponse, TokenAndSignatureRequest, TokenAndSignatureResponse,
-    UserIdentity, UserInfoRequest, UserInfoResponse,
+    BODY_PREFIX_BYTES, MSATokenRequest, MSATokenResponse, TokenAndSignatureRequest,
+    TokenAndSignatureResponse, UserIdentity, UserInfoRequest, UserInfoResponse,
 };
 use xodus::proto::xodus::XodusMessageType;
 
@@ -419,17 +419,27 @@ async fn title_bound_token(
     let authorization = authorization_value(&xsts.identity, &xsts.token.token)?;
 
     let signature = match &resolved.signature_policy {
-        Some(policy) => signing::sign_request(
-            &xsts.proof_key,
-            i32::from(policy.version),
-            policy.max_body_bytes as usize,
-            chrono::Utc::now(),
-            method,
-            &signing::path_and_query(url),
-            &authorization,
-            body,
-        )
-        .map_err(|err| TokenError::new(E_FAIL, format!("request signing failed: {err}")))?,
+        Some(policy) => {
+            if body.len() == BODY_PREFIX_BYTES && policy.max_body_bytes as usize > BODY_PREFIX_BYTES
+            {
+                // the runtime sends at most BODY_PREFIX_BYTES of a body too large for its frame
+                tracing::warn!(
+                    "{url}: the signature policy covers {} body bytes but at most {BODY_PREFIX_BYTES} were sent; the signature is wrong if the body was cut",
+                    policy.max_body_bytes
+                );
+            }
+            signing::sign_request(
+                &xsts.proof_key,
+                i32::from(policy.version),
+                policy.max_body_bytes as usize,
+                chrono::Utc::now(),
+                method,
+                &signing::path_and_query(url),
+                &authorization,
+                body,
+            )
+            .map_err(|err| TokenError::new(E_FAIL, format!("request signing failed: {err}")))?
+        }
         None => String::new(),
     };
 

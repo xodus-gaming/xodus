@@ -122,6 +122,14 @@ fn hresult_string(hresult: u32) -> String {
     format!("0x{hresult:08X}")
 }
 
+/// Longest body prefix the runtime guarantees to carry in [`TokenAndSignatureRequest::body`].
+/// The socket frame has a u16 length, so WineGDK sends the whole body when it fits and only
+/// its first `BODY_PREFIX_BYTES` otherwise. That is `MaxBodyBytes` of the signature policy
+/// every ordinary endpoint uses (title.mgt `SignaturePolicies[0]`), so the signature comes out
+/// the same; the few endpoints whose policy covers the whole body only ever see small requests.
+/// Keep in sync with `IPC_TOKEN_BODY_PREFIX_BYTES` in WineGDK's dlls/xgameruntime/private.h.
+pub const BODY_PREFIX_BYTES: usize = 8192;
+
 /// `XUserGetTokenAndSignatureAsync` forwarded by the runtime: get an XSTS token (and the
 /// Xbox Live request signature) for one HTTP request.
 #[derive(Debug, Deserialize)]
@@ -139,7 +147,8 @@ pub struct TokenAndSignatureRequest {
     pub method: Option<String>,
     #[serde(default)]
     pub headers: Option<TokenRequestHeaders>,
-    /// Request body, base64 encoded.
+    /// Request body, base64 encoded. It may be only a prefix of the body the game sends, see
+    /// [`BODY_PREFIX_BYTES`]; the signature never covers more than that for ordinary endpoints.
     #[serde(default)]
     pub body: Option<String>,
     #[serde(default)]
@@ -298,6 +307,30 @@ mod test {
     use xal::response::{XSTSDisplayClaims, XSTSToken};
 
     use super::*;
+    use crate::api::xbox::title::resolve_relying_party;
+    use crate::models::xbox::TitleMgtResponse;
+
+    /// A body cut to [`BODY_PREFIX_BYTES`] must sign exactly like the whole body for the
+    /// policy of the endpoints that take large bodies (title storage, achievements, ...).
+    #[test]
+    fn body_prefix_covers_default_signature_policy() {
+        let table: TitleMgtResponse =
+            serde_json::from_str(include_str!("../../../testdata/title_endpoints.json")).unwrap();
+        for url in [
+            "https://titlestorage.xboxlive.com/trustedplatform/users/xuid(1)/scids/0/data/save.dat,binary",
+            "https://achievements.xboxlive.com/users/xuid(1)/achievements?titleId=5",
+            "https://sessiondirectory.xboxlive.com/serviceconfigs/0/sessiontemplates/t/sessions/s",
+        ] {
+            let policy = resolve_relying_party(url, &table)
+                .and_then(|r| r.signature_policy)
+                .expect(url);
+            assert!(
+                policy.max_body_bytes as usize <= BODY_PREFIX_BYTES,
+                "{url}: policy signs {} bytes, the runtime may send only {BODY_PREFIX_BYTES}",
+                policy.max_body_bytes
+            );
+        }
+    }
 
     /// `xui[0]` of an XSTS token for http://xboxlive.com (values made up).
     fn claims() -> HashMap<String, String> {
