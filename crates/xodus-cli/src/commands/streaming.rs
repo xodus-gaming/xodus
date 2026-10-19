@@ -69,7 +69,7 @@ pub async fn run(
             &tx,
             rx,
         )
-        .await;
+        .await
     } else {
         let vurl = if source.starts_with("http://") || source.starts_with("https://") {
             source
@@ -145,10 +145,8 @@ pub async fn run(
             &tx,
             rx,
         )
-        .await;
+        .await
     }
-
-    ExitCode::SUCCESS
 }
 
 async fn run_cli_reader<Reader>(
@@ -163,7 +161,7 @@ async fn run_cli_reader<Reader>(
     url: &str,
     tx: &Sender<ProgressEvent>,
     mut rx: Receiver<ProgressEvent>,
-) -> ()
+) -> ExitCode
 where
     Reader: AsyncRead + Unpin,
 {
@@ -236,7 +234,7 @@ async fn run_reader<Reader>(
     l: u64,
     url: &str,
     tx: &Sender<ProgressEvent>,
-) -> ()
+) -> ExitCode
 where
     Reader: AsyncRead + Unpin,
 {
@@ -250,7 +248,13 @@ where
     let mut remote_file = streaming::PrefixCacheFile::new(reader, l, cache_path.clone())
         .await
         .expect("no err");
-    let remote_xvd = XvdFile::parse(&mut remote_file).await.expect("no err");
+    let remote_xvd = match XvdFile::parse(&mut remote_file).await {
+        Ok(xvd) => xvd,
+        Err(error) => {
+            eprintln!("could not parse streaming package: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
     let mut rfiles: HashMap<String, SegmentFile> = HashMap::new();
     let mut lfiles: HashMap<String, SegmentFile> = HashMap::new();
 
@@ -315,7 +319,7 @@ where
     .await;
     if let Err(err) = license {
         eprintln!("{}", err);
-        return;
+        return ExitCode::FAILURE;
     }
     let (key, game_splicense) = license.unwrap();
     if game_splicense.content_keys.len() != 1 {
@@ -323,10 +327,10 @@ where
             "unexpected number of content keys {}",
             game_splicense.content_keys.len()
         );
-        return;
+        return ExitCode::FAILURE;
     }
     let Some((_, content_key)) = game_splicense.content_keys.into_iter().next() else {
-        return;
+        return ExitCode::FAILURE;
     };
 
     let full_key = content_key.unpack(&key).expect("failed to unpack");
@@ -352,7 +356,7 @@ where
                 out.display(),
                 err
             );
-            return;
+            return ExitCode::FAILURE;
         }
     };
 
@@ -364,7 +368,7 @@ where
             available_free_space,
             total_size
         );
-        return;
+        return ExitCode::FAILURE;
     }
 
     tx.send(ProgressEvent::UpdateRemaining {
@@ -458,4 +462,73 @@ where
 
     std::fs::remove_file(&final_path).ok();
     std::fs::rename(&cache_path, &final_path).expect("ok");
+    ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    // No account, keychain, Store service or owned game content is used.
+    async fn stream_source(source: String, destination: &Path) -> ExitCode {
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let tokens = TokenManager::with_memory();
+        run(
+            &client,
+            &tokens,
+            source,
+            destination.to_string_lossy().into_owned(),
+            true,
+            None,
+            None,
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn truncated_file_reports_reader_failure() {
+        let work = tempfile::tempdir().unwrap();
+        let package = work.path().join("truncated.msixvc");
+        std::fs::write(&package, [0u8; 64]).unwrap();
+        let destination = work.path().join("output");
+        let status = stream_source(format!("file://{}", package.display()), &destination).await;
+        assert_eq!(status, ExitCode::FAILURE);
+        assert!(!destination.join(".xodus-streaming.msixvc").exists());
+    }
+
+    #[tokio::test]
+    async fn truncated_http_package_reports_reader_failure() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            loop {
+                let byte = socket.read_u8().await.unwrap();
+                request.push(byte);
+                if request.ends_with(b"\r\n\r\n") {
+                    break;
+                }
+                assert!(request.len() < 8192);
+            }
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 64\r\nConnection: close\r\n\r\n")
+                .await
+                .unwrap();
+            socket.write_all(&[0u8; 64]).await.unwrap();
+            socket.shutdown().await.unwrap();
+        });
+        let work = tempfile::tempdir().unwrap();
+        let destination = work.path().join("output");
+        let status = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            stream_source(format!("http://{address}/truncated.msixvc"), &destination),
+        )
+        .await
+        .unwrap();
+        assert_eq!(status, ExitCode::FAILURE);
+        assert!(!destination.join(".xodus-streaming.msixvc").exists());
+        server.await.unwrap();
+    }
 }
