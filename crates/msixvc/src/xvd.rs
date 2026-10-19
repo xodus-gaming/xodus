@@ -448,7 +448,7 @@ impl XvdFile {
     {
         let mut files = HashMap::new();
 
-        let user_data_offset = self.layout.user_data.start.0 as u64;
+        let user_data_offset = self.layout.user_data.start.to_bytes().0;
         file.seek(SeekFrom::Start(user_data_offset)).await?;
         let user_data_header = {
             let mut buf = XvdUserDataHeader::buffer();
@@ -477,7 +477,7 @@ impl XvdFile {
                     .iter()
                     .position(|&c| c == 0)
                     .unwrap_or(fullname.len());
-                let pfull_name: String = String::from_utf16(&fullname[..end]).unwrap();
+                let pfull_name: String = String::from_utf16_lossy(&fullname[..end]);
 
                 files.insert(
                     pfull_name,
@@ -532,7 +532,7 @@ impl XvdFile {
                 ))
                 .await?;
                 file.read_exact(buf.as_mut_bytes()).await?;
-                let file_name: String = String::from_utf16(buf.as_slice()).unwrap();
+                let file_name: String = String::from_utf16_lossy(buf.as_slice());
                 let page_length = if segment.filesize == 0 {
                     1
                 } else {
