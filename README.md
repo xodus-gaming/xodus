@@ -9,12 +9,13 @@
 
 > [!CAUTION]
 > This is an unofficial project - use at your own risk. It is not affiliated with, endorsed by, or sponsored by Microsoft or XBOX; all trademarks, product names, and company names or logos mentioned herein are the property of their respective owners.
+> This is the *only official* repository of Xodus. We are not affiliated with any other projects using our name or repository.
 
 ## Current state of the project
 
 The project can now login, download packages and obtain licenses for games.
 
-These parts are still quite scattered arround.
+These parts are still quite scattered around.
 
 - [x] Device login
 - [x] User login
@@ -103,7 +104,7 @@ RUSTFLAGS="--cfg tokio_unstable" cargo run --features tokio_console
 Usage: xodus-cli <COMMAND>
 
 Commands:
-  download    Download msixvc or xsp files fo given game
+  download    Download msixvc or xsp files for a given game
   license     Dump CIKs for use with XvdTool
   extract     Extract locally stored msixvc file
   login       

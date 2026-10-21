@@ -17,6 +17,12 @@ pub enum RSTError {
     MissingNonce,
     #[error("Unexpected error deriving hmac key")]
     HmacKey,
+    #[error("Response contains an invalid encrypted payload")]
+    InvalidEncryptedPayload,
+    #[error("Unable to decrypt response")]
+    Decryption,
+    #[error("Decrypted response is not valid UTF-8")]
+    Utf8(#[from] std::str::Utf8Error),
     #[error("The signature verification failed - {0}")]
     InvalidResponseSignature(String),
 }
