@@ -286,6 +286,12 @@ where
             return Poll::Ready(Ok(0));
         }
 
+        match AsyncWrite::poll_flush(Pin::new(&mut self.cache_writer), cx) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+            Poll::Pending => return Poll::Pending,
+        }
+
         loop {
             match self.cache_read_state {
                 CacheReadState::Idle => {
@@ -495,7 +501,7 @@ where
 
             match self.as_mut().poll_flush_pending_chunk(cx) {
                 Poll::Ready(Ok(())) => {
-                    if self.pending_chunk.is_some() {
+                    if self.cached_len >= target_end || self.pending_chunk.is_some() {
                         continue;
                     }
                 }
