@@ -43,7 +43,8 @@ async fn prepare(lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(), 
         .unwrap();
 
     let device_s = String::from_utf8(
-        Command::new("/usr/bin/hdiutil")
+        Command::new("/usr/sbin/diskutil")
+            .arg("image")
             .arg("attach")
             .arg("-nomount")
             .arg(format!("ram://{}", disk_size.div_ceil(256)))
@@ -94,9 +95,8 @@ async fn prepare(lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(), 
                 .unwrap();
             assert!(mnt.success());
 
-            let mnt = Command::new("/usr/bin/hdiutil")
-                .arg("detach")
-                .arg("-force")
+            let mnt = Command::new("/usr/sbin/diskutil")
+                .arg("eject")
                 .arg(&device_cl)
                 .status()
                 .await
