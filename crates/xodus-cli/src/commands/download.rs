@@ -55,13 +55,16 @@ pub async fn run(
     };
     println!();
     for file in files {
-        let url = format!(
-            "{}{}",
-            file.cdn_root_paths.first().unwrap(),
-            file.relative_url
-        );
+        let urls = file.download_urls();
+        let Some(first_url) = urls.first() else {
+            eprintln!(
+                "{}: the server returned no CDN for this file",
+                file.file_name
+            );
+            return ExitCode::FAILURE;
+        };
         if dry_run {
-            println!("{}", url);
+            println!("{}", first_url);
             continue;
         }
 
@@ -70,11 +73,26 @@ pub async fn run(
             .progress_chars("#>-")
         );
 
-        let res = client
-            .get(url)
-            .send()
-            .await
-            .expect("Failed to request the download");
+        // Try each CDN in turn; only fail once all of them have.
+        let mut response = None;
+        for url in &urls {
+            match client
+                .get(url)
+                .send()
+                .await
+                .and_then(|r| r.error_for_status())
+            {
+                Ok(r) => {
+                    response = Some(r);
+                    break;
+                }
+                Err(err) => tracing::warn!("{url}: {err}; trying the next CDN"),
+            }
+        }
+        let Some(res) = response else {
+            eprintln!("Failed to request the download from any CDN");
+            return ExitCode::FAILURE;
+        };
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .write(true)
