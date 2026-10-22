@@ -100,18 +100,23 @@ RUSTFLAGS="--cfg tokio_unstable" cargo run --features tokio_console
 
 ### CLI Usage
 
+The `run` command is only available on Unix platforms, including Linux and macOS.
+
 ```
 Usage: xodus-cli <COMMAND>
 
 Commands:
-  download    Download msixvc or xsp files for a given game
-  license     Dump CIKs for use with XvdTool
-  extract     Extract locally stored msixvc file
-  login       
-  streaming   Download and extract the game through streaming algorithm
-  clep        Generate or decrypt base64-encoded CLEP challenge data
-  sp-license  Decode SPLicenseBlock
-  help        Print this message or the help of the given subcommand(s)
+  download       Download msixvc or xsp files for a given game
+  license        Dump CIKs for use with XvdTool
+  extract        Extract locally stored msixvc file
+  extract-eappx  Extract a locally stored EAppx/EMSIX package (research task, see issue #91)
+  login
+  logout
+  streaming      Download and extract the game through streaming algorithm
+  run            Run a Game with xodus wine
+  clep           Generate or decrypt base64-encoded CLEP challenge data
+  sp-license     Decode SPLicenseBlock
+  help           Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
