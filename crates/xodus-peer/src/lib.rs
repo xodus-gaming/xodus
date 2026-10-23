@@ -40,5 +40,8 @@ pub mod proto {
         pub mod stub {
             include!(concat!(env!("OUT_DIR"), "/xodus.stub.rs"));
         }
+        pub mod userstats {
+            include!(concat!(env!("OUT_DIR"), "/xodus.userstats.rs"));
+        }
     }
 }

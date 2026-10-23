@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package xodus.userstats;
+
+message GetUserstatsRequest {
+    uint64 xuid = 1;
+    repeated uint32 title_ids = 2;
+}
+
+message TitleStats {
+    uint32 title_id = 1;
+    repeated Stat stats = 2;
+}
+
+message Stat {
+    string name = 1;
+    string display_name = 2;
+    string stat_type = 3;
+    string value = 4;
+}
+
+message GetUserstatsResponse {
+    repeated TitleStats titles = 1;
+    UserstatsError error = 2;
+}
+
+enum UserstatsError {
+    USERSTATS_ERROR_OK = 0;
+    USERSTATS_ERROR_NOT_SIGNED_IN = 1;
+    USERSTATS_ERROR_EMPTY_LIST = 2;
+}
+
+enum UserstatsServiceMessage {
+    USERSTATS_SERVICE_MESSAGE_UNDEFINED = 0;
+    USERSTATS_SERVICE_MESSAGE_GET_USERSTATS = 1;
+}
+
+service UserstatsService {
+    rpc GetUserstats(GetUserstatsRequest) returns (GetUserstatsResponse);
+}
