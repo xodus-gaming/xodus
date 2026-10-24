@@ -5,3 +5,4 @@
 - [xboxservices](./xboxservices.md)
 - [titlestorage](./titlestorage.md)
 - [gameruntime](./gameruntime.md)
+- [chat](./chat.md)
