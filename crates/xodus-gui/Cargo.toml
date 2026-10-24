@@ -1,0 +1,13 @@
+[package]
+name = "xodus-gui"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+
+[dependencies]
+xodus-peer = { path = "../xodus-peer" } 
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+egui = { version = "0.36" }
+eframe = { version = "0.36" }
+wgpu = { version = "30.0" }

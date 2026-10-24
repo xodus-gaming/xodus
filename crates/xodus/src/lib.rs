@@ -10,9 +10,3 @@ pub mod tokens;
 pub const XBOX_LIVE_PACKAGES_PC: &str = "https://packagespc.xboxlive.com";
 
 pub use xal;
-
-pub mod proto {
-    pub mod xodus {
-        include!(concat!(env!("OUT_DIR"), "/xodus.rs"));
-    }
-}
