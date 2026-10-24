@@ -12,6 +12,26 @@ Flow looks as follows
 - On SSO failure - open the URL returned in the fault for auth approval
 - Call RST2.srf again once that second session completes
 
+## Troubleshooting on Linux
+
+On KDE Plasma Wayland, login may fail with GDK protocol error 71 or display a blank WebKit window with a GBM allocation error. Try the opt-in compatibility mode:
+
+```sh
+xodus-cli login --safe-webview
+```
+
+This Linux-only flag sets `GDK_BACKEND=x11` and `WEBKIT_DISABLE_DMABUF_RENDERER=1` before the application runtime starts, overriding any inherited values for this invocation. It is equivalent to:
+
+```sh
+GDK_BACKEND=x11 WEBKIT_DISABLE_DMABUF_RENDERER=1 xodus-cli login
+```
+
+The mode requires a working X11 server or XWayland session. Disabling WebKit's DMA-BUF renderer may reduce rendering acceleration or performance. Plain `login` and other commands leave these environment variables unchanged; there is no automatic fallback or retry. The mode exposes a reported workaround, rather than repairing the underlying graphics stack, and is not promised to work without X11/XWayland.
+
+Disabling NVIDIA explicit sync is a separate experimental alternative discussed in [issue #167](https://github.com/xodus-gaming/xodus/issues/167). An isolated experiment supported it on one device configuration, but did not establish physical page presentation or completion of the original login flow. It is not included in `--safe-webview`.
+
+Validation on an affected KDE/XWayland installation is still needed: compare plain login, the shell workaround, and `--safe-webview`, checking visible page presentation, IPC token handoff, and session closure. A DOM-load result alone does not validate the full login flow.
+
 ## Webview / JS IPC
 
 On Windows, `CloudExperienceHost` hosts the login page and exposes itself to it as `window.external`, plus a `CloudExperienceHost.Bridge.dispatchMessage` bridge the page can call into and get answers from. Xodus doesn't have a real `CloudExperienceHost` - `xodus-cli/src/webview.rs` re-implements just enough of it inside its own embedded webview (tao/wry) for the page to behave as if it were signing in through Windows.
