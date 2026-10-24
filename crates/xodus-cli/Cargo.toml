@@ -29,6 +29,8 @@ tempfile = "3.27.0"
 rustix = "1.1.4"
 ctrlc = "3.5.2"
 nix = "0.31.3"
+quick-xml = "0.42.0"
+serde_core = "1.0.229"
 
 [features]
 tokio_console = ["dep:console-subscriber"]
