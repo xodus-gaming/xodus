@@ -210,6 +210,7 @@ enum CacheWriteState {
     Idle,
     Seeking { offset: u64 },
     Writing,
+    Flushing { written: usize },
 }
 
 pub struct PrefixCacheFile<R> {
@@ -398,14 +399,28 @@ where
                             )));
                         }
                         Poll::Ready(Ok(written)) => {
+                            // tokio::fs::File completes writes in the background; flush
+                            // before exposing the bytes to the separate cache_reader handle.
                             self.pending_chunk_offset += written;
-                            self.cached_len += written as u64;
                             self.cache_write_pos += written as u64;
+                            self.cache_write_state = CacheWriteState::Flushing { written };
+                        }
+                        Poll::Ready(Err(err)) => {
+                            self.cache_write_state = CacheWriteState::Idle;
+                            return Poll::Ready(Err(err));
+                        }
+                    }
+                }
+                CacheWriteState::Flushing { written } => {
+                    match AsyncWrite::poll_flush(Pin::new(&mut self.cache_writer), cx) {
+                        Poll::Pending => return Poll::Pending,
+                        Poll::Ready(Ok(())) => {
+                            self.cached_len += written as u64;
                             if self.pending_chunk_offset >= chunk.len() {
                                 self.pending_chunk = None;
                                 self.pending_chunk_offset = 0;
-                                self.cache_write_state = CacheWriteState::Idle;
                             }
+                            self.cache_write_state = CacheWriteState::Idle;
                             return Poll::Ready(Ok(()));
                         }
                         Poll::Ready(Err(err)) => {
