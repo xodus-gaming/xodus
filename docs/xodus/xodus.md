@@ -1,4 +1,4 @@
-# Xodus project
+# Xodus
 
 - [Device](./device.md)
 - [Login Flow](./login.md)
