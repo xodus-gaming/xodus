@@ -30,7 +30,7 @@ pub async fn get_license(
     .await
     .unwrap();
 
-    ms_device_token.refresh_device(tokens).unwrap();
+    ms_device_token.refresh_device(tokens).trace();
 
     let user_token = xodus::api::live::exchange_user_token(
         client,

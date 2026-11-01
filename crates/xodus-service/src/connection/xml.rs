@@ -66,7 +66,10 @@ pub async fn parse_message(
             let ms_device_rps_token = if let Some((ms_device_token, Some(lifetime))) =
                 device_token_resp
                     .ok()
-                    .map(|t| t.get_rps())
+                    .map(|t| {
+                        t.refresh_device(context.tokens()).trace();
+                        t.get_rps()
+                    })
                     .unwrap_or_default()
             {
                 Some((ms_device_token, lifetime.timestamp()))
