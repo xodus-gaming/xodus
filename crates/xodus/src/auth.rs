@@ -10,7 +10,6 @@ use xal::{
     XalAuthenticator,
 };
 
-use crate::models::live::ExchangeUserTokenOutcome;
 use crate::models::secrets::Token;
 use crate::models::soap;
 use crate::tokens::TokenManager;
@@ -100,10 +99,11 @@ pub async fn do_sisu(
         "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0".to_owned(),
         Some(soap::PolicyReference::token_broker()),
     )
-    .await?
-    .refresh(manager);
+    .await?;
 
-    let Some((ms_device_token, _)) = device_token_resp.get_device_rps() else {
+    device_token_resp.refresh_device_sts(&manager)?;
+
+    let Some((ms_device_token, _)) = device_token_resp.get_rps() else {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::BrokenPipe,
             "error",
@@ -128,31 +128,9 @@ pub async fn do_sisu(
     )
     .await?;
 
-    let ExchangeUserTokenOutcome::Issued(
-        soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
-    ) = user_token
-    else {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::BrokenPipe,
-            "error",
-        )));
-    };
+    user_token.refresh_user_sts(manager)?;
 
-    if let Some(sts) = collection.security_tokens.pop() {
-        let address = sts.applies_to.endpoint_reference.address.clone();
-        let sts: Token = sts.into();
-        let address = if let Token::Legacy(legacy) = &sts {
-            legacy.key_name.clone().unwrap_or(address)
-        } else {
-            address
-        };
-        if let Err(err) = manager.save_user_token(address, sts) {
-            tracing::warn!("Failed to persist refreshed STS token: {err}");
-        }
-    }
-    let token: soap::RequestSecurityTokenResponse = collection.security_tokens.remove(0);
-    let token: Token = token.into();
-    let Token::Compact(user_token) = token else {
+    let Some((user_token, _)) = user_token.get_rps() else {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::BrokenPipe,
             "error",

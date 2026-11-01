@@ -1,6 +1,7 @@
 use std::process::ExitCode;
 
-use xodus::models::live::{DAProperty, ExchangeUserTokenOutcome};
+use xodus::api::live::TokenResponse;
+use xodus::models::live::DAProperty;
 use xodus::models::{secrets, soap};
 use xodus::tokens::TokenManager;
 
@@ -20,28 +21,13 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
     let output = webview::run_sessions(handler)
         .expect("failed to login")
         .flatten();
-    let issued_tokens = match output {
-        Some(soap::BodyContent::RequestSecurityTokenResponseCollection(collection)) => {
-            collection.security_tokens
-        }
-        Some(soap::BodyContent::RequestSecurityTokenResponse(token)) => vec![*token],
+    match output {
+        Some(resp) => resp.refresh_user_sts(tokens),
         None => {
             eprintln!("Didn't log in");
-            vec![]
+            return ExitCode::FAILURE;
         }
-        _ => unreachable!(),
     };
-
-    for token in issued_tokens {
-        let address = token.applies_to.endpoint_reference.address.clone();
-        let token = token.into();
-        let address = if let secrets::Token::Legacy(legacy) = &token {
-            legacy.key_name.clone().unwrap_or(address)
-        } else {
-            address
-        };
-        tokens.save_user_token(address, token).unwrap();
-    }
 
     ExitCode::SUCCESS
 }
@@ -72,7 +58,7 @@ impl LoginHandler {
     fn exchange_user_token(
         &self,
         prop: DAProperty,
-    ) -> Result<ExchangeUserTokenOutcome, Box<dyn std::error::Error>> {
+    ) -> Result<TokenResponse, Box<dyn std::error::Error>> {
         let client = self.client.clone();
         let device_token = self.device.clone();
         let client_id = self.client_id.clone();
@@ -119,7 +105,7 @@ impl LoginHandler {
 }
 
 impl webview::SessionHandler for LoginHandler {
-    type Output = Option<soap::BodyContent>;
+    type Output = Option<TokenResponse>;
 
     fn bootstrap(
         &mut self,
@@ -141,7 +127,7 @@ impl webview::SessionHandler for LoginHandler {
         let exchanged = self.exchange_user_token(data.clone())?;
 
         match exchanged {
-            ExchangeUserTokenOutcome::Fault(pp) => {
+            TokenResponse::Fault(pp) => {
                 if let Some(pp) = pp
                     && let Some(auth_url) = pp.inline_auth_url
                 {
@@ -155,7 +141,7 @@ impl webview::SessionHandler for LoginHandler {
                 runtime.close_session(session_id);
                 Ok(webview::HandlerControl::Complete(None))
             }
-            ExchangeUserTokenOutcome::Issued(da) => {
+            _ => {
                 runtime.close_session(session_id);
                 self.tokens
                     .save_user(&xodus::models::secrets::User {
@@ -163,7 +149,7 @@ impl webview::SessionHandler for LoginHandler {
                         username: data.username,
                     })
                     .unwrap();
-                Ok(webview::HandlerControl::Complete(Some(da)))
+                Ok(webview::HandlerControl::Complete(Some(exchanged)))
             }
         }
     }

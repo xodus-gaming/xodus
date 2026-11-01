@@ -5,10 +5,10 @@ use zerocopy::transmute;
 
 use crate::licensing::splicense::ClepHmacState;
 use crate::models::devicecredential::{DeviceAddRequest, DeviceAddResponse};
-use crate::models::live::ExchangeUserTokenOutcome;
 use crate::models::secrets::{LegacyToken, Token};
 use crate::models::soap;
 use crate::tokens::TokenManager;
+use crate::tokens::store::TokenStoreError;
 
 mod rst;
 mod utils;
@@ -52,11 +52,11 @@ pub async fn authenticate_device(
 pub enum TokenResponse {
     RequestSecurityTokenResponseCollection(soap::RequestSecurityTokenResponseCollection),
     RequestSecurityTokenResponse(Box<soap::RequestSecurityTokenResponse>),
-    Fault(soap::Fault),
+    Fault(Option<soap::PP>),
 }
 
 impl TokenResponse {
-    pub fn get_device_rps(&self) -> Option<(String, Option<DateTime<FixedOffset>>)> {
+    pub fn get_rps(&self) -> Option<(String, Option<DateTime<FixedOffset>>)> {
         match &self {
             TokenResponse::RequestSecurityTokenResponseCollection(collection) => {
                 let Some(refresh_token) = collection.security_tokens.get(0) else {
@@ -76,44 +76,38 @@ impl TokenResponse {
             }
         }
     }
-    pub fn get_device_sts(&self) -> Option<LegacyToken> {
-        match &self {
-            TokenResponse::RequestSecurityTokenResponseCollection(collection) => {
-                let Some(refresh_token) = collection.security_tokens.get(1) else {
-                    return None;
-                };
-                let Token::Legacy(legacy) = refresh_token.clone().into() else {
-                    return None;
-                };
-                Some(legacy)
-            }
-            b => {
-                warn!("Exchange token supports only singular token right now {b:?}");
-                None
-            }
-        }
+    pub fn refresh_device_sts(&self, tokens: &TokenManager) -> Result<(), TokenStoreError> {
+        self.refresh_sts(tokens, false)
     }
-    pub fn refresh(self, tokens: &TokenManager) -> Self {
+    pub fn refresh_user_sts(&self, tokens: &TokenManager) -> Result<(), TokenStoreError> {
+        self.refresh_sts(tokens, true)
+    }
+    fn refresh_sts(&self, tokens: &TokenManager, user: bool) -> Result<(), TokenStoreError> {
         match &self {
             TokenResponse::RequestSecurityTokenResponseCollection(collection) => {
                 let Some(resp) = collection.security_tokens.get(1) else {
-                    return self;
+                    return Ok(());
                 };
+                let address = resp.applies_to.endpoint_reference.address.clone();
                 let token = resp.clone().into();
-                let Token::Legacy(ltoken) = &token else {
-                    return self;
+                let address = if let Token::Legacy(legacy) = &token {
+                    legacy.key_name.clone().unwrap_or(address)
+                } else {
+                    address
                 };
-                let key_name = ltoken.key_name.clone().unwrap_or_default();
-
                 // Error not so important, except if happen more often
-                _ = tokens.save_device_token(key_name, token);
+                if user {
+                    _ = tokens.save_user_token(address, token);
+                } else {
+                    _ = tokens.save_device_token(address, token);
+                }
             }
             b => {
                 warn!("Exchange token supports only singular token right now {b:?}");
-                return self;
+                return Ok(());
             }
         }
-        self
+        Ok(())
     }
 }
 
@@ -144,7 +138,7 @@ pub async fn exchange_device_token(
     let envelope = request.request(client).await?;
 
     Ok(match envelope.body.body {
-        soap::BodyContent::Fault(f) => TokenResponse::Fault(f),
+        soap::BodyContent::Fault(_) => TokenResponse::Fault(None),
         soap::BodyContent::RequestSecurityTokenResponse(f) => {
             TokenResponse::RequestSecurityTokenResponse(f)
         }
@@ -171,7 +165,7 @@ pub async fn exchange_user_token(
     inline_ux: Option<String>,
     hosting_app: String,
     scope_policies: &[(String, Option<soap::PolicyReference>)],
-) -> Result<ExchangeUserTokenOutcome, rst::RSTError> {
+) -> Result<TokenResponse, rst::RSTError> {
     let secret = BASE64_STANDARD.decode(device_token.binary_secret.as_ref().unwrap())?;
     let secret: [u8; 4096] = secret.try_into().unwrap();
     let secret: ClepHmacState = transmute!(secret);
@@ -203,8 +197,18 @@ pub async fn exchange_user_token(
     let envelope = request.request(client).await?;
 
     Ok(match envelope.body.body {
-        soap::BodyContent::Fault(_) => ExchangeUserTokenOutcome::Fault(envelope.header.pp),
-        body => ExchangeUserTokenOutcome::Issued(body),
+        soap::BodyContent::Fault(_) => TokenResponse::Fault(envelope.header.pp),
+        soap::BodyContent::RequestSecurityTokenResponse(f) => {
+            TokenResponse::RequestSecurityTokenResponse(f)
+        }
+        soap::BodyContent::RequestSecurityTokenResponseCollection(f) => {
+            TokenResponse::RequestSecurityTokenResponseCollection(f)
+        }
+        _ => {
+            return Err(rst::RSTError::Deserialization(quick_xml::DeError::Custom(
+                "Unexpected Answer".to_owned(),
+            )));
+        }
     })
 }
 
@@ -236,10 +240,11 @@ mod test {
             Some(soap::PolicyReference::token_broker()),
         )
         .await
-        .unwrap()
-        .refresh(&mgr);
+        .unwrap();
 
-        let Some((ms_device_token, _)) = resp.get_device_rps() else {
+        resp.refresh_device_sts(&mgr).unwrap();
+
+        let Some((ms_device_token, _)) = resp.get_rps() else {
             todo!("Unsupported token");
         };
 

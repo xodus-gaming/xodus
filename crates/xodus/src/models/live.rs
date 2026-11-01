@@ -45,9 +45,3 @@ impl HostBridgeMessage {
         }
     }
 }
-
-#[derive(Debug)]
-pub enum ExchangeUserTokenOutcome {
-    Issued(soap::BodyContent),
-    Fault(Option<soap::PP>),
-}

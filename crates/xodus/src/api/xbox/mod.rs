@@ -1,4 +1,3 @@
-use crate::models::live::ExchangeUserTokenOutcome;
 use crate::models::secrets::{LegacyToken, Token};
 use crate::models::soap;
 use crate::models::xbox::XstsResponse;
@@ -29,23 +28,7 @@ pub async fn run(
     .await
     .expect("Failed to get ms user token");
 
-    let user_token: Token = match user_token {
-        ExchangeUserTokenOutcome::Fault(_) => {
-            eprintln!("Failed to get exchange MS token");
-            panic!("TODO");
-        }
-        ExchangeUserTokenOutcome::Issued(
-            soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
-        ) => {
-            let token = collection.security_tokens.remove(0);
-            token.into()
-        }
-        ExchangeUserTokenOutcome::Issued(soap::BodyContent::RequestSecurityTokenResponse(
-            token,
-        )) => (*token).into(),
-        _ => unreachable!("Only responses are handled"),
-    };
-    let Token::Compact(user_token) = user_token else {
+    let Some((user_token, _)) = user_token.get_rps() else {
         eprintln!("Unsupported token");
         panic!("TODO");
     };
