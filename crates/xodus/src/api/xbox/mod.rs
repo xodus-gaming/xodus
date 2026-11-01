@@ -19,10 +19,10 @@ pub async fn run(
         dev_token,
         None,
         Some("Silent".to_string()),
-        "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
+        "000000004424da1f".to_string(),
         &[(
-            "user.auth.xboxlive.com".to_owned(),
-            Some(soap::PolicyReference::mbi_ssl()),
+            "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0&clientid=000000004424da1f".to_owned(),
+            Some(soap::PolicyReference::token_broker()),
         )],
     )
     .await
