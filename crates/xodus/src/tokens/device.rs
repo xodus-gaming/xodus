@@ -2,7 +2,7 @@ use crate::hardware;
 use crate::licensing::splicense::SPLicense;
 use crate::licensing::utils::{generate_string, parse_bcrypt_rsa_private};
 use crate::models::devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo};
-use crate::models::secrets::Device;
+use crate::models::secrets::{Device, Token};
 use crate::models::soap::BodyContent;
 use crate::tokens::manager::TokenManager;
 
@@ -70,17 +70,11 @@ fn save_device_sts_token(
     tokens: &TokenManager,
     resp: Box<crate::models::soap::RequestSecurityTokenResponse>,
 ) {
-    let key_name = resp
-        .requested_security_token
-        .encrypted_data
-        .as_ref()
-        .unwrap()
-        .key_info
-        .key_name
-        .as_ref()
-        .unwrap()
-        .clone();
     let token = (*resp).into();
+    let Token::Legacy(ltoken) = &token else {
+        return;
+    };
+    let key_name = ltoken.key_name.clone().unwrap_or_default();
     tokens
         .save_device_token(key_name, token)
         .expect("Failed to save device token");

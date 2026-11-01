@@ -67,11 +67,7 @@ impl TokenResponse {
                 };
                 Some((
                     compact,
-                    refresh_token
-                        .lifetime
-                        .as_ref()
-                        .map(|lt| chrono::DateTime::parse_from_rfc3339(&lt.expires).ok())
-                        .unwrap_or_default(),
+                    chrono::DateTime::parse_from_rfc3339(&refresh_token.lifetime.expires).ok(),
                 ))
             }
             b => {
@@ -103,21 +99,14 @@ impl TokenResponse {
                 let Some(resp) = collection.security_tokens.get(1) else {
                     return self;
                 };
-                let key_name = resp
-                    .requested_security_token
-                    .as_ref()
-                    .unwrap()
-                    .encrypted_data
-                    .as_ref()
-                    .unwrap()
-                    .key_info
-                    .key_name
-                    .as_ref()
-                    .unwrap()
-                    .clone();
+                let token = resp.clone().into();
+                let Token::Legacy(ltoken) = &token else {
+                    return self;
+                };
+                let key_name = ltoken.key_name.clone().unwrap_or_default();
 
                 // Error not so important, except if happen more often
-                _ = tokens.save_device_token(key_name, resp.clone().into());
+                _ = tokens.save_device_token(key_name, token);
             }
             b => {
                 warn!("Exchange token supports only singular token right now {b:?}");
