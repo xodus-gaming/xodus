@@ -1,5 +1,11 @@
 use std::process::ExitCode;
 
+#[cfg(feature = "firefox")]
+use serde_core::de::IntoDeserializer;
+#[cfg(feature = "firefox")]
+use serde_json::Value;
+#[cfg(any(feature = "firefox", feature = "chromeium"))]
+use xodus::models::live::DAProperty;
 use xodus::models::live::ExchangeUserTokenOutcome;
 use xodus::models::secrets::Token;
 use xodus::models::{secrets, soap};
@@ -9,7 +15,7 @@ const CLIENT_ID: &str = "0000000040159362";
 const USER_AUTH_SCOPE: &str = "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0&clientid=0000000040159362&ssoappgroup=none";
 
 #[cfg(feature = "firefox")]
-async fn resolve_browser(start_url: &str, target_url: &str) -> String {
+async fn resolve_browser(start_url: &str, target_url: &str) -> DAProperty {
     use ff_rdp_core::{ActorId, WebConsoleActor};
     use std::time::Duration;
     let con: ff_rdp_core::RdpConnection =
@@ -64,24 +70,50 @@ async fn resolve_browser(start_url: &str, target_url: &str) -> String {
 
     println!("read data");
     loop {
-        let response = ff_rdp_core::WebConsoleActor::evaluate_js_async(
+        let response = match ff_rdp_core::WebConsoleActor::evaluate_js_async(
             &mut transport,
             &a.console_actor,
-            "ServerData.sDAToken",
-        )
-        .unwrap();
-        let j = response.result.to_json();
-        let Some(s) = j.as_str() else {
-            println!("failed to read");
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            continue;
+            "JSON.stringify(ServerData)",
+        ) {
+            Ok(r) => r,
+            Err(e) => {
+                println!("{}", e);
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                continue;
+            }
         };
-        return s.to_owned();
+        let s = match response.result {
+            ff_rdp_core::Grip::Value(value) => value.to_string(),
+            ff_rdp_core::Grip::LongString {
+                actor,
+                length,
+                initial,
+            } => {
+                _ = initial;
+                ff_rdp_core::LongStringActor::full_string(&mut transport, actor.as_ref(), length)
+                    .unwrap_or_default()
+            }
+            _ => {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                continue;
+            }
+        };
+
+        let val = match serde_json::from_str(&s) {
+            Ok(v) => v,
+            Err(e) => {
+                println!("{}", s);
+                println!("{}", e);
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                continue;
+            }
+        };
+        return val;
     }
 }
 
 #[cfg(feature = "chromeium")]
-async fn resolve_browser(start_url: &str, target_url: &str) -> String {
+async fn resolve_browser(start_url: &str, target_url: &str) -> DAProperty {
     use chromiumoxide::Browser;
     use futures_util::StreamExt;
     use std::time::Duration;
@@ -103,13 +135,13 @@ async fn resolve_browser(start_url: &str, target_url: &str) -> String {
             if let Ok(Some(url)) = page.url().await
                 && url.starts_with(target_url)
             {
-                let res = page.evaluate("ServerData.sDAToken").await.unwrap();
+                let res = page.evaluate("ServerData").await.unwrap();
                 let v = res.value().unwrap();
-                return v.as_str().unwrap().to_owned();
+                return serde_json::from_value(v.clone()).unwrap();
             }
         }
     }
-    "".to_owned()
+    unreachable!()
 }
 
 #[cfg(any(feature = "chromeium", feature = "firefox"))]
@@ -141,6 +173,8 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
 
     scopes.push(("http://Passport.NET/tb".to_string(), None));
 
+    let mut user_data = None;
+
     loop {
         let outcome = xodus::api::live::exchange_user_token(
             &client,
@@ -162,11 +196,13 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
                     "login end url: {}",
                     pp.inline_end_auth_url.as_deref().unwrap()
                 );
-                user_token.token = resolve_browser(
+                let rdata = resolve_browser(
                     pp.inline_auth_url.as_deref().unwrap(),
                     "https://login.live.com/ppsecure/post.srf",
                 )
                 .await;
+                user_token.token = rdata.da_token.clone();
+                user_data = Some(rdata);
                 continue;
             }
             ExchangeUserTokenOutcome::Fault(_) => {
@@ -183,11 +219,13 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
                             "login end url: {}",
                             pp.inline_end_auth_url.as_deref().unwrap()
                         );
-                        user_token.token = resolve_browser(
+                        let rdata = resolve_browser(
                             pp.inline_auth_url.as_deref().unwrap(),
                             "https://login.live.com/ppsecure/post.srf",
                         )
                         .await;
+                        user_token.token = rdata.da_token.clone();
+                        user_data = Some(rdata);
                         continue;
                     }
                     println!("error {}", pp.error_status.as_ref().unwrap());
@@ -195,6 +233,22 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
                     println!("payload {}", quick_xml::se::to_string(pp).unwrap());
                     println!("Failure");
                     return ExitCode::FAILURE;
+                }
+                for token in collection.security_tokens {
+                    let address = token
+                        .applies_to
+                        .as_ref()
+                        .unwrap()
+                        .endpoint_reference
+                        .address
+                        .clone();
+                    let token = token.into();
+                    let address = if let secrets::Token::Legacy(legacy) = &token {
+                        legacy.key_name.clone().unwrap_or(address)
+                    } else {
+                        address
+                    };
+                    tokens.save_user_token(address, token).unwrap();
                 }
                 token.into()
             }
@@ -208,6 +262,14 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
             Token::Legacy(legacy_token) => println!("legacy {}", legacy_token.token),
             Token::Compact(c) => println!("compact {c}"),
         }
+        user_data.map(|user_data| {
+            tokens
+                .save_user(&xodus::models::secrets::User {
+                    puid: user_data.puid,
+                    username: user_data.username,
+                })
+                .unwrap();
+        });
         return ExitCode::SUCCESS;
     }
 }
