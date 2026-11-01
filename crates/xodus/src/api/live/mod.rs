@@ -55,59 +55,87 @@ pub enum TokenResponse {
     Fault(Option<soap::PP>),
 }
 
+pub trait TraceTokenRefreshError {
+    fn trace(self);
+}
+
+impl TraceTokenRefreshError for Result<(), TokenStoreError> {
+    fn trace(self) {
+        match self {
+            Ok(_) => {}
+            Err(err) => tracing::warn!("Failed to persist refreshed STS token: {err}"),
+        }
+    }
+}
+
 impl TokenResponse {
     pub fn get_rps(&self) -> Option<(String, Option<DateTime<FixedOffset>>)> {
         match &self {
+            TokenResponse::RequestSecurityTokenResponse(resp) => Some(resp.as_ref()),
             TokenResponse::RequestSecurityTokenResponseCollection(collection) => {
-                let Some(refresh_token) = collection.security_tokens.get(0) else {
-                    return None;
-                };
-                let Token::Compact(compact) = refresh_token.clone().into() else {
-                    return None;
-                };
-                Some((
-                    compact,
-                    chrono::DateTime::parse_from_rfc3339(&refresh_token.lifetime.expires).ok(),
-                ))
+                collection.security_tokens.get(0)
             }
             b => {
                 warn!("Exchange token supports only singular token right now {b:?}");
                 None
             }
         }
+        .map(|resp| {
+            let Token::Compact(compact) = resp.clone().into() else {
+                return None;
+            };
+            Some((
+                compact,
+                chrono::DateTime::parse_from_rfc3339(&resp.lifetime.expires).ok(),
+            ))
+        })
+        .unwrap_or_default()
     }
-    pub fn refresh_device_sts(&self, tokens: &TokenManager) -> Result<(), TokenStoreError> {
-        self.refresh_sts(tokens, false)
+    pub fn refresh_device(&self, tokens: &TokenManager) -> Result<(), TokenStoreError> {
+        self.refresh(tokens, false)
     }
-    pub fn refresh_user_sts(&self, tokens: &TokenManager) -> Result<(), TokenStoreError> {
-        self.refresh_sts(tokens, true)
+    pub fn refresh_user(&self, tokens: &TokenManager) -> Result<(), TokenStoreError> {
+        self.refresh(tokens, true)
     }
-    fn refresh_sts(&self, tokens: &TokenManager, user: bool) -> Result<(), TokenStoreError> {
+    fn refresh_token(
+        resp: &soap::RequestSecurityTokenResponse,
+        tokens: &TokenManager,
+        user: bool,
+    ) -> Result<(), TokenStoreError> {
+        let address = resp.applies_to.endpoint_reference.address.clone();
+        let token = resp.clone().into();
+        let address = if let Token::Legacy(legacy) = &token {
+            legacy.key_name.clone().unwrap_or(address)
+        } else {
+            address
+        };
+        // Error not so important, except if happen more often
+        if user {
+            tokens.save_user_token(address, token)
+        } else {
+            tokens.save_device_token(address, token)
+        }
+    }
+    fn refresh(&self, tokens: &TokenManager, user: bool) -> Result<(), TokenStoreError> {
+        let mut result = None;
         match &self {
+            TokenResponse::RequestSecurityTokenResponse(resp) => {
+                if let Err(e) = Self::refresh_token(resp, tokens, user) {
+                    result = Some(e);
+                }
+            }
             TokenResponse::RequestSecurityTokenResponseCollection(collection) => {
-                let Some(resp) = collection.security_tokens.get(1) else {
-                    return Ok(());
-                };
-                let address = resp.applies_to.endpoint_reference.address.clone();
-                let token = resp.clone().into();
-                let address = if let Token::Legacy(legacy) = &token {
-                    legacy.key_name.clone().unwrap_or(address)
-                } else {
-                    address
-                };
-                // Error not so important, except if happen more often
-                if user {
-                    _ = tokens.save_user_token(address, token);
-                } else {
-                    _ = tokens.save_device_token(address, token);
+                for resp in &collection.security_tokens {
+                    if let Err(e) = Self::refresh_token(resp, tokens, user) {
+                        result = Some(e);
+                    }
                 }
             }
             b => {
                 warn!("Exchange token supports only singular token right now {b:?}");
-                return Ok(());
             }
         }
-        Ok(())
+        result.map_or_else(|| Ok(()), |e| Err(e))
     }
 }
 
@@ -242,7 +270,7 @@ mod test {
         .await
         .unwrap();
 
-        resp.refresh_device_sts(&mgr).unwrap();
+        resp.refresh_device(&mgr).unwrap();
 
         let Some((ms_device_token, _)) = resp.get_rps() else {
             todo!("Unsupported token");

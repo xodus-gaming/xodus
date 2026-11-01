@@ -1,3 +1,4 @@
+use xodus::api::live::TraceTokenRefreshError;
 use xodus::licensing::splicense::{DeviceKey, SPLicense};
 use xodus::models::secrets::Token;
 use xodus::models::soap;
@@ -29,7 +30,7 @@ pub async fn get_license(
     .await
     .unwrap();
 
-    ms_device_token.refresh_device_sts(tokens).unwrap();
+    ms_device_token.refresh_device(tokens).unwrap();
 
     let user_token = xodus::api::live::exchange_user_token(
         client,
@@ -51,7 +52,7 @@ pub async fn get_license(
         return Err("Unsupported token".to_string());
     };
 
-    user_token.refresh_user_sts(tokens).unwrap();
+    user_token.refresh_user(tokens).trace();
 
     let Some((user_token, _)) = user_token.get_rps() else {
         return Err("Unsupported token".to_string());

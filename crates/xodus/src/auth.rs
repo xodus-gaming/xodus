@@ -10,6 +10,7 @@ use xal::{
     XalAuthenticator,
 };
 
+use crate::api::live::TraceTokenRefreshError;
 use crate::models::secrets::Token;
 use crate::models::soap;
 use crate::tokens::TokenManager;
@@ -101,7 +102,7 @@ pub async fn do_sisu(
     )
     .await?;
 
-    device_token_resp.refresh_device_sts(&manager)?;
+    device_token_resp.refresh_device(&manager)?;
 
     let Some((ms_device_token, _)) = device_token_resp.get_rps() else {
         return Err(Box::new(std::io::Error::new(
@@ -128,7 +129,7 @@ pub async fn do_sisu(
     )
     .await?;
 
-    user_token.refresh_user_sts(manager)?;
+    user_token.refresh_user(manager).trace();
 
     let Some((user_token, _)) = user_token.get_rps() else {
         return Err(Box::new(std::io::Error::new(

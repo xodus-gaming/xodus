@@ -1,4 +1,5 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use xodus::api::live::TraceTokenRefreshError;
 use xodus::models::secrets::Token;
 use xodus::models::soap;
 use xodus::models::xgameruntime::xuser::{MSATokenRequest, MSATokenResponse};
@@ -91,7 +92,7 @@ pub async fn parse_message(
             )
             .await?;
 
-            user_token.refresh_user_sts(context.tokens())?;
+            user_token.refresh_user(context.tokens()).trace();
             let Some((user_token, Some(expiry))) = user_token.get_rps() else {
                 todo!("token error response")
             };

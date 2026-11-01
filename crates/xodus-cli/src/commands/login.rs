@@ -22,7 +22,7 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
         .expect("failed to login")
         .flatten();
     match output {
-        Some(resp) => resp.refresh_user_sts(tokens),
+        Some(resp) => resp.refresh_user(tokens).expect("user tokens to be saved"),
         None => {
             eprintln!("Didn't log in");
             return ExitCode::FAILURE;
