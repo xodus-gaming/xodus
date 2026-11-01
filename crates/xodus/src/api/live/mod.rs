@@ -39,7 +39,7 @@ impl ExchangeTokenResponseOutcome {
         match &self {
             ExchangeTokenResponseOutcome::RequestSecurityTokenResponse(resp) => Some(resp.as_ref()),
             ExchangeTokenResponseOutcome::RequestSecurityTokenResponseCollection(collection) => {
-                collection.security_tokens.get(0)
+                collection.security_tokens.first()
             }
             b => {
                 warn!("Exchange token supports only singular token right now {b:?}");
@@ -101,7 +101,7 @@ impl ExchangeTokenResponseOutcome {
                 warn!("Exchange token supports only singular token right now {b:?}");
             }
         }
-        result.map_or_else(|| Ok(()), |e| Err(e))
+        result.map_or_else(|| Ok(()), Err)
     }
 }
 

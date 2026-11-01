@@ -1,4 +1,4 @@
-use crate::models::secrets::{LegacyToken, Token};
+use crate::models::secrets::LegacyToken;
 use crate::models::soap;
 use crate::models::xbox::XstsResponse;
 

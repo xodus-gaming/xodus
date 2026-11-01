@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::soap;
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DAProperty {
     #[serde(rename = "sDAToken")]
