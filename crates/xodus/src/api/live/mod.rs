@@ -259,7 +259,6 @@ mod test {
         let Token::Legacy(token) = token else {
             todo!("no a LegacyToken");
         };
-        println!("{}\n{}", token.token, token.binary_secret.as_ref().unwrap());
         let resp = exchange_device_token(
             &client,
             token,
