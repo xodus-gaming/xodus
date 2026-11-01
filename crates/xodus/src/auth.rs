@@ -102,7 +102,7 @@ pub async fn do_sisu(
     )
     .await?;
 
-    device_token_resp.refresh_device(&manager).trace();
+    device_token_resp.refresh_device(manager).trace();
 
     let Some((ms_device_token, _)) = device_token_resp.get_rps() else {
         return Err(Box::new(std::io::Error::new(
