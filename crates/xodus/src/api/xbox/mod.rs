@@ -1,6 +1,6 @@
-use crate::models::secrets::LegacyToken;
 use crate::models::soap;
 use crate::models::xbox::XstsResponse;
+use crate::{api::live::ExchangeTokenResponseOutcome, models::secrets::LegacyToken};
 
 pub mod auth;
 pub mod title;

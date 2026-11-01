@@ -1,6 +1,5 @@
 use base64::prelude::*;
 use chrono::{DateTime, FixedOffset};
-use tracing::warn;
 use zerocopy::transmute;
 
 use crate::licensing::splicense::ClepHmacState;
@@ -10,7 +9,7 @@ use crate::models::soap;
 use crate::tokens::TokenManager;
 use crate::tokens::store::TokenStoreError;
 
-mod rst;
+pub mod rst;
 mod utils;
 
 pub const XML_HEADER: &str = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
@@ -34,40 +33,42 @@ pub async fn login_device_credential(
     Ok(resp)
 }
 
-impl ExchangeTokenResponseOutcome {
-    pub fn get_rps(&self) -> Option<(String, Option<DateTime<FixedOffset>>)> {
-        match &self {
-            ExchangeTokenResponseOutcome::RequestSecurityTokenResponse(resp) => Some(resp.as_ref()),
-            ExchangeTokenResponseOutcome::RequestSecurityTokenResponseCollection(collection) => {
-                collection.security_tokens.first()
-            }
-            b => {
-                warn!("Exchange token supports only singular token right now {b:?}");
-                None
-            }
-        }
-        .map(|resp| {
-            let Token::Compact(compact) = resp.clone().into() else {
-                return None;
-            };
-            Some((
-                compact,
-                chrono::DateTime::parse_from_rfc3339(&resp.lifetime.expires).ok(),
-            ))
+pub trait ExchangeTokenResponseOutcome {
+    fn get_rps(&self) -> Option<(String, Option<DateTime<FixedOffset>>)>;
+    fn refresh_device(&self, tokens: &TokenManager) -> Result<(), TokenStoreError>;
+    fn refresh_user(&self, tokens: &TokenManager) -> Result<(), TokenStoreError>;
+}
+
+impl ExchangeTokenResponseOutcome for soap::RequestSecurityTokenResponseCollection {
+    fn get_rps(&self) -> Option<(String, Option<DateTime<FixedOffset>>)> {
+        let Some((Token::Compact(compact), expiry)) = self.security_tokens.first().map(|t| {
+            (
+                t.clone().into(),
+                chrono::DateTime::parse_from_rfc3339(&t.lifetime.expires).ok(),
+            )
+        }) else {
+            return None;
+        };
+        Some((compact, expiry))
+    }
+    fn refresh_device(&self, tokens: &TokenManager) -> Result<(), TokenStoreError> {
+        refresh_tokens(self, |address, token| {
+            tokens.save_device_token(address, token)
         })
-        .unwrap_or_default()
     }
-    pub fn refresh_device(&self, tokens: &TokenManager) -> Result<(), TokenStoreError> {
-        self.refresh(tokens, false)
+    fn refresh_user(&self, tokens: &TokenManager) -> Result<(), TokenStoreError> {
+        refresh_tokens(self, |address, token| {
+            tokens.save_user_token(address, token)
+        })
     }
-    pub fn refresh_user(&self, tokens: &TokenManager) -> Result<(), TokenStoreError> {
-        self.refresh(tokens, true)
-    }
-    fn refresh_token(
-        resp: &soap::RequestSecurityTokenResponse,
-        tokens: &TokenManager,
-        user: bool,
-    ) -> Result<(), TokenStoreError> {
+}
+
+fn refresh_tokens<F: Fn(String, Token) -> Result<(), TokenStoreError>>(
+    collection: &soap::RequestSecurityTokenResponseCollection,
+    store_token: F,
+) -> Result<(), TokenStoreError> {
+    let mut result = None;
+    for resp in &collection.security_tokens {
         let address = resp.applies_to.endpoint_reference.address.clone();
         let token = resp.clone().into();
         let address = if let Token::Legacy(legacy) = &token {
@@ -75,58 +76,33 @@ impl ExchangeTokenResponseOutcome {
         } else {
             address
         };
-        // Error not so important, except if happen more often
-        if user {
-            tokens.save_user_token(address, token)
-        } else {
-            tokens.save_device_token(address, token)
+        if let Err(e) = store_token(address, token) {
+            result = Some(e);
         }
     }
-    fn refresh(&self, tokens: &TokenManager, user: bool) -> Result<(), TokenStoreError> {
-        let mut result = None;
-        match &self {
-            ExchangeTokenResponseOutcome::RequestSecurityTokenResponse(resp) => {
-                if let Err(e) = Self::refresh_token(resp, tokens, user) {
-                    result = Some(e);
-                }
-            }
-            ExchangeTokenResponseOutcome::RequestSecurityTokenResponseCollection(collection) => {
-                for resp in &collection.security_tokens {
-                    if let Err(e) = Self::refresh_token(resp, tokens, user) {
-                        result = Some(e);
-                    }
-                }
-            }
-            b => {
-                warn!("Exchange token supports only singular token right now {b:?}");
-            }
-        }
-        result.map_or_else(|| Ok(()), Err)
-    }
+    result.map_or_else(|| Ok(()), Err)
 }
 
-fn to_outcome(envelope: soap::Envelope) -> Result<ExchangeTokenResponseOutcome, rst::RSTError> {
-    Ok(match envelope.body.body {
-        soap::BodyContent::Fault(_) => ExchangeTokenResponseOutcome::Fault(envelope.header.pp),
+fn to_outcome(
+    envelope: soap::Envelope,
+) -> Result<soap::RequestSecurityTokenResponseCollection, rst::RSTError> {
+    match envelope.body.body {
+        soap::BodyContent::Fault(_) => Err(rst::RSTError::TokenFault(envelope.header.pp)),
         soap::BodyContent::RequestSecurityTokenResponse(f) => {
-            ExchangeTokenResponseOutcome::RequestSecurityTokenResponse(f)
+            Ok(soap::RequestSecurityTokenResponseCollection {
+                security_tokens: vec![*f],
+            })
         }
-        soap::BodyContent::RequestSecurityTokenResponseCollection(f) => {
-            ExchangeTokenResponseOutcome::RequestSecurityTokenResponseCollection(f)
-        }
-        _ => {
-            return Err(rst::RSTError::Deserialization(quick_xml::DeError::Custom(
-                "Unexpected Answer".to_owned(),
-            )));
-        }
-    })
+        soap::BodyContent::RequestSecurityTokenResponseCollection(f) => Ok(f),
+        _ => Err(rst::RSTError::UnexpectedTokenResponse(envelope.body.body)),
+    }
 }
 
 pub async fn authenticate_device(
     client: &reqwest::Client,
     username: String,
     private_key: rsa::RsaPrivateKey,
-) -> Result<ExchangeTokenResponseOutcome, rst::RSTError> {
+) -> Result<soap::RequestSecurityTokenResponseCollection, rst::RSTError> {
     let request = rst::RSTRequestBuilder::new()
         .username(soap::UsernameToken::devicetoken(username))
         .signature(rst::RSTSignature::Rsa(Box::new(private_key)))
@@ -134,13 +110,6 @@ pub async fn authenticate_device(
         .build()?;
 
     to_outcome(request.request(client).await?)
-}
-
-#[derive(Debug, Clone)]
-pub enum ExchangeTokenResponseOutcome {
-    RequestSecurityTokenResponseCollection(soap::RequestSecurityTokenResponseCollection),
-    RequestSecurityTokenResponse(Box<soap::RequestSecurityTokenResponse>),
-    Fault(Option<soap::PP>),
 }
 
 pub trait TraceTokenRefreshError {
@@ -162,7 +131,7 @@ pub async fn exchange_device_token(
     hosting_app: String,
     scope: String,
     policy: Option<soap::PolicyReference>,
-) -> Result<ExchangeTokenResponseOutcome, rst::RSTError> {
+) -> Result<soap::RequestSecurityTokenResponseCollection, rst::RSTError> {
     let secret = BASE64_STANDARD.decode(device_token.binary_secret.as_ref().unwrap())?;
     let secret: [u8; 4096] = secret.try_into().unwrap();
     let secret: ClepHmacState = transmute!(secret);
@@ -195,7 +164,7 @@ pub async fn exchange_user_token(
     inline_ux: Option<String>,
     hosting_app: String,
     scope_policies: &[(String, Option<soap::PolicyReference>)],
-) -> Result<ExchangeTokenResponseOutcome, rst::RSTError> {
+) -> Result<soap::RequestSecurityTokenResponseCollection, rst::RSTError> {
     let secret = BASE64_STANDARD.decode(device_token.binary_secret.as_ref().unwrap())?;
     let secret: [u8; 4096] = secret.try_into().unwrap();
     let secret: ClepHmacState = transmute!(secret);
@@ -230,7 +199,7 @@ pub async fn exchange_user_token(
 
 #[cfg(test)]
 mod test {
-    use crate::api::live::exchange_device_token;
+    use crate::api::live::{ExchangeTokenResponseOutcome, exchange_device_token};
     use crate::models::secrets::Token;
     use crate::models::soap;
     use crate::tokens::TokenManager;

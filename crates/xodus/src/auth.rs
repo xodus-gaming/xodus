@@ -10,7 +10,7 @@ use xal::{
     XalAuthenticator,
 };
 
-use crate::api::live::TraceTokenRefreshError;
+use crate::api::live::{ExchangeTokenResponseOutcome, TraceTokenRefreshError};
 use crate::models::secrets::Token;
 use crate::models::soap;
 use crate::tokens::TokenManager;

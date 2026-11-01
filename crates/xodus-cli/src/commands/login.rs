@@ -1,6 +1,7 @@
 use std::process::ExitCode;
 
 use xodus::api::live::ExchangeTokenResponseOutcome;
+use xodus::api::live::rst::RSTError;
 use xodus::models::live::DAProperty;
 use xodus::models::{secrets, soap};
 use xodus::tokens::TokenManager;
@@ -58,7 +59,7 @@ impl LoginHandler {
     fn exchange_user_token(
         &self,
         prop: DAProperty,
-    ) -> Result<ExchangeTokenResponseOutcome, Box<dyn std::error::Error>> {
+    ) -> Result<soap::RequestSecurityTokenResponseCollection, RSTError> {
         let client = self.client.clone();
         let device_token = self.device.clone();
         let client_id = self.client_id.clone();
@@ -98,14 +99,13 @@ impl LoginHandler {
                     &scopes,
                 )
                 .await
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
             })
         })
     }
 }
 
 impl webview::SessionHandler for LoginHandler {
-    type Output = Option<ExchangeTokenResponseOutcome>;
+    type Output = Option<soap::RequestSecurityTokenResponseCollection>;
 
     fn bootstrap(
         &mut self,
@@ -124,10 +124,8 @@ impl webview::SessionHandler for LoginHandler {
         data: DAProperty,
         runtime: &mut webview::RuntimeCommands,
     ) -> Result<webview::HandlerControl<Self::Output>, Box<dyn std::error::Error>> {
-        let exchanged = self.exchange_user_token(data.clone())?;
-
-        match exchanged {
-            ExchangeTokenResponseOutcome::Fault(pp) => {
+        match self.exchange_user_token(data.clone()) {
+            Err(RSTError::TokenFault(pp)) => {
                 if let Some(pp) = pp
                     && let Some(auth_url) = pp.inline_auth_url
                 {
@@ -141,7 +139,7 @@ impl webview::SessionHandler for LoginHandler {
                 runtime.close_session(session_id);
                 Ok(webview::HandlerControl::Complete(None))
             }
-            _ => {
+            Ok(exchanged) => {
                 runtime.close_session(session_id);
                 self.tokens
                     .save_user(&xodus::models::secrets::User {
@@ -151,6 +149,7 @@ impl webview::SessionHandler for LoginHandler {
                     .unwrap();
                 Ok(webview::HandlerControl::Complete(Some(exchanged)))
             }
+            Err(e) => Err(Box::new(e)),
         }
     }
 

@@ -1,4 +1,4 @@
-use xodus::api::live::TraceTokenRefreshError;
+use xodus::api::live::{ExchangeTokenResponseOutcome, TraceTokenRefreshError};
 use xodus::licensing::splicense::{DeviceKey, SPLicense};
 use xodus::models::secrets::Token;
 use xodus::models::soap;

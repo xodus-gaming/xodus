@@ -1,5 +1,5 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use xodus::api::live::TraceTokenRefreshError;
+use xodus::api::live::{ExchangeTokenResponseOutcome, TraceTokenRefreshError};
 use xodus::models::secrets::Token;
 use xodus::models::soap;
 use xodus::models::xgameruntime::xuser::{MSATokenRequest, MSATokenResponse};
