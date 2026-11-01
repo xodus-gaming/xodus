@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use xodus::api::live::TokenResponse;
+use xodus::api::live::ExchangeTokenResponseOutcome;
 use xodus::models::live::DAProperty;
 use xodus::models::{secrets, soap};
 use xodus::tokens::TokenManager;
@@ -58,7 +58,7 @@ impl LoginHandler {
     fn exchange_user_token(
         &self,
         prop: DAProperty,
-    ) -> Result<TokenResponse, Box<dyn std::error::Error>> {
+    ) -> Result<ExchangeTokenResponseOutcome, Box<dyn std::error::Error>> {
         let client = self.client.clone();
         let device_token = self.device.clone();
         let client_id = self.client_id.clone();
@@ -105,7 +105,7 @@ impl LoginHandler {
 }
 
 impl webview::SessionHandler for LoginHandler {
-    type Output = Option<TokenResponse>;
+    type Output = Option<ExchangeTokenResponseOutcome>;
 
     fn bootstrap(
         &mut self,
@@ -127,7 +127,7 @@ impl webview::SessionHandler for LoginHandler {
         let exchanged = self.exchange_user_token(data.clone())?;
 
         match exchanged {
-            TokenResponse::Fault(pp) => {
+            ExchangeTokenResponseOutcome::Fault(pp) => {
                 if let Some(pp) = pp
                     && let Some(auth_url) = pp.inline_auth_url
                 {

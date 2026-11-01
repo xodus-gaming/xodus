@@ -49,7 +49,7 @@ pub async fn authenticate_device(
 }
 
 #[derive(Debug, Clone)]
-pub enum TokenResponse {
+pub enum ExchangeTokenResponseOutcome {
     RequestSecurityTokenResponseCollection(soap::RequestSecurityTokenResponseCollection),
     RequestSecurityTokenResponse(Box<soap::RequestSecurityTokenResponse>),
     Fault(Option<soap::PP>),
@@ -68,11 +68,11 @@ impl TraceTokenRefreshError for Result<(), TokenStoreError> {
     }
 }
 
-impl TokenResponse {
+impl ExchangeTokenResponseOutcome {
     pub fn get_rps(&self) -> Option<(String, Option<DateTime<FixedOffset>>)> {
         match &self {
-            TokenResponse::RequestSecurityTokenResponse(resp) => Some(resp.as_ref()),
-            TokenResponse::RequestSecurityTokenResponseCollection(collection) => {
+            ExchangeTokenResponseOutcome::RequestSecurityTokenResponse(resp) => Some(resp.as_ref()),
+            ExchangeTokenResponseOutcome::RequestSecurityTokenResponseCollection(collection) => {
                 collection.security_tokens.get(0)
             }
             b => {
@@ -119,12 +119,12 @@ impl TokenResponse {
     fn refresh(&self, tokens: &TokenManager, user: bool) -> Result<(), TokenStoreError> {
         let mut result = None;
         match &self {
-            TokenResponse::RequestSecurityTokenResponse(resp) => {
+            ExchangeTokenResponseOutcome::RequestSecurityTokenResponse(resp) => {
                 if let Err(e) = Self::refresh_token(resp, tokens, user) {
                     result = Some(e);
                 }
             }
-            TokenResponse::RequestSecurityTokenResponseCollection(collection) => {
+            ExchangeTokenResponseOutcome::RequestSecurityTokenResponseCollection(collection) => {
                 for resp in &collection.security_tokens {
                     if let Err(e) = Self::refresh_token(resp, tokens, user) {
                         result = Some(e);
@@ -145,7 +145,7 @@ pub async fn exchange_device_token(
     hosting_app: String,
     scope: String,
     policy: Option<soap::PolicyReference>,
-) -> Result<TokenResponse, rst::RSTError> {
+) -> Result<ExchangeTokenResponseOutcome, rst::RSTError> {
     let secret = BASE64_STANDARD.decode(device_token.binary_secret.as_ref().unwrap())?;
     let secret: [u8; 4096] = secret.try_into().unwrap();
     let secret: ClepHmacState = transmute!(secret);
@@ -166,12 +166,12 @@ pub async fn exchange_device_token(
     let envelope = request.request(client).await?;
 
     Ok(match envelope.body.body {
-        soap::BodyContent::Fault(_) => TokenResponse::Fault(None),
+        soap::BodyContent::Fault(_) => ExchangeTokenResponseOutcome::Fault(None),
         soap::BodyContent::RequestSecurityTokenResponse(f) => {
-            TokenResponse::RequestSecurityTokenResponse(f)
+            ExchangeTokenResponseOutcome::RequestSecurityTokenResponse(f)
         }
         soap::BodyContent::RequestSecurityTokenResponseCollection(f) => {
-            TokenResponse::RequestSecurityTokenResponseCollection(f)
+            ExchangeTokenResponseOutcome::RequestSecurityTokenResponseCollection(f)
         }
         _ => {
             return Err(rst::RSTError::Deserialization(quick_xml::DeError::Custom(
@@ -193,7 +193,7 @@ pub async fn exchange_user_token(
     inline_ux: Option<String>,
     hosting_app: String,
     scope_policies: &[(String, Option<soap::PolicyReference>)],
-) -> Result<TokenResponse, rst::RSTError> {
+) -> Result<ExchangeTokenResponseOutcome, rst::RSTError> {
     let secret = BASE64_STANDARD.decode(device_token.binary_secret.as_ref().unwrap())?;
     let secret: [u8; 4096] = secret.try_into().unwrap();
     let secret: ClepHmacState = transmute!(secret);
@@ -225,12 +225,12 @@ pub async fn exchange_user_token(
     let envelope = request.request(client).await?;
 
     Ok(match envelope.body.body {
-        soap::BodyContent::Fault(_) => TokenResponse::Fault(envelope.header.pp),
+        soap::BodyContent::Fault(_) => ExchangeTokenResponseOutcome::Fault(envelope.header.pp),
         soap::BodyContent::RequestSecurityTokenResponse(f) => {
-            TokenResponse::RequestSecurityTokenResponse(f)
+            ExchangeTokenResponseOutcome::RequestSecurityTokenResponse(f)
         }
         soap::BodyContent::RequestSecurityTokenResponseCollection(f) => {
-            TokenResponse::RequestSecurityTokenResponseCollection(f)
+            ExchangeTokenResponseOutcome::RequestSecurityTokenResponseCollection(f)
         }
         _ => {
             return Err(rst::RSTError::Deserialization(quick_xml::DeError::Custom(
