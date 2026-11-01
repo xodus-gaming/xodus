@@ -34,40 +34,6 @@ pub async fn login_device_credential(
     Ok(resp)
 }
 
-pub async fn authenticate_device(
-    client: &reqwest::Client,
-    username: String,
-    private_key: rsa::RsaPrivateKey,
-) -> Result<soap::Envelope, rst::RSTError> {
-    let request = rst::RSTRequestBuilder::new()
-        .username(soap::UsernameToken::devicetoken(username))
-        .signature(rst::RSTSignature::Rsa(Box::new(private_key)))
-        .scope_policy("http://Passport.NET/tb", None)
-        .build()?;
-
-    request.request(client).await
-}
-
-#[derive(Debug, Clone)]
-pub enum ExchangeTokenResponseOutcome {
-    RequestSecurityTokenResponseCollection(soap::RequestSecurityTokenResponseCollection),
-    RequestSecurityTokenResponse(Box<soap::RequestSecurityTokenResponse>),
-    Fault(Option<soap::PP>),
-}
-
-pub trait TraceTokenRefreshError {
-    fn trace(self);
-}
-
-impl TraceTokenRefreshError for Result<(), TokenStoreError> {
-    fn trace(self) {
-        match self {
-            Ok(_) => {}
-            Err(err) => tracing::warn!("Failed to persist refreshed STS token: {err}"),
-        }
-    }
-}
-
 impl ExchangeTokenResponseOutcome {
     pub fn get_rps(&self) -> Option<(String, Option<DateTime<FixedOffset>>)> {
         match &self {
@@ -139,6 +105,57 @@ impl ExchangeTokenResponseOutcome {
     }
 }
 
+fn to_outcome(envelope: soap::Envelope) -> Result<ExchangeTokenResponseOutcome, rst::RSTError> {
+    Ok(match envelope.body.body {
+        soap::BodyContent::Fault(_) => ExchangeTokenResponseOutcome::Fault(envelope.header.pp),
+        soap::BodyContent::RequestSecurityTokenResponse(f) => {
+            ExchangeTokenResponseOutcome::RequestSecurityTokenResponse(f)
+        }
+        soap::BodyContent::RequestSecurityTokenResponseCollection(f) => {
+            ExchangeTokenResponseOutcome::RequestSecurityTokenResponseCollection(f)
+        }
+        _ => {
+            return Err(rst::RSTError::Deserialization(quick_xml::DeError::Custom(
+                "Unexpected Answer".to_owned(),
+            )));
+        }
+    })
+}
+
+pub async fn authenticate_device(
+    client: &reqwest::Client,
+    username: String,
+    private_key: rsa::RsaPrivateKey,
+) -> Result<ExchangeTokenResponseOutcome, rst::RSTError> {
+    let request = rst::RSTRequestBuilder::new()
+        .username(soap::UsernameToken::devicetoken(username))
+        .signature(rst::RSTSignature::Rsa(Box::new(private_key)))
+        .scope_policy("http://Passport.NET/tb", None)
+        .build()?;
+
+    to_outcome(request.request(client).await?)
+}
+
+#[derive(Debug, Clone)]
+pub enum ExchangeTokenResponseOutcome {
+    RequestSecurityTokenResponseCollection(soap::RequestSecurityTokenResponseCollection),
+    RequestSecurityTokenResponse(Box<soap::RequestSecurityTokenResponse>),
+    Fault(Option<soap::PP>),
+}
+
+pub trait TraceTokenRefreshError {
+    fn trace(self);
+}
+
+impl TraceTokenRefreshError for Result<(), TokenStoreError> {
+    fn trace(self) {
+        match self {
+            Ok(_) => {}
+            Err(err) => tracing::warn!("Failed to persist refreshed STS token: {err}"),
+        }
+    }
+}
+
 pub async fn exchange_device_token(
     client: &reqwest::Client,
     device_token: LegacyToken,
@@ -163,22 +180,7 @@ pub async fn exchange_device_token(
         .scope_policy("http://Passport.NET/tb", None)
         .build()?;
 
-    let envelope = request.request(client).await?;
-
-    Ok(match envelope.body.body {
-        soap::BodyContent::Fault(_) => ExchangeTokenResponseOutcome::Fault(None),
-        soap::BodyContent::RequestSecurityTokenResponse(f) => {
-            ExchangeTokenResponseOutcome::RequestSecurityTokenResponse(f)
-        }
-        soap::BodyContent::RequestSecurityTokenResponseCollection(f) => {
-            ExchangeTokenResponseOutcome::RequestSecurityTokenResponseCollection(f)
-        }
-        _ => {
-            return Err(rst::RSTError::Deserialization(quick_xml::DeError::Custom(
-                "Unexpected Answer".to_owned(),
-            )));
-        }
-    })
+    to_outcome(request.request(client).await?)
 }
 
 // Each parameter maps directly to a distinct SOAP request field; grouping them
@@ -222,22 +224,8 @@ pub async fn exchange_user_token(
     }
 
     let request = builder.build()?;
-    let envelope = request.request(client).await?;
 
-    Ok(match envelope.body.body {
-        soap::BodyContent::Fault(_) => ExchangeTokenResponseOutcome::Fault(envelope.header.pp),
-        soap::BodyContent::RequestSecurityTokenResponse(f) => {
-            ExchangeTokenResponseOutcome::RequestSecurityTokenResponse(f)
-        }
-        soap::BodyContent::RequestSecurityTokenResponseCollection(f) => {
-            ExchangeTokenResponseOutcome::RequestSecurityTokenResponseCollection(f)
-        }
-        _ => {
-            return Err(rst::RSTError::Deserialization(quick_xml::DeError::Custom(
-                "Unexpected Answer".to_owned(),
-            )));
-        }
-    })
+    to_outcome(request.request(client).await?)
 }
 
 #[cfg(test)]
