@@ -63,11 +63,12 @@ pub async fn parse_message(
             )
             .await;
 
-            let ms_device_rps_token = if let Some((Token::Compact(ms_device_token), Ok(lifetime))) =
-                device_token_resp.ok().map(|t| {
-                    let expiry = chrono::DateTime::parse_from_rfc3339(&t.lifetime.expires);
-                    (t.into(), expiry)
-                }) {
+            let ms_device_rps_token = if let Some((ms_device_token, Some(lifetime))) =
+                device_token_resp
+                    .ok()
+                    .map(|t| t.get_device_rps())
+                    .unwrap_or_default()
+            {
                 Some((ms_device_token, lifetime.timestamp()))
             } else {
                 None
