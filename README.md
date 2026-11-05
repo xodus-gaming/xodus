@@ -9,6 +9,7 @@
 
 > [!CAUTION]
 > This is an unofficial project - use at your own risk. It is not affiliated with, endorsed by, or sponsored by Microsoft or XBOX; all trademarks, product names, and company names or logos mentioned herein are the property of their respective owners.
+> This is the *only official* repository of Xodus. We are not affiliated with any other projects using our name or repository.
 
 ## Current state of the project
 
@@ -83,7 +84,7 @@ Running xodus-service in debug
 cargo run --bin xodus-service
 ```
 
-Debug and profile `xodus-cli` or `xodus-service` with [tokio-console]([tokio-console](https://github.com/tokio-rs/console))
+Debug and profile `xodus-cli` or `xodus-service` with [tokio-console](https://github.com/tokio-rs/console)
 
 ```
 RUSTFLAGS="--cfg tokio_unstable" cargo run --features tokio_console 
