@@ -86,7 +86,7 @@ Result :
 
 ## Authorize a cloud gaming session
 
-> [!WARN]
+> [!WARNING]
 > Make sure that the response is 202 Accepted.
 
 > [!NOTE]
