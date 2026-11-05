@@ -1,8 +1,8 @@
 # XBOX Cloud Gaming
 
 > [!NOTE]
-> The specific endpoint does not use XBL tokens, but otherwise, needs a Bearer token, that you need to get via the original authentification board.
-> It needs to have these scopes in order to be authorized by the Cloud Gaming platform : service::http://passport.net/purpose::PURPOSE_XBOX_CLOUD_CONSOLE_TRANSFER_TOKEN openid profile offline_access
+> The specific endpoint does not use XBL tokens, but otherwise, needs a Bearer token, that you need to get via the original authentification board. 
+> It needs to have these scopes in order to be authorized by the Cloud Gaming platform : service::http://passport.net/purpose::PURPOSE_XBOX_CLOUD_CONSOLE_TRANSFER_TOKEN openid profile offline_access 
 > Make sure it replies properly.
 
 ## Search for a title inside the Cloud Gaming platform 
@@ -120,7 +120,7 @@ sec-ch-ua-platform: "Windows"
 x-ms-device-info: {"appInfo":{"env":{"clientAppId":"play.xbox.com","clientAppType":"browser","clientSdkVersion":"placeholder","httpEnvironment":"prod","sdkInstallId":""}},"dev":{"displayInfo":{"dimensions":{"heightInPixels":1184,"widthInPixels":1904},"pixelDensity":{"dpiX":1,"dpiY":1}},"browser":{"browserName":"chrome","browserVersion":"156.0.0.0"},"hw":{"make":"unknown","model":"unknown","platformType":"desktop","sdkType":"web"},"os":{"name":"windows","ver":"19.0.0","platform":"desktop"}}}
 ```
 Body :
-```
+```JSON
 {
   "titleId":"ASTRONEER",
   "systemUpdateGroup":"",
@@ -140,7 +140,7 @@ Body :
 }
 ```
 Answer (if 202 Accepted) :
-```
+```JSON
 {
     "sessionPath": "v5/sessions/cloud/<uuid>",
     "queueConfig": "<sha1 looking string>"
