@@ -9,7 +9,9 @@
 
 ## Search for a title inside the Cloud Gaming platform 
 
+```
 POST https://weu.core.gssv-play-prod.xboxlive.com/v2/titles
+```
 
 Headers : 
 ```
