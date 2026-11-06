@@ -1,7 +1,9 @@
 ## Encryption
 
-MSIXVC packages can be downloaded from Microsoft's CDN without the need for any
-authentication because most of the package is encrypted.
+MSIXVC packages can be downloaded from Microsoft's CDN without the need to
+prove that the user owns a license for the package because most of the package
+is encrypted. A valid user or device token is enough to download any MSIXVC
+package from the CDN. The Windows client authenticates with a device token.
 
 The keys used to encrypt and decrypt the packages are called the Content
 Integrity Keys (CIKs). CIKs are 32-byte keys identified by a unique UUID.
