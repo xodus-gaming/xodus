@@ -152,7 +152,7 @@ Answer (if 202 Accepted) :
 
 ## Get cloud gaming wait time for the concerned title
 
-GET https://weu.core.gssv-play-prod.xboxlive.com/v1/waittime/<game>
+GET https://weu.core.gssv-play-prod.xboxlive.com/v1/waittime/\<game\>
 
 Headers :
 ```
@@ -187,7 +187,7 @@ Result (example) :
 
 ## Connect to cloud gaming session
 
-POST https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/<uuid>/connect
+POST https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/\<uuid\>/connect
 
 > [!WARNING]
 > Make sure that the response is 202 Accepted.
@@ -224,7 +224,7 @@ No answer for this endpoint is expected.
 
 ## Get current state of cloud session
 
-GET https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/<uuid>/state
+GET https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/\<uuid\>/state
 
 Headers :
 ```
@@ -255,7 +255,7 @@ Answer (OK example) :
 
 ## Get current cloud gaming configuration (Controllers, XBOX settings)
 
-GET https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/<uuid>/configuration
+GET https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/\<uuid\>/configuration
 
 Headers :
 ```
@@ -309,7 +309,7 @@ Answer (OK example):
 
 ## Terminate a cloud session
 
-DELETE https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/<uuid>
+DELETE https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/\<uuid\>
 
 Headers :
 ```
@@ -336,6 +336,6 @@ sec-ch-ua-platform: "Windows"
 
 ## Other linkups not in this writeup
 
-https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/<uuid>/sdp | Get the necessary info for WebRTC connection.
-https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/<uuid>/ice | ?
-https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/<uuid>/keepalive | Keeps the connection alive.
+https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/\<uuid\>/sdp | Get the necessary info for WebRTC connection.
+https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/\<uuid\>/ice | ?
+https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/\<uuid\>/keepalive | Keeps the connection alive.
