@@ -1022,7 +1022,7 @@ impl XvdFile {
         Progress: FnMut(u64, u64),
     {
         i.seek(std::io::SeekFrom::Start(sfile.offset)).await?;
-        self.extract_file_ex(i, out, sfile, full_key, progress, false)
+        self.extract_file_ex(i, out, sfile, full_key, progress, true)
             .await
     }
 
