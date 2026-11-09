@@ -1,3 +1,5 @@
+use crate::models::soap;
+
 #[derive(thiserror::Error, Debug)]
 pub enum RSTError {
     #[error("Error making a request {0:?}")]
@@ -25,6 +27,10 @@ pub enum RSTError {
     Utf8(#[from] std::str::Utf8Error),
     #[error("The signature verification failed - {0}")]
     InvalidResponseSignature(String),
+    #[error("Unexpected Response - {0:?}")]
+    UnexpectedTokenResponse(soap::BodyContent),
+    #[error("Unexpected Response - {0:?}")]
+    TokenFault(Option<soap::PP>),
 }
 
 #[derive(thiserror::Error, Debug)]

@@ -1,5 +1,5 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use xodus::models::live::ExchangeUserTokenOutcome;
+use xodus::api::live::{ExchangeTokenResponseOutcome, TraceTokenRefreshError};
 use xodus::models::secrets::Token;
 use xodus::models::soap;
 use xodus::models::xgameruntime::xuser::{MSATokenRequest, MSATokenResponse};
@@ -63,11 +63,15 @@ pub async fn parse_message(
             )
             .await;
 
-            let ms_device_rps_token = if let Some((Token::Compact(ms_device_token), Ok(lifetime))) =
-                device_token_resp.ok().map(|t| {
-                    let expiry = chrono::DateTime::parse_from_rfc3339(&t.lifetime.expires);
-                    (t.into(), expiry)
-                }) {
+            let ms_device_rps_token = if let Some((ms_device_token, Some(lifetime))) =
+                device_token_resp
+                    .ok()
+                    .map(|t| {
+                        t.refresh_device(context.tokens()).trace();
+                        t.get_rps()
+                    })
+                    .unwrap_or_default()
+            {
                 Some((ms_device_token, lifetime.timestamp()))
             } else {
                 None
@@ -91,41 +95,20 @@ pub async fn parse_message(
             )
             .await?;
 
-            match user_token {
-                ExchangeUserTokenOutcome::Issued(
-                    soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
-                ) => {
-                    if let Some(sts) = collection.security_tokens.pop() {
-                        let address = sts.applies_to.endpoint_reference.address.clone();
-                        let sts: Token = sts.into();
-                        let address = if let Token::Legacy(legacy) = &sts {
-                            legacy.key_name.clone().unwrap_or(address)
-                        } else {
-                            address
-                        };
-                        if let Err(err) = context.tokens().save_user_token(address, sts) {
-                            tracing::warn!("Failed to persist refreshed STS token: {err}");
-                        }
-                    }
-                    let token = collection.security_tokens.remove(0);
-                    let expiry = chrono::DateTime::parse_from_rfc3339(&token.lifetime.expires)?;
-                    let token: Token = token.into();
-                    let Token::Compact(user_token) = token else {
-                        return Ok(vec![]);
-                    };
-                    let payload = MSATokenResponse {
-                        token: user_token,
-                        expiry: expiry.timestamp(),
-                        device_expiry: ms_device_rps_token.as_ref().map(|(_, r)| *r).unwrap_or(0),
-                        device_rps: ms_device_rps_token
-                            .map(|(t, _)| t)
-                            .unwrap_or_else(String::new),
-                    };
-                    let payload = quick_xml::se::to_string(&payload)?;
-                    Ok(payload.as_bytes().to_vec())
-                }
-                _ => todo!("Error handling sill sucks"),
-            }
+            user_token.refresh_user(context.tokens()).trace();
+            let Some((user_token, Some(expiry))) = user_token.get_rps() else {
+                todo!("token error response")
+            };
+            let payload = MSATokenResponse {
+                token: user_token,
+                expiry: expiry.timestamp(),
+                device_expiry: ms_device_rps_token.as_ref().map(|(_, r)| *r).unwrap_or(0),
+                device_rps: ms_device_rps_token
+                    .map(|(t, _)| t)
+                    .unwrap_or_else(String::new),
+            };
+            let payload = quick_xml::se::to_string(&payload)?;
+            Ok(payload.as_bytes().to_vec())
         }
         _ => Err("Unimplemented".into()),
     }

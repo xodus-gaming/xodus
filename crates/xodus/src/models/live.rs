@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::soap;
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DAProperty {
     #[serde(rename = "sDAToken")]
@@ -44,10 +42,4 @@ impl HostBridgeMessage {
             None
         }
     }
-}
-
-#[derive(Debug)]
-pub enum ExchangeUserTokenOutcome {
-    Issued(soap::BodyContent),
-    Fault(Option<soap::PP>),
 }
