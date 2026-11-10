@@ -22,6 +22,15 @@ struct Job {
     content: SegmentFile,
 }
 
+struct StreamJob {
+    destination: String,
+    try_skip_ntfs: bool,
+    parallel: Option<usize>,
+    market: Option<String>,
+    url: String,
+    length: u64,
+}
+
 enum ProgressEvent {
     Started { id: usize, name: String, total: u64 },
     Advanced { id: usize, delta: u64 },
@@ -59,13 +68,15 @@ pub async fn run(
         run_cli_reader(
             client,
             tokens,
-            destination,
-            try_skip_ntfs,
-            parallel,
-            market,
+            StreamJob {
+                destination,
+                try_skip_ntfs,
+                parallel,
+                market,
+                url: source.clone(),
+                length: l,
+            },
             f,
-            l,
-            &source,
             &tx,
             rx,
         )
@@ -135,13 +146,15 @@ pub async fn run(
         run_cli_reader(
             client,
             tokens,
-            destination,
-            try_skip_ntfs,
-            parallel,
-            market,
+            StreamJob {
+                destination,
+                try_skip_ntfs,
+                parallel,
+                market,
+                url: url.clone(),
+                length: l,
+            },
             http_file,
-            l,
-            url,
             &tx,
             rx,
         )
@@ -154,19 +167,15 @@ pub async fn run(
 async fn run_cli_reader<Reader>(
     client: &reqwest::Client,
     tokens: &TokenManager,
-    destination: String,
-    try_skip_ntfs: bool,
-    parallel: Option<usize>,
-    market: Option<String>,
+    job: StreamJob,
     reader: Reader,
-    l: u64,
-    url: &str,
     tx: &Sender<ProgressEvent>,
     mut rx: Receiver<ProgressEvent>,
 ) -> ()
 where
     Reader: AsyncRead + Unpin,
 {
+    let l = job.length;
     tokio::spawn(async move {
         let multi_progress = MultiProgress::new();
         let total_progess = multi_progress.add(ProgressBar::new(l).with_style(
@@ -210,36 +219,28 @@ where
 
         total_progess.abandon();
     });
-    run_reader(
-        client,
-        tokens,
-        destination,
-        try_skip_ntfs,
-        parallel,
-        market,
-        reader,
-        l,
-        url,
-        tx,
-    )
-    .await
+    run_reader(client, tokens, job, reader, tx).await
 }
 
 async fn run_reader<Reader>(
     client: &reqwest::Client,
     tokens: &TokenManager,
-    destination: String,
-    try_skip_ntfs: bool,
-    parallel: Option<usize>,
-    market: Option<String>,
+    job: StreamJob,
     reader: Reader,
-    l: u64,
-    url: &str,
     tx: &Sender<ProgressEvent>,
 ) -> ()
 where
     Reader: AsyncRead + Unpin,
 {
+    let StreamJob {
+        destination,
+        try_skip_ntfs,
+        parallel,
+        market,
+        url,
+        length: l,
+    } = job;
+
     let out: &Path = Path::new(&destination);
 
     std::fs::create_dir_all(out).expect("ok");
@@ -399,58 +400,69 @@ where
     .for_each_concurrent(parallel.unwrap_or(4), |(id, job)| {
         let tx = tx.clone();
         let client = client.clone();
-        async move {
-            let target_file = out.join(job.name.replace("\\", "/"));
-            if let Some(folder) = target_file.parent() {
-                std::fs::create_dir_all(folder).expect("ok");
-            }
-            let mut fout = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(target_file)
-                .await
-                .expect("ok");
-            let mut lp = 0;
+        {
+            let value = url.clone();
 
-            let progress = |pos, _| {
-                if tx
-                    .try_send(ProgressEvent::Advanced {
-                        id,
-                        delta: pos - lp,
-                    })
-                    .is_ok()
-                {
-                    lp = pos;
+            async move {
+                let target_file = out.join(job.name.replace("\\", "/"));
+                if let Some(folder) = target_file.parent() {
+                    std::fs::create_dir_all(folder).expect("ok");
                 }
-            };
-            let path = job.name.to_owned();
-            let shown = if path.len() > 30 {
-                format!("...{}", &path[path.len() - 27..])
-            } else {
-                path.clone()
-            };
-            tx.send(ProgressEvent::Started {
-                id,
-                name: shown,
-                total: job.content.length,
-            })
-            .await
-            .ok();
+                let mut fout = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(target_file)
+                    .await
+                    .expect("ok");
+                let mut lp = 0;
 
-            if let Some(fpath) = url.strip_prefix("file://") {
-                let mut i = File::open(&fpath).await.unwrap();
-                remote_xvd_ref
-                    .extract_file(&mut i, &mut fout, &job.content, *full_key, progress)
-                    .await
-                    .expect("msg");
-                tx.send(ProgressEvent::Finished { id }).await.ok();
-            } else {
-                remote_xvd_ref
-                    .download_file_http(&client, url, &mut fout, &job.content, *full_key, progress)
-                    .await
-                    .expect("msg");
-                tx.send(ProgressEvent::Finished { id }).await.ok();
+                let progress = |pos, _| {
+                    if tx
+                        .try_send(ProgressEvent::Advanced {
+                            id,
+                            delta: pos - lp,
+                        })
+                        .is_ok()
+                    {
+                        lp = pos;
+                    }
+                };
+                let path = job.name.to_owned();
+                let shown = if path.len() > 30 {
+                    format!("...{}", &path[path.len() - 27..])
+                } else {
+                    path.clone()
+                };
+                tx.send(ProgressEvent::Started {
+                    id,
+                    name: shown,
+                    total: job.content.length,
+                })
+                .await
+                .ok();
+
+                if let Some(fpath) = value.strip_prefix("file://") {
+                    let mut i = File::open(&fpath).await.unwrap();
+                    remote_xvd_ref
+                        .extract_file(&mut i, &mut fout, &job.content, *full_key, progress)
+                        .await
+                        .expect("msg");
+                    tx.send(ProgressEvent::Finished { id }).await.ok();
+                } else {
+                    remote_xvd_ref
+                        .download_file_http(
+                            &client,
+                            &value,
+                            &mut fout,
+                            &job.content,
+                            *full_key,
+                            progress,
+                        )
+                        .await
+                        .expect("msg");
+                    tx.send(ProgressEvent::Finished { id }).await.ok();
+                }
             }
         }
     })
