@@ -28,7 +28,7 @@ fs2 = "0.4.3"
 tempfile = "3.27.0"
 rustix = "1.1.4"
 ctrlc = "3.5.2"
-nix = "0.31.3"
+nix = { version = "0.31.3", features = ["process"] }
 
 [features]
 tokio_console = ["dep:console-subscriber"]

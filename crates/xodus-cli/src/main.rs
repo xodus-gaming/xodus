@@ -79,6 +79,11 @@ enum SubCommand {
         exe: Option<String>,
         #[arg(short, long)]
         market: Option<String>,
+        #[arg(
+            long,
+            help = "Materialize licensed executables for child/self-reading launches (Linux only)"
+        )]
+        materialize: bool,
     },
     #[command(about = "Generate or decrypt base64-encoded CLEP challenge data")]
     Clep {
@@ -232,7 +237,8 @@ async fn main() -> ExitCode {
             wine,
             exe,
             market,
-        } => commands::run::run(&client, &tokens, source, wine, exe, market).await,
+            materialize,
+        } => commands::run::run(&client, &tokens, source, wine, exe, market, materialize).await,
         SubCommand::Clep { action } => match action {
             ClepAction::Generate {
                 smbios,
