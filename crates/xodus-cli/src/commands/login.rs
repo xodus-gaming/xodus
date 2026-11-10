@@ -10,6 +10,12 @@ const CLIENT_ID: &str = "000000004424da1f";
 const LOGIN_MARKET: &str = "en-US";
 const USER_AUTH_SCOPE: &str = "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0";
 
+#[cfg(any(feature = "chromeium", feature = "firefox"))]
+pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
+    crate::commands::login_external::run(client, tokens).await
+}
+
+#[cfg(not(any(feature = "chromeium", feature = "firefox")))]
 pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
     let token = tokens.get_device_sts_token().unwrap();
     let secrets::Token::Legacy(token) = token else {
@@ -33,7 +39,13 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
     };
 
     for token in issued_tokens {
-        let address = token.applies_to.endpoint_reference.address.clone();
+        let address = token
+            .applies_to
+            .as_ref()
+            .unwrap()
+            .endpoint_reference
+            .address
+            .clone();
         let token = token.into();
         let address = if let secrets::Token::Legacy(legacy) = &token {
             legacy.key_name.clone().unwrap_or(address)

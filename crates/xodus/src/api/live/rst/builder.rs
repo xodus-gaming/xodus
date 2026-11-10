@@ -81,7 +81,7 @@ impl<'a> RSTRequestBuilder<'a> {
     }
 
     pub fn username(mut self, username_token: soap::UsernameToken) -> Self {
-        self.header.security.username_token = Some(username_token);
+        self.header.security.as_mut().unwrap().username_token = Some(username_token);
         self
     }
 
@@ -96,24 +96,25 @@ impl<'a> RSTRequestBuilder<'a> {
         match (self.device_token.take(), self.user_token.take()) {
             (Some(dev_token), Some(Token::Legacy(user_token))) => {
                 let encrypted_data = quick_xml::de::from_str(&user_token.token)?;
-                self.header.security.binary_security_token = vec![soap::BinarySecurityTokenReq {
-                    id: "DeviceDAToken".to_string(),
-                    value_type: "urn:liveid:device".to_owned(),
-                    value: dev_token.token,
-                }];
+                self.header.security.as_mut().unwrap().binary_security_token =
+                    vec![soap::BinarySecurityTokenReq {
+                        id: "DeviceDAToken".to_string(),
+                        value_type: "urn:liveid:device".to_owned(),
+                        value: dev_token.token,
+                    }];
 
-                self.header.security.encrypted_data = Some(encrypted_data);
+                self.header.security.as_mut().unwrap().encrypted_data = Some(encrypted_data);
             }
             (Some(dev_token), None) => {
                 let encrypted_data = quick_xml::de::from_str(&dev_token.token)?;
-                self.header.security.encrypted_data = Some(encrypted_data);
+                self.header.security.as_mut().unwrap().encrypted_data = Some(encrypted_data);
             }
             (None, None) => (),
             _ => return Err(RSTBuilderError::UnsupportedTokenCombination),
         }
 
         let signature_template = self.build_request_signature_template();
-        self.header.security.signature = signature_template;
+        self.header.security.as_mut().unwrap().signature = signature_template;
 
         let body = soap::Body {
             body: if security_tokens.len() > 1 {
@@ -189,13 +190,15 @@ impl<'a> RSTRequestBuilder<'a> {
         let reference_uri = self
             .header
             .security
+            .as_ref()
+            .unwrap()
             .binary_security_token
             .first()
             .map(|token| format!("#{}", token.id))
             .unwrap_or_default();
 
         if let Some(derived_key_token) = signature.derived_key_token(&self.nonce, &reference_uri) {
-            self.header.security.derived_key_tokens = vec![derived_key_token];
+            self.header.security.as_mut().unwrap().derived_key_tokens = vec![derived_key_token];
         }
 
         let signed_info = soap::SignedInfo {

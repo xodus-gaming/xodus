@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::base::{AppliesTo, PolicyReference, Timestamp};
 use super::crypto::EncryptedData;
-use crate::models::soap::{CipherData, EncryptionMethod};
+use crate::models::soap::{CipherData, EncryptionMethod, PP};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestSecurityToken {
@@ -22,19 +22,30 @@ pub struct RequestSecurityToken {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestSecurityTokenResponse {
-    #[serde(rename = "wst:TokenType", alias = "TokenType")]
-    pub token_type: String,
-    #[serde(rename = "wsp:AppliesTo", alias = "AppliesTo")]
-    pub applies_to: AppliesTo,
-    #[serde(rename = "wst:Lifetime", alias = "Lifetime")]
-    pub lifetime: Timestamp,
+    #[serde(default, rename = "wst:TokenType", alias = "TokenType")]
+    pub token_type: Option<String>,
+    #[serde(default, rename = "wsp:AppliesTo", alias = "AppliesTo")]
+    pub applies_to: Option<AppliesTo>,
+    #[serde(default, rename = "wst:Lifetime", alias = "Lifetime")]
+    pub lifetime: Option<Timestamp>,
     #[serde(
+        default,
         rename = "wst:RequestedSecurityToken",
         alias = "RequestedSecurityToken"
     )]
-    pub requested_security_token: RequestedSecurityToken,
-    #[serde(rename = "wst:RequestedProofToken", alias = "RequestedProofToken")]
+    pub requested_security_token: Option<RequestedSecurityToken>,
+    #[serde(
+        default,
+        rename = "wst:RequestedProofToken",
+        alias = "RequestedProofToken"
+    )]
     pub requested_proof_token: Option<RequestedProofToken>,
+    #[serde(
+        rename = "psf:pp",
+        alias = "pp",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pp: Option<PP>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

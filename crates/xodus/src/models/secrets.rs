@@ -31,9 +31,13 @@ pub enum Token {
 
 impl From<soap::RequestSecurityTokenResponse> for Token {
     fn from(value: soap::RequestSecurityTokenResponse) -> Self {
-        match value.token_type.as_str() {
+        match value.token_type.unwrap().as_str() {
             "urn:passport:legacy" => {
-                let encrypted_data = value.requested_security_token.encrypted_data.unwrap();
+                let encrypted_data = value
+                    .requested_security_token
+                    .unwrap()
+                    .encrypted_data
+                    .unwrap();
                 let key_name = encrypted_data.key_info.key_name.clone();
                 let token = quick_xml::se::to_string(&encrypted_data).unwrap();
                 let binary_secret = value
@@ -48,12 +52,13 @@ impl From<soap::RequestSecurityTokenResponse> for Token {
                     token,
                     binary_secret,
                     tpm_key,
-                    lifetime: value.lifetime,
+                    lifetime: value.lifetime.unwrap(),
                 })
             }
             "urn:passport:compact" => Self::Compact(
                 value
                     .requested_security_token
+                    .unwrap()
                     .binary_security_token
                     .unwrap()
                     .value,
@@ -62,6 +67,7 @@ impl From<soap::RequestSecurityTokenResponse> for Token {
                 "d={}",
                 value
                     .requested_security_token
+                    .unwrap()
                     .binary_security_token
                     .unwrap()
                     .value

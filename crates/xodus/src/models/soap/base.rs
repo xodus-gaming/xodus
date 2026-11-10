@@ -107,6 +107,9 @@ pub struct PP {
     #[serde(rename = "psf:reqstatus", alias = "reqstatus")]
     pub req_status: Option<String>,
 
+    #[serde(rename = "psf:errorstatus", alias = "errorstatus")]
+    pub error_status: Option<String>,
+
     #[serde(rename = "psf:inlineauthurl", alias = "inlineauthurl")]
     pub inline_auth_url: Option<String>,
 

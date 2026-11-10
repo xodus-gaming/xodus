@@ -1,4 +1,6 @@
 use base64::prelude::*;
+use chrono::{DateTime, FixedOffset};
+use tracing::warn;
 use zerocopy::transmute;
 
 use crate::licensing::splicense::ClepHmacState;
@@ -6,6 +8,7 @@ use crate::models::devicecredential::{DeviceAddRequest, DeviceAddResponse};
 use crate::models::live::ExchangeUserTokenOutcome;
 use crate::models::secrets::{LegacyToken, Token};
 use crate::models::soap;
+use crate::tokens::TokenManager;
 
 mod rst;
 mod utils;
@@ -45,14 +48,94 @@ pub async fn authenticate_device(
     request.request(client).await
 }
 
+#[derive(Debug, Clone)]
+pub enum TokenResponse {
+    RequestSecurityTokenResponseCollection(soap::RequestSecurityTokenResponseCollection),
+    RequestSecurityTokenResponse(Box<soap::RequestSecurityTokenResponse>),
+    Fault(soap::Fault),
+}
+
+impl TokenResponse {
+    pub fn get_device_rps(&self) -> Option<(String, Option<DateTime<FixedOffset>>)> {
+        match &self {
+            TokenResponse::RequestSecurityTokenResponseCollection(collection) => {
+                let Some(refresh_token) = collection.security_tokens.get(0) else {
+                    return None;
+                };
+                let Token::Compact(compact) = refresh_token.clone().into() else {
+                    return None;
+                };
+                Some((
+                    compact,
+                    refresh_token
+                        .lifetime
+                        .as_ref()
+                        .map(|lt| chrono::DateTime::parse_from_rfc3339(&lt.expires).ok())
+                        .unwrap_or_default(),
+                ))
+            }
+            b => {
+                warn!("Exchange token supports only singular token right now {b:?}");
+                None
+            }
+        }
+    }
+    pub fn get_device_sts(&self) -> Option<LegacyToken> {
+        match &self {
+            TokenResponse::RequestSecurityTokenResponseCollection(collection) => {
+                let Some(refresh_token) = collection.security_tokens.get(1) else {
+                    return None;
+                };
+                let Token::Legacy(legacy) = refresh_token.clone().into() else {
+                    return None;
+                };
+                Some(legacy)
+            }
+            b => {
+                warn!("Exchange token supports only singular token right now {b:?}");
+                None
+            }
+        }
+    }
+    pub fn refresh(self, tokens: &TokenManager) -> Self {
+        match &self {
+            TokenResponse::RequestSecurityTokenResponseCollection(collection) => {
+                let Some(resp) = collection.security_tokens.get(1) else {
+                    return self;
+                };
+                let key_name = resp
+                    .requested_security_token
+                    .as_ref()
+                    .unwrap()
+                    .encrypted_data
+                    .as_ref()
+                    .unwrap()
+                    .key_info
+                    .key_name
+                    .as_ref()
+                    .unwrap()
+                    .clone();
+
+                // Error not so important, except if happen more often
+                _ = tokens.save_device_token(key_name, resp.clone().into());
+            }
+            b => {
+                warn!("Exchange token supports only singular token right now {b:?}");
+                return self;
+            }
+        }
+        self
+    }
+}
+
 pub async fn exchange_device_token(
     client: &reqwest::Client,
-    token: LegacyToken,
+    device_token: LegacyToken,
     hosting_app: String,
     scope: String,
     policy: Option<soap::PolicyReference>,
-) -> Result<soap::RequestSecurityTokenResponse, rst::RSTError> {
-    let secret = BASE64_STANDARD.decode(token.binary_secret.as_ref().unwrap())?;
+) -> Result<TokenResponse, rst::RSTError> {
+    let secret = BASE64_STANDARD.decode(device_token.binary_secret.as_ref().unwrap())?;
     let secret: [u8; 4096] = secret.try_into().unwrap();
     let secret: ClepHmacState = transmute!(secret);
     let hmac_secret = secret.get_hmac_state();
@@ -60,24 +143,31 @@ pub async fn exchange_device_token(
     let request = rst::RSTRequestBuilder::new()
         .sso_flags("SsoRestr")
         .hosting_app(&hosting_app)
-        .device_token(token)
+        .device_token(device_token)
         .signature(rst::RSTSignature::Hmac {
             clep_secret: &*hmac_secret,
             tpm_secret: &[],
         })
         .scope_policy(&scope, policy)
+        .scope_policy("http://Passport.NET/tb", None)
         .build()?;
 
     let envelope = request.request(client).await?;
 
-    match envelope.body.body {
-        soap::BodyContent::RequestSecurityTokenResponse(res) => Ok(*res),
-        soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection) => {
-            let token = collection.security_tokens.remove(0);
-            Ok(token)
+    Ok(match envelope.body.body {
+        soap::BodyContent::Fault(f) => TokenResponse::Fault(f),
+        soap::BodyContent::RequestSecurityTokenResponse(f) => {
+            TokenResponse::RequestSecurityTokenResponse(f)
         }
-        b => unimplemented!("Exchange token supports only singular token right now {b:?}"),
-    }
+        soap::BodyContent::RequestSecurityTokenResponseCollection(f) => {
+            TokenResponse::RequestSecurityTokenResponseCollection(f)
+        }
+        _ => {
+            return Err(rst::RSTError::Deserialization(quick_xml::DeError::Custom(
+                "Unexpected Answer".to_owned(),
+            )));
+        }
+    })
 }
 
 // Each parameter maps directly to a distinct SOAP request field; grouping them
@@ -148,6 +238,7 @@ mod test {
         let Token::Legacy(token) = token else {
             todo!("no a LegacyToken");
         };
+        println!("{}\n{}", token.token, token.binary_secret.as_ref().unwrap());
         let resp = exchange_device_token(
             &client,
             token,
@@ -156,10 +247,10 @@ mod test {
             Some(soap::PolicyReference::token_broker()),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .refresh(&mgr);
 
-        let ms_device_token: Token = resp.into();
-        let Token::Compact(ms_device_token) = ms_device_token else {
+        let Some((ms_device_token, _)) = resp.get_device_rps() else {
             todo!("Unsupported token");
         };
 

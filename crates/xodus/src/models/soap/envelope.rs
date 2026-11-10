@@ -60,16 +60,16 @@ impl Envelope {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Header {
-    #[serde(rename = "wsa:Action", alias = "Action")]
-    pub action: MustUnderstandValue,
-    #[serde(rename = "wsa:To", alias = "To")]
-    pub to: MustUnderstandValue,
+    #[serde(default, rename = "wsa:Action", alias = "Action")]
+    pub action: Option<MustUnderstandValue>,
+    #[serde(default, rename = "wsa:To", alias = "To")]
+    pub to: Option<MustUnderstandValue>,
     #[serde(rename = "wsa:MessageID")]
     pub message_id: Option<String>,
     #[serde(rename = "ps:AuthInfo")]
     pub auth_info: Option<AuthInfo>,
-    #[serde(rename = "wsse:Security", alias = "Security")]
-    pub security: Security,
+    #[serde(default, rename = "wsse:Security", alias = "Security")]
+    pub security: Option<Security>,
     #[serde(
         rename = "psf:EncryptedPP",
         alias = "EncryptedPP",
@@ -94,17 +94,17 @@ impl Header {
     pub fn new() -> Self {
         let now = chrono::Utc::now();
         Self {
-            action: MustUnderstandValue {
+            action: Some(MustUnderstandValue {
                 must_understand: Some("1".to_owned()),
                 value: "http://schemas.xmlsoap.org/ws/2005/02/trust/RST/Issue".to_owned(),
-            },
-            to: MustUnderstandValue {
+            }),
+            to: Some(MustUnderstandValue {
                 must_understand: Some("1".to_owned()),
                 value: "https://login.live.com:443/RST2.srf".to_owned(),
-            },
+            }),
             message_id: Some(now.timestamp().to_string()),
             auth_info: Some(AuthInfo::default()),
-            security: Security {
+            security: Some(Security {
                 username_token: None,
                 encrypted_data: None,
                 derived_key_tokens: vec![],
@@ -116,7 +116,7 @@ impl Header {
                         .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
                 },
                 signature: None,
-            },
+            }),
             encrypted_pp: None,
             pp: None,
         }

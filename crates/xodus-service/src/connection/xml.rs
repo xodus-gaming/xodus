@@ -1,7 +1,7 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use xodus::models::live::ExchangeUserTokenOutcome;
 use xodus::models::secrets::Token;
-use xodus::models::soap;
+use xodus::models::soap::{self};
 use xodus::models::xgameruntime::xuser::{MSATokenRequest, MSATokenResponse};
 use xodus::proto::xodus::XodusMessageType;
 
@@ -63,11 +63,12 @@ pub async fn parse_message(
             )
             .await;
 
-            let ms_device_rps_token = if let Some((Token::Compact(ms_device_token), Ok(lifetime))) =
-                device_token_resp.ok().map(|t| {
-                    let expiry = chrono::DateTime::parse_from_rfc3339(&t.lifetime.expires);
-                    (t.into(), expiry)
-                }) {
+            let ms_device_rps_token = if let Some((ms_device_token, Some(lifetime))) =
+                device_token_resp
+                    .ok()
+                    .map(|t| t.get_device_rps())
+                    .unwrap_or_default()
+            {
                 Some((ms_device_token, lifetime.timestamp()))
             } else {
                 None
@@ -96,7 +97,13 @@ pub async fn parse_message(
                     soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
                 ) => {
                     if let Some(sts) = collection.security_tokens.pop() {
-                        let address = sts.applies_to.endpoint_reference.address.clone();
+                        let address = sts
+                            .applies_to
+                            .as_ref()
+                            .unwrap()
+                            .endpoint_reference
+                            .address
+                            .clone();
                         let sts: Token = sts.into();
                         let address = if let Token::Legacy(legacy) = &sts {
                             legacy.key_name.clone().unwrap_or(address)
@@ -108,7 +115,9 @@ pub async fn parse_message(
                         }
                     }
                     let token = collection.security_tokens.remove(0);
-                    let expiry = chrono::DateTime::parse_from_rfc3339(&token.lifetime.expires)?;
+                    let expiry = chrono::DateTime::parse_from_rfc3339(
+                        &token.lifetime.as_ref().unwrap().expires,
+                    )?;
                     let token: Token = token.into();
                     let Token::Compact(user_token) = token else {
                         return Ok(vec![]);
