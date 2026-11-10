@@ -37,7 +37,7 @@ pub async fn request_xsts_token(
         relying_party: Some(relying_party.to_string()),
         token_type: Some("JWT".to_string()),
         properties: XstsPropertyBag {
-            user_tokens: Some(vec![token]),
+            device_token: Some(token),
             sandbox_id: Some("RETAIL".to_string()),
             delegation_token: None,
             service_token: None,
