@@ -181,9 +181,67 @@ pub async fn do_sisu(
         .await?;
     let resp = auth
         .sisu_authorize_rps(&user_token, &data.token, None)
-        .await
-        .expect("ok");
+        .await?;
     Ok((auth, resp, data))
+}
+
+pub type XstsToken = xal::response::XSTSToken;
+/// Proof key of a [`TitleSession`]: signs the Xbox Live requests made with its tokens.
+pub type ProofKey = p256::SecretKey;
+
+/// Title-bound Xbox Live session of one game: the authenticator whose proof key signed the
+/// device token (so it can sign service requests), plus the device/title/user tokens from the
+/// sisu flow. Built from the MSA tokens stored in the [`TokenManager`].
+pub struct TitleSession {
+    pub client_id: String,
+    pub title_id: i64,
+    pub authenticator: XalAuthenticator,
+    pub device_token: xal::response::DeviceToken,
+    pub title_token: xal::response::TitleToken,
+    pub user_token: xal::response::UserToken,
+}
+
+impl TitleSession {
+    pub async fn establish(
+        client: &Client,
+        manager: &TokenManager,
+        client_id: &str,
+        title_id: i64,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let (authenticator, resp, device_token) =
+            do_sisu(client, manager, client_id, title_id).await?;
+        Ok(Self {
+            client_id: client_id.to_owned(),
+            title_id,
+            authenticator,
+            device_token,
+            title_token: resp.title_token,
+            user_token: resp.user_token,
+        })
+    }
+
+    /// Device, title and user tokens are all still within their lifetime.
+    pub fn is_valid(&self) -> bool {
+        self.device_token.check_validity().is_ok()
+            && self.title_token.check_validity().is_ok()
+            && self.user_token.check_validity().is_ok()
+    }
+
+    pub async fn get_xsts_token(&mut self, relying_party: &str) -> Result<XstsToken, xal::Error> {
+        self.authenticator
+            .get_xsts_token(
+                Some(&self.device_token),
+                Some(&self.title_token),
+                Some(&self.user_token),
+                relying_party,
+            )
+            .await
+    }
+
+    /// Proof key registered with the device token; signs requests made with its XSTS tokens.
+    pub fn proof_key(&self) -> ProofKey {
+        self.authenticator.request_signer().keypair
+    }
 }
 
 #[ignore]

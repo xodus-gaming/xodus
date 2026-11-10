@@ -34,6 +34,7 @@ globset = "0.4.20"
 num-bigint-dig = "0.9.1"
 num-integer = "0.1.47"
 kryptering = "0.5.0"
+p256 = "0.13.2"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 smbios-lib = "0.9.4"
@@ -45,6 +46,8 @@ dbus-secret-service-keyring-store = { version = "1.0.1", features = ["crypto-ope
 apple-native-keyring-store = { version = "1.0.2", features = ["keychain"]}
 
 [dev-dependencies]
+# xal's reqwest, to cross-check signatures against its RequestSigner in tests
+reqwest011 = { package = "reqwest", version = "0.11" }
 rsa = "0.9.10"
 bergshamra = "0.8.0"
 ed25519-dalek = "3.0.0"
