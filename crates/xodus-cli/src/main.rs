@@ -80,6 +80,12 @@ enum SubCommand {
         #[arg(short, long)]
         market: Option<String>,
     },
+    #[command(about = "Decrypt keep_encrypted files in place using a real license")]
+    Decrypt {
+        source: String,
+        #[arg(short, long)]
+        market: Option<String>,
+    },
     #[command(about = "Generate or decrypt base64-encoded CLEP challenge data")]
     Clep {
         #[command(subcommand)]
@@ -233,6 +239,9 @@ async fn main() -> ExitCode {
             exe,
             market,
         } => commands::run::run(&client, &tokens, source, wine, exe, market).await,
+        SubCommand::Decrypt { source, market } => {
+            commands::decrypt::run(&client, &tokens, source, market).await
+        }
         SubCommand::Clep { action } => match action {
             ClepAction::Generate {
                 smbios,

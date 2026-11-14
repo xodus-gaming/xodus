@@ -1,4 +1,5 @@
 pub mod clep;
+pub mod decrypt;
 pub mod download;
 pub mod extract;
 pub mod extract_eappx;
