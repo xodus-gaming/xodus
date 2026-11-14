@@ -1,5 +1,6 @@
 pub mod builder;
 pub mod error;
+pub mod fault;
 pub mod request;
 pub mod signature;
 

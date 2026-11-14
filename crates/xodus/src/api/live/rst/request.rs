@@ -15,22 +15,79 @@ impl<'a> RSTRequest<'a> {
     pub async fn request(
         self,
         client: &reqwest::Client,
+        timeout: Option<std::time::Duration>,
     ) -> Result<soap::Envelope, super::RSTError> {
         tracing::trace!("Making RST2.srf request");
-        let response = client
-        .post("https://login.live.com/RST2.srf")
-        .header("User-Agent", "MSAWindows/55 (OS 10.0.26100.0.0 ge_release; IDK 10.0.26100.5074 ge_release; Cfg 16.000.29325.00; Test 0)")
-        .header("Content-Type", "application/soap+xml")
-        .header("Host", "login.live.com")
-        .body(self.signed_xml)
-        .send()
-        .await?;
-
-        let response_text = response.text().await?;
-        let envelope: soap::Envelope = quick_xml::de::from_str(&response_text)?;
+        let response_text = post_rst(client, RST_URL, self.signed_xml, timeout).await?;
+        let envelope = parse_rst_response(&response_text)?;
 
         verify_and_decrypt_envelope(self.signature, response_text, envelope)
     }
+
+    /// Like `request`, but a SOAP Fault is returned together with its verified and decrypted
+    /// envelope, so the caller can read the fault's encrypted `psf:pp` (e.g. `inlineauthurl`).
+    /// If the Fault envelope cannot be parsed or decrypted, the typed `RSTError::Fault` is returned.
+    pub async fn request_allow_fault(
+        self,
+        client: &reqwest::Client,
+        timeout: Option<std::time::Duration>,
+    ) -> Result<(soap::Envelope, Option<super::fault::SoapFault>), super::RSTError> {
+        let response_text = post_rst(client, RST_URL, self.signed_xml, timeout).await?;
+        let fault = match parse_rst_response(&response_text) {
+            Ok(envelope) => {
+                let envelope = verify_and_decrypt_envelope(self.signature, response_text, envelope)?;
+                return Ok((envelope, None));
+            }
+            Err(super::RSTError::Fault(fault)) => fault,
+            Err(e) => return Err(e),
+        };
+        let decrypted = quick_xml::de::from_str::<soap::Envelope>(&response_text)
+            .map_err(super::RSTError::from)
+            .and_then(|envelope| verify_and_decrypt_envelope(self.signature, response_text, envelope));
+        match decrypted {
+            Ok(envelope) => Ok((envelope, Some(fault))),
+            Err(e) => {
+                tracing::warn!("Unable to decrypt RST2 Fault envelope: {e}");
+                Err(super::RSTError::Fault(fault))
+            }
+        }
+    }
+}
+
+const RST_URL: &str = "https://login.live.com/RST2.srf";
+
+async fn post_rst(
+    client: &reqwest::Client,
+    url: &str,
+    body: String,
+    timeout: Option<std::time::Duration>,
+) -> Result<String, super::RSTError> {
+    let mut builder = client
+        .post(url)
+        .header("User-Agent", "MSAWindows/55 (OS 10.0.26100.0.0 ge_release; IDK 10.0.26100.5074 ge_release; Cfg 16.000.29325.00; Test 0)")
+        .header("Content-Type", "application/soap+xml")
+        .header("Host", "login.live.com")
+        .body(body);
+    if let Some(d) = timeout {
+        builder = builder.timeout(d);
+    }
+    Ok(builder.send().await?.text().await?)
+}
+
+/// Detects a SOAP Fault before envelope deserialization and returns it as a typed error.
+fn parse_rst_response(text: &str) -> Result<soap::Envelope, super::RSTError> {
+    if text.contains("<S:Fault") || text.contains(":Fault>") {
+        tracing::warn!("RST2 returned a Fault: {text}");
+        return match super::fault::SoapFault::parse(text) {
+            Ok(fault) => Err(super::RSTError::Fault(fault)),
+            Err(e) => Err(super::RSTError::Deserialization(
+                <quick_xml::DeError as serde::de::Error>::custom(format!(
+                    "unparseable RST2 Fault: {e}"
+                )),
+            )),
+        };
+    }
+    Ok(quick_xml::de::from_str(text)?)
 }
 
 fn verify_and_decrypt_envelope<'a>(
@@ -55,7 +112,7 @@ fn verify_and_decrypt_envelope<'a>(
         && let Some(key_info) = &security_signature.key_info
     {
         let id = &key_info.security_token_reference.reference.uri;
-        let nonce = nonces.get(&id[1..]).ok_or(super::RSTError::MissingNonce)?;
+        let nonce = id.get(1..).and_then(|k| nonces.get(k)).ok_or(super::RSTError::MissingNonce)?;
         let nonce = BASE64_STANDARD.decode(nonce)?;
         let key = signature.signing_key(&nonce)?;
         let mut kmgr = bergshamra::KeysManager::new();
@@ -88,4 +145,57 @@ fn verify_and_decrypt_envelope<'a>(
     }
 
     Ok(envelope)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FIXTURE: &str = include_str!("testdata/rst-fault.xml");
+
+    #[test]
+    fn rst_response_fault_fixture() {
+        match parse_rst_response(FIXTURE) {
+            Err(crate::api::live::rst::RSTError::Fault(f)) => assert!(f.is_sign_in_required()),
+            other => panic!("expected Fault, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fault_fixture_parses_as_envelope_with_encrypted_pp() {
+        let envelope: soap::Envelope = quick_xml::de::from_str(FIXTURE).unwrap();
+        assert!(envelope.header.encrypted_pp.is_some());
+        assert!(matches!(envelope.body.body, soap::BodyContent::Fault(_)));
+    }
+
+    #[test]
+    fn rst_response_truncated_fault_is_deserialization() {
+        let cut = &FIXTURE[..FIXTURE.find("<S:Detail").unwrap()];
+        assert!(matches!(
+            parse_rst_response(cut),
+            Err(crate::api::live::rst::RSTError::Deserialization(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn rst_timeout() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _held = listener.accept().await;
+            std::future::pending::<()>().await;
+        });
+        let client = reqwest::Client::new();
+        let start = std::time::Instant::now();
+        let r = post_rst(
+            &client,
+            &format!("http://{addr}/"),
+            String::new(),
+            Some(std::time::Duration::from_millis(200)),
+        )
+        .await;
+        assert!(r.is_err());
+        let e = start.elapsed();
+        assert!(e >= std::time::Duration::from_millis(200) && e < std::time::Duration::from_secs(2));
+    }
 }

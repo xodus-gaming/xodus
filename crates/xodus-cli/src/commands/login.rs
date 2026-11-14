@@ -9,6 +9,28 @@ use crate::webview;
 const CLIENT_ID: &str = "000000004424da1f";
 const LOGIN_MARKET: &str = "en-US";
 const USER_AUTH_SCOPE: &str = "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0";
+/// Exit status when no token was obtained (window closed); xodus-service maps it to E_ABORT.
+const LOGIN_CANCELLED_EXIT: u8 = 2;
+/// Exit status when sign-in failed with an error (e.g. an RST2 Fault); distinct from cancel.
+const LOGIN_FAILED_EXIT: u8 = 3;
+const FAULT_WITHOUT_INLINE_AUTH: &str = "User token exchange returned a fault without inline auth";
+
+/// Maps the sign-in session outcome to (exit status, stderr text).
+fn login_exit<T, E: std::fmt::Display>(outcome: Result<Option<T>, E>) -> (u8, Option<String>) {
+    match outcome {
+        Ok(Some(_)) => (0, None),
+        Ok(None) => (LOGIN_CANCELLED_EXIT, None),
+        Err(e) => (LOGIN_FAILED_EXIT, Some(format!("failed to login: {e}"))),
+    }
+}
+
+/// A user-token Fault is only recoverable when its PP carries an inline auth URL.
+fn user_token_fault(pp: Option<soap::PP>) -> Result<soap::PP, String> {
+    match pp {
+        Some(pp) if pp.inline_auth_url.is_some() => Ok(pp),
+        _ => Err(FAULT_WITHOUT_INLINE_AUTH.to_string()),
+    }
+}
 
 pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
     let token = tokens.get_device_sts_token().unwrap();
@@ -17,18 +39,19 @@ pub async fn run(client: &reqwest::Client, tokens: &TokenManager) -> ExitCode {
         return ExitCode::FAILURE;
     };
     let handler = LoginHandler::new(client.clone(), token, tokens.clone());
-    let output = webview::run_sessions(handler)
-        .expect("failed to login")
-        .flatten();
+    let outcome = webview::run_sessions(handler).map(Option::flatten);
+    let (status, message) = login_exit(outcome.as_ref().map(Option::as_ref));
+    if let Some(message) = message {
+        eprintln!("{message}");
+    }
+    let Ok(Some(output)) = outcome else {
+        return ExitCode::from(status);
+    };
     let issued_tokens = match output {
-        Some(soap::BodyContent::RequestSecurityTokenResponseCollection(collection)) => {
+        soap::BodyContent::RequestSecurityTokenResponseCollection(collection) => {
             collection.security_tokens
         }
-        Some(soap::BodyContent::RequestSecurityTokenResponse(token)) => vec![*token],
-        None => {
-            eprintln!("Didn't log in");
-            vec![]
-        }
+        soap::BodyContent::RequestSecurityTokenResponse(token) => vec![*token],
         _ => unreachable!(),
     };
 
@@ -110,6 +133,7 @@ impl LoginHandler {
                     None,
                     client_id,
                     &scopes,
+                    None,
                 )
                 .await
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
@@ -142,18 +166,12 @@ impl webview::SessionHandler for LoginHandler {
 
         match exchanged {
             ExchangeUserTokenOutcome::Fault(pp) => {
-                if let Some(pp) = pp
-                    && let Some(auth_url) = pp.inline_auth_url
-                {
-                    runtime.close_session(session_id);
-                    self.finish = true;
-                    runtime.open_session(webview::finalize_request(auth_url));
-                    return Ok(webview::HandlerControl::Continue);
-                }
-
-                println!("User token exchange returned a fault without inline auth");
                 runtime.close_session(session_id);
-                Ok(webview::HandlerControl::Complete(None))
+                // user_token_fault guarantees inline_auth_url is Some.
+                let auth_url = user_token_fault(pp)?.inline_auth_url.unwrap_or_default();
+                self.finish = true;
+                runtime.open_session(webview::finalize_request(auth_url));
+                Ok(webview::HandlerControl::Continue)
             }
             ExchangeUserTokenOutcome::Issued(da) => {
                 runtime.close_session(session_id);
@@ -174,5 +192,51 @@ impl webview::SessionHandler for LoginHandler {
         _runtime: &mut webview::RuntimeCommands,
     ) -> Result<webview::HandlerControl<Self::Output>, Box<dyn std::error::Error>> {
         Ok(webview::HandlerControl::Complete(None))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pp(inline_auth_url: Option<&str>) -> soap::PP {
+        soap::PP {
+            xmlns_psf: None,
+            server_version: None,
+            req_status: None,
+            inline_auth_url: inline_auth_url.map(String::from),
+            inline_end_auth_url: None,
+            auth_state_internal: None,
+            user_session_key: None,
+        }
+    }
+
+    #[test]
+    fn login_exit_no_token_is_cancel() {
+        assert_eq!(login_exit::<u8, &str>(Ok(None)), (2, None));
+    }
+
+    #[test]
+    fn login_exit_err_is_failure() {
+        assert_eq!(
+            login_exit::<u8, &str>(Err("boom")),
+            (3, Some("failed to login: boom".to_string()))
+        );
+    }
+
+    #[test]
+    fn login_exit_token_is_success() {
+        assert_eq!(login_exit::<u8, &str>(Ok(Some(1))), (0, None));
+    }
+
+    #[test]
+    fn login_exit_fault_without_inline_auth_is_failure() {
+        for p in [None, Some(pp(None))] {
+            let e = user_token_fault(p).unwrap_err();
+            assert_eq!(e, FAULT_WITHOUT_INLINE_AUTH);
+            assert_eq!(login_exit::<u8, _>(Err(e)).0, 3);
+        }
+        let ok = user_token_fault(Some(pp(Some("https://login.live.com/x")))).unwrap();
+        assert_eq!(ok.inline_auth_url.as_deref(), Some("https://login.live.com/x"));
     }
 }

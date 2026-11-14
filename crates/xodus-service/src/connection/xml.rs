@@ -1,10 +1,8 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use xodus::models::live::ExchangeUserTokenOutcome;
-use xodus::models::secrets::Token;
-use xodus::models::soap;
-use xodus::models::xgameruntime::xuser::{MSATokenRequest, MSATokenResponse};
+use xodus::models::xgameruntime::xuser::MSATokenRequest;
 use xodus::proto::xodus::XodusMessageType;
 
+use super::msa::{ServiceError, error_body, handle_msa_token};
 use crate::XML_MAGIC;
 use crate::simple_context::SimpleContext;
 
@@ -42,91 +40,45 @@ pub async fn parse_message(
         XodusMessageType::Ping => Ok(buffer),
         XodusMessageType::MsaTokenRequest => {
             tracing::debug!("Raw buffer: {buffer:?}");
-            let string_buf = std::str::from_utf8(&buffer)?;
-            tracing::debug!("String buffer: {string_buf:?}");
-            let req = quick_xml::de::from_str::<MSATokenRequest>(string_buf)?;
-            let Token::Legacy(token) = context.tokens().get_user_sts_token()? else {
-                return Ok(vec![]);
-            };
-            let scope = if req.msa_full_trust {
-                "service::user.auth.xboxlive.com::MBI_SSL"
-            } else {
-                "xboxlive.signin"
-            };
-            let device_token = context.device_token.as_ref().unwrap();
-            let device_token_resp = xodus::api::live::exchange_device_token(
-                &context.client,
-                device_token.clone(),
-                "{28C08266-F973-4AE6-FFE4-409B249F138F}".to_string(),
-                "scope=service::user.auth.xboxlive.com::MBI_SSL".to_owned(),
-                Some(soap::PolicyReference::token_broker()),
-            )
-            .await;
-
-            let ms_device_rps_token = if let Some((Token::Compact(ms_device_token), Ok(lifetime))) =
-                device_token_resp.ok().map(|t| {
-                    let expiry = chrono::DateTime::parse_from_rfc3339(&t.lifetime.expires);
-                    (t.into(), expiry)
-                }) {
-                Some((ms_device_token, lifetime.timestamp()))
-            } else {
-                None
-            };
-
-            let user_token = xodus::api::live::exchange_user_token(
-                &context.client,
-                token,
-                "USERNAME".to_string(),
-                device_token.clone(),
-                None,
-                Some("Silent".to_string()),
-                req.client_id.clone(),
-                &[
-                    (
-                        format!("scope={scope}&api-version=2.0&clientid={}", req.client_id),
-                        Some(soap::PolicyReference::token_broker()),
-                    ),
-                    ("http://Passport.NET/tb".to_string(), None),
-                ],
-            )
-            .await?;
-
-            match user_token {
-                ExchangeUserTokenOutcome::Issued(
-                    soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
-                ) => {
-                    if let Some(sts) = collection.security_tokens.pop() {
-                        let address = sts.applies_to.endpoint_reference.address.clone();
-                        let sts: Token = sts.into();
-                        let address = if let Token::Legacy(legacy) = &sts {
-                            legacy.key_name.clone().unwrap_or(address)
-                        } else {
-                            address
-                        };
-                        if let Err(err) = context.tokens().save_user_token(address, sts) {
-                            tracing::warn!("Failed to persist refreshed STS token: {err}");
-                        }
-                    }
-                    let token = collection.security_tokens.remove(0);
-                    let expiry = chrono::DateTime::parse_from_rfc3339(&token.lifetime.expires)?;
-                    let token: Token = token.into();
-                    let Token::Compact(user_token) = token else {
-                        return Ok(vec![]);
-                    };
-                    let payload = MSATokenResponse {
-                        token: user_token,
-                        expiry: expiry.timestamp(),
-                        device_expiry: ms_device_rps_token.as_ref().map(|(_, r)| *r).unwrap_or(0),
-                        device_rps: ms_device_rps_token
-                            .map(|(t, _)| t)
-                            .unwrap_or_else(String::new),
-                    };
-                    let payload = quick_xml::se::to_string(&payload)?;
-                    Ok(payload.as_bytes().to_vec())
+            let req = match std::str::from_utf8(&buffer)
+                .map_err(|e| e.to_string())
+                .and_then(|s| quick_xml::de::from_str::<MSATokenRequest>(s).map_err(|e| e.to_string()))
+            {
+                Ok(req) => req,
+                Err(e) => {
+                    tracing::error!("Invalid MsaTokenRequest: {e}");
+                    return Ok(error_body(&ServiceError::Other(e)));
                 }
-                _ => todo!("Error handling sill sucks"),
-            }
+            };
+            Ok(handle_msa_token(&req, context).await)
         }
         _ => Err("Unimplemented".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use xodus::models::secrets::LegacyToken;
+    use xodus::models::soap::Timestamp;
+    use xodus::tokens::manager::TokenManager;
+
+    #[tokio::test]
+    async fn exchange_msa_parse_message_bad_input() {
+        let tok = LegacyToken {
+            key_name: None,
+            token: String::new(),
+            binary_secret: None,
+            tpm_key: None,
+            lifetime: Timestamp { id: None, created: String::new(), expires: String::new() },
+        };
+        let mut ctx = SimpleContext::new(tok, Arc::new(TokenManager::with_memory()));
+        for input in [&b""[..], b"\xff", b"<MSATokenRequest>"] {
+            let out = parse_message(&mut ctx, XodusMessageType::MsaTokenRequest, input.to_vec())
+                .await
+                .unwrap();
+            assert!(String::from_utf8(out).unwrap().contains("<Error>0x80004005</Error>"));
+        }
     }
 }
