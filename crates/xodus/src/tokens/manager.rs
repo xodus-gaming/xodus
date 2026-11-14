@@ -168,6 +168,8 @@ impl TokenManager {
         address: String,
         token: Token,
     ) -> Result<(), TokenStoreError> {
+        static WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let mut tokens: HashMap<String, Token> = match backend.get(key)? {
             Some(bytes) if !bytes.is_empty() => {
                 serde_json::from_slice::<TokenStore>(&bytes)?.tokens
