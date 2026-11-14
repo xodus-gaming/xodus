@@ -100,6 +100,7 @@ pub async fn do_sisu(
             "{28C08266-F973-4AE6-FFE4-409B249F138F}".to_string(),
             "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0".to_owned(),
             Some(soap::PolicyReference::token_broker()),
+            None,
         )
         .await?;
 
@@ -125,6 +126,7 @@ pub async fn do_sisu(
             ),
             ("http://Passport.NET/tb".to_string(), None),
         ],
+        None,
     )
     .await?;
 

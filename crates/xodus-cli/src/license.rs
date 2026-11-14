@@ -26,6 +26,7 @@ pub async fn get_license(
         "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
         "www.microsoft.com".to_owned(),
         Some(soap::PolicyReference::mbi_ssl()),
+        None,
     )
     .await
     .unwrap();
@@ -42,6 +43,7 @@ pub async fn get_license(
             "www.microsoft.com".to_owned(),
             Some(soap::PolicyReference::mbi_ssl()),
         )],
+        None,
     )
     .await
     .expect("Failed to get ms user token");

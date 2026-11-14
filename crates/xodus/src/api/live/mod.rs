@@ -8,6 +8,8 @@ use crate::models::secrets::{LegacyToken, Token};
 use crate::models::soap;
 
 mod rst;
+pub use rst::fault::SoapFault;
+pub use rst::RSTError;
 mod utils;
 
 pub const XML_HEADER: &str = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
@@ -15,8 +17,8 @@ pub const XML_HEADER: &str = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
 pub async fn login_device_credential(
     client: &reqwest::Client,
     data: DeviceAddRequest,
-) -> reqwest::Result<DeviceAddResponse> {
-    let data = quick_xml::se::to_string(&data).unwrap();
+) -> Result<DeviceAddResponse, rst::RSTError> {
+    let data = quick_xml::se::to_string(&data)?;
 
     let response = client
         .post("https://login.live.com/ppsecure/deviceaddcredential.srf")
@@ -27,7 +29,7 @@ pub async fn login_device_credential(
         .send()
         .await?;
     let text = response.text().await?;
-    let resp: DeviceAddResponse = quick_xml::de::from_str(&text).expect("Failed to de xml");
+    let resp: DeviceAddResponse = quick_xml::de::from_str(&text)?;
     Ok(resp)
 }
 
@@ -42,7 +44,14 @@ pub async fn authenticate_device(
         .scope_policy("http://Passport.NET/tb", None)
         .build()?;
 
-    request.request(client).await
+    request.request(client, None).await
+}
+
+fn clep_state(token: &LegacyToken) -> Result<ClepHmacState, rst::RSTError> {
+    let secret = token.binary_secret.as_ref().ok_or(rst::RSTError::HmacKey)?;
+    let secret = BASE64_STANDARD.decode(secret)?;
+    let secret: [u8; 4096] = secret.try_into().map_err(|_| rst::RSTError::HmacKey)?;
+    Ok(transmute!(secret))
 }
 
 pub async fn exchange_device_token(
@@ -51,11 +60,9 @@ pub async fn exchange_device_token(
     hosting_app: String,
     scope: String,
     policy: Option<soap::PolicyReference>,
+    timeout: Option<std::time::Duration>,
 ) -> Result<soap::RequestSecurityTokenResponse, rst::RSTError> {
-    let secret = BASE64_STANDARD.decode(token.binary_secret.as_ref().unwrap())?;
-    let secret: [u8; 4096] = secret.try_into().unwrap();
-    let secret: ClepHmacState = transmute!(secret);
-    let hmac_secret = secret.get_hmac_state();
+    let hmac_secret = clep_state(&token)?.get_hmac_state();
 
     let request = rst::RSTRequestBuilder::new()
         .sso_flags("SsoRestr")
@@ -68,15 +75,18 @@ pub async fn exchange_device_token(
         .scope_policy(&scope, policy)
         .build()?;
 
-    let envelope = request.request(client).await?;
+    let envelope = request.request(client, timeout).await?;
 
     match envelope.body.body {
         soap::BodyContent::RequestSecurityTokenResponse(res) => Ok(*res),
-        soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection) => {
-            let token = collection.security_tokens.remove(0);
-            Ok(token)
+        soap::BodyContent::RequestSecurityTokenResponseCollection(collection) => {
+            collection.security_tokens.into_iter().next().ok_or_else(|| {
+                rst::RSTError::UnexpectedResponse(
+                    "empty RequestSecurityTokenResponseCollection".to_string(),
+                )
+            })
         }
-        b => unimplemented!("Exchange token supports only singular token right now {b:?}"),
+        b => Err(rst::RSTError::UnexpectedResponse(format!("{b:?}"))),
     }
 }
 
@@ -92,11 +102,9 @@ pub async fn exchange_user_token(
     inline_ux: Option<String>,
     hosting_app: String,
     scope_policies: &[(String, Option<soap::PolicyReference>)],
+    timeout: Option<std::time::Duration>,
 ) -> Result<ExchangeUserTokenOutcome, rst::RSTError> {
-    let secret = BASE64_STANDARD.decode(device_token.binary_secret.as_ref().unwrap())?;
-    let secret: [u8; 4096] = secret.try_into().unwrap();
-    let secret: ClepHmacState = transmute!(secret);
-    let hmac_secret = secret.get_hmac_state();
+    let hmac_secret = clep_state(&device_token)?.get_hmac_state();
 
     let mut builder = rst::RSTRequestBuilder::new()
         .username(soap::UsernameToken::user_hint(username))
@@ -121,16 +129,94 @@ pub async fn exchange_user_token(
     }
 
     let request = builder.build()?;
-    let envelope = request.request(client).await?;
+    let (envelope, fault) = request.request_allow_fault(client, timeout).await?;
 
-    Ok(match envelope.body.body {
-        soap::BodyContent::Fault(_) => ExchangeUserTokenOutcome::Fault(envelope.header.pp),
-        body => ExchangeUserTokenOutcome::Issued(body),
-    })
+    match fault {
+        None => Ok(ExchangeUserTokenOutcome::Issued(envelope.body.body)),
+        Some(f) => interactive_fault(f, inline_ux.as_deref(), Some(&envelope))
+            .map(|pp| ExchangeUserTokenOutcome::Fault(Some(pp))),
+    }
+}
+
+/// Interactive callers (no `inline_ux`) can get a Fault whose decrypted `psf:pp` carries an
+/// inline auth URL (e.g. "Platform SSO permission interrupt") to open in the webview.
+/// Every other Fault, including one whose envelope could not be decrypted, stays `RSTError::Fault`.
+fn interactive_fault(
+    f: SoapFault,
+    inline_ux: Option<&str>,
+    envelope: Option<&soap::Envelope>,
+) -> Result<soap::PP, rst::RSTError> {
+    match envelope.and_then(|e| e.header.pp.as_ref()) {
+        Some(pp) if inline_ux.is_none() && pp.inline_auth_url.is_some() => Ok(pp.clone()),
+        _ => Err(rst::RSTError::Fault(f)),
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use super::{clep_state, interactive_fault, SoapFault};
+
+    fn fault_envelope(inline_auth_url: Option<&str>) -> soap::Envelope {
+        let mut envelope: soap::Envelope =
+            quick_xml::de::from_str(include_str!("rst/testdata/rst-fault.xml")).unwrap();
+        envelope.header.pp = Some(soap::PP {
+            xmlns_psf: None,
+            server_version: None,
+            req_status: None,
+            inline_auth_url: inline_auth_url.map(String::from),
+            inline_end_auth_url: None,
+            auth_state_internal: None,
+            user_session_key: None,
+        });
+        envelope
+    }
+
+    #[test]
+    fn request_allow_fault_undecryptable_is_fault() {
+        let r = interactive_fault(SoapFault::default(), None, None);
+        assert!(matches!(r, Err(super::rst::RSTError::Fault(_))));
+    }
+
+    #[test]
+    fn request_allow_fault_inline_ux_is_fault() {
+        let envelope = fault_envelope(Some("https://login.live.com/x"));
+        let r = interactive_fault(SoapFault::default(), Some("ux"), Some(&envelope));
+        assert!(matches!(r, Err(super::rst::RSTError::Fault(_))));
+    }
+
+    #[test]
+    fn request_allow_fault_no_inline_auth_is_fault() {
+        let envelope = fault_envelope(None);
+        let r = interactive_fault(SoapFault::default(), None, Some(&envelope));
+        assert!(matches!(r, Err(super::rst::RSTError::Fault(_))));
+    }
+
+    #[test]
+    fn request_allow_fault_interactive_inline_auth_is_pp() {
+        let envelope = fault_envelope(Some("https://login.live.com/x"));
+        let pp = interactive_fault(SoapFault::default(), None, Some(&envelope)).unwrap();
+        assert_eq!(pp.inline_auth_url.as_deref(), Some("https://login.live.com/x"));
+    }
+    use crate::models::secrets::LegacyToken;
+
+    #[test]
+    fn clep_state_rejects_missing_or_short_secret() {
+        let mut t = LegacyToken {
+            key_name: None,
+            token: String::new(),
+            binary_secret: None,
+            tpm_key: None,
+            lifetime: crate::models::soap::Timestamp {
+                id: None,
+                created: String::new(),
+                expires: String::new(),
+            },
+        };
+        assert!(matches!(clep_state(&t), Err(super::rst::RSTError::HmacKey)));
+        t.binary_secret = Some(base64::Engine::encode(&base64::prelude::BASE64_STANDARD, [0u8; 8]));
+        assert!(matches!(clep_state(&t), Err(super::rst::RSTError::HmacKey)));
+    }
+
     use crate::api::live::exchange_device_token;
     use crate::models::secrets::Token;
     use crate::models::soap;
@@ -154,6 +240,7 @@ mod test {
             "{28C08266-F973-4AE6-FFE4-409B249F138F}".to_string(),
             "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0".to_owned(),
             Some(soap::PolicyReference::token_broker()),
+            None,
         )
         .await
         .unwrap();

@@ -6,6 +6,8 @@ pub enum RSTError {
     Serialization(#[from] quick_xml::SeError),
     #[error("Error deserializing response {0:?}")]
     Deserialization(#[from] quick_xml::DeError),
+    #[error("RST2 returned a Fault: {0:?}")]
+    Fault(super::fault::SoapFault),
     #[error("Unable to decode base64")]
     Base64(#[from] base64::DecodeError),
     #[error("Error processing XML for verification {0:?}")]
@@ -25,6 +27,8 @@ pub enum RSTError {
     Utf8(#[from] std::str::Utf8Error),
     #[error("The signature verification failed - {0}")]
     InvalidResponseSignature(String),
+    #[error("Server returned an unexpected response body: {0}")]
+    UnexpectedResponse(String),
 }
 
 #[derive(thiserror::Error, Debug)]
