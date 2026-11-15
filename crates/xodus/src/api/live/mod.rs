@@ -89,9 +89,9 @@ fn to_outcome(
     envelope: soap::Envelope,
 ) -> Result<soap::RequestSecurityTokenResponseCollection, rst::RSTError> {
     match envelope.body.body {
-        soap::BodyContent::Fault(_) => Err(rst::RSTError::TokenFault(
-            envelope.header.pp.map(|pp| Box::new(pp)),
-        )),
+        soap::BodyContent::Fault(_) => {
+            Err(rst::RSTError::TokenFault(envelope.header.pp.map(Box::new)))
+        }
         soap::BodyContent::RequestSecurityTokenResponse(f) => {
             Ok(soap::RequestSecurityTokenResponseCollection {
                 security_tokens: vec![*f],
