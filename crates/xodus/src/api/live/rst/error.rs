@@ -30,7 +30,7 @@ pub enum RSTError {
     #[error("Unexpected Response - {0:?}")]
     UnexpectedTokenResponse(Box<soap::BodyContent>),
     #[error("Token Fault - {0:?}")]
-    TokenFault(Option<soap::PP>),
+    TokenFault(Option<Box<soap::PP>>),
 }
 
 #[derive(thiserror::Error, Debug)]
