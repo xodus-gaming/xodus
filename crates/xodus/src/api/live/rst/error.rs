@@ -28,8 +28,8 @@ pub enum RSTError {
     #[error("The signature verification failed - {0}")]
     InvalidResponseSignature(String),
     #[error("Unexpected Response - {0:?}")]
-    UnexpectedTokenResponse(soap::BodyContent),
-    #[error("Unexpected Response - {0:?}")]
+    UnexpectedTokenResponse(Box<soap::BodyContent>),
+    #[error("Token Fault - {0:?}")]
     TokenFault(Option<soap::PP>),
 }
 

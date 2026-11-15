@@ -9,8 +9,10 @@ use crate::models::soap;
 use crate::tokens::TokenManager;
 use crate::tokens::store::TokenStoreError;
 
-pub mod rst;
+mod rst;
 mod utils;
+
+pub use rst::RSTError;
 
 pub const XML_HEADER: &str = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
 
@@ -94,7 +96,9 @@ fn to_outcome(
             })
         }
         soap::BodyContent::RequestSecurityTokenResponseCollection(f) => Ok(f),
-        _ => Err(rst::RSTError::UnexpectedTokenResponse(envelope.body.body)),
+        _ => Err(rst::RSTError::UnexpectedTokenResponse(Box::new(
+            envelope.body.body,
+        ))),
     }
 }
 

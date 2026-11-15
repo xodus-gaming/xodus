@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 
 use xodus::api::live::ExchangeTokenResponseOutcome;
-use xodus::api::live::rst::RSTError;
+use xodus::api::live::RSTError;
 use xodus::models::live::DAProperty;
 use xodus::models::{secrets, soap};
 use xodus::tokens::TokenManager;
