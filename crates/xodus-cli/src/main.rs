@@ -80,6 +80,52 @@ enum SubCommand {
         #[arg(short, long)]
         market: Option<String>,
     },
+    #[command(about = "Add or remove friends and followers")]
+    Friend {
+        #[command(subcommand)]
+        action: FriendAction,
+        xuid: String,
+    },
+    #[command(about = "Search peoplehub.xboxlive.com for information about a user")]
+    UserInfo {
+        #[clap(help = "The xuid of the user you want information about. The default is yourself.")]
+        user: Option<String>,
+        /// People
+        #[arg(long, default_value_t = false, help = "List friends of the user")]
+        friends: bool,
+        #[arg(long, default_value_t = false, help = "List followers of the user")]
+        followers: bool,
+        #[arg(long, default_value_t = false, help = "List users recently played with" )]
+        recentplayers: bool,
+        #[arg(long, default_value_t = false, help = "List recomended friends" )]
+        recommendations: bool,
+        #[arg(long, default_value_t = false, help = "List users who are following the user")]
+        social: bool,
+        #[arg(long, default_value_t = false, help = "List outgoing friend requests")]
+        sent_requests: bool,
+        #[arg(long, default_value_t = false, help = "List incoming friend requests")]
+        recieved_requests: bool,
+        #[clap(short, long, help = "Additional xuids")]
+        xuids: Vec<String>,
+        #[arg(short, long, help = "List friends who play a title")]
+        title: Option<u32>,
+        /// Search
+        #[arg(short, long, help = "Search for users")]
+        search: Option<String>,
+        #[arg(short, long, default_value_t = 10, help = "Maximum search results")]
+        max_results: u32,
+        /// Decorations
+        #[arg(long, default_value_t = false, help = "Get extra details")]
+        detail: bool,
+        #[arg(long, default_value_t = false, help = "Get the users' prefered color")]
+        preferred_color: bool,
+        #[arg(long, default_value_t = false, help = "Get presence detail")]
+        presence_detail: bool,
+        #[arg(long, default_value_t = false, help = "Get multiplayer summary")]
+        multiplayer_summary: bool,
+        #[arg(short, long, default_value_t = false, help = "Request all optional information")]
+        all: bool,
+    },
     #[command(about = "Generate or decrypt base64-encoded CLEP challenge data")]
     Clep {
         #[command(subcommand)]
@@ -89,6 +135,17 @@ enum SubCommand {
     SpLicense {
         block: String,
     },
+}
+
+#[derive(Subcommand)]
+enum FriendAction {
+    #[command(about = "Offer or accept a friend request")]
+    Add,
+    #[command(about = "Cancel a friend request or remove friend")]
+    Remove,
+    Follow,
+    Unfollow,
+    RemoveFollower,
 }
 
 #[derive(Subcommand)]
@@ -233,6 +290,54 @@ async fn main() -> ExitCode {
             exe,
             market,
         } => commands::run::run(&client, &tokens, source, wine, exe, market).await,
+        SubCommand::Friend { action, xuid } => match action {
+            FriendAction::Add => commands::friend::add(&client, &tokens, xuid).await,
+            FriendAction::Remove => commands::friend::remove(&client, &tokens, xuid).await,
+            FriendAction::Follow => commands::friend::follow(&client, &tokens, xuid).await,
+            FriendAction::Unfollow => commands::friend::unfollow(&client, &tokens, xuid).await,
+            FriendAction::RemoveFollower => {
+                commands::friend::remove_follower(&client, &tokens, xuid).await
+            },
+        },
+        SubCommand::UserInfo {
+            user,
+            friends,
+            followers,
+            recentplayers,
+            recommendations,
+            social,
+            sent_requests,
+            recieved_requests,
+            xuids,
+            title,
+            search,
+            max_results,
+            detail,
+            preferred_color,
+            presence_detail,
+            multiplayer_summary,
+            all,
+        } => commands::user_info::run(
+            &client,
+            &tokens,
+            user,
+            friends,
+            followers,
+            recentplayers,
+            recommendations,
+            social,
+            sent_requests,
+            recieved_requests,
+            xuids,
+            title,
+            search,
+            max_results,
+            detail,
+            preferred_color,
+            presence_detail,
+            multiplayer_summary,
+            all,
+        ).await,
         SubCommand::Clep { action } => match action {
             ClepAction::Generate {
                 smbios,

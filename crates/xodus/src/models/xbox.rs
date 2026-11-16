@@ -1,3 +1,6 @@
+pub mod peoplehub;
+pub mod profile;
+pub mod social;
 pub mod subscriptions;
 
 use serde::{Deserialize, Serialize};
@@ -54,6 +57,12 @@ impl XstsResponse {
             .xui
             .first()
             .map(|claim| claim.uhs.as_str())
+    }
+    pub fn xuid(&self) -> Option<&str> {
+        self.display_claims
+            .xui
+            .first().as_ref()?
+            .xid.as_deref()
     }
 }
 
