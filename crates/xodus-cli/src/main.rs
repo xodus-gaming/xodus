@@ -13,57 +13,51 @@ mod webview;
 
 #[derive(Subcommand)]
 enum SubCommand {
-    #[command(about = "Download msixvc or xsp files fo given game")]
+    /// Download msixvc or xsp files fo given game
     Download {
         product: String,
         #[arg(short, long)]
         market: Option<String>,
-        #[arg(
-            long,
-            default_value_t = false,
-            help = "Display download URLs instead of downloading"
-        )]
+        /// Display download URLs instead of downloading
+        #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
-    #[command(about = "Dump CIKs for use with XvdTool")]
+    /// Dump CIKs for use with XvdTool
     License {
-        #[clap(help = "Content Id of a license")]
+        /// Content Id of a license
         content_id: String,
-        #[clap(help = "A path where to dump CIKs")]
+        /// A path where to dump CIKs
         ciks: String,
         #[arg(short, long)]
         market: Option<String>,
     },
-    #[command(about = "Extract locally stored msixvc file")]
+    /// Extract locally stored msixvc file
     Extract {
         path: String,
         destination: String,
         #[arg(short, long)]
         market: Option<String>,
     },
-    #[command(
-        about = "Extract a locally stored EAppx/EMSIX package (research task, see issue #91)"
-    )]
+    /// Extract a locally stored EAppx/EMSIX package (research task, see issue #91)
     ExtractEappx {
         path: String,
         destination: String,
-        #[arg(short, long, help = "Path to a keyfile with content decryption keys")]
+        /// Path to a keyfile with content decryption keys
+        #[arg(short, long)]
         key_file: Option<String>,
     },
     Login,
     Logout {
-        #[arg(long, default_value_t = false, help = "Remove device license")]
+        /// Remove device license
+        #[arg(long, default_value_t = false)]
         device: bool,
     },
-    #[command(about = "Download and extract the game through streaming algorithm")]
+    /// Download and extract the game through streaming algorithm
     Streaming {
         source: String,
         destination: String,
-        #[arg(
-            long,
-            default_value_t = false,
-            help = "Attempt to skip downloading NTFS metadata to be faste while missing some files"
-        )]
+        /// Attempt to skip downloading NTFS metadata to be faste while missing some files
+        #[arg(long, default_value_t = false)]
         try_skip_ntfs: bool,
         #[arg(short, long)]
         parallel: Option<usize>,
@@ -71,7 +65,7 @@ enum SubCommand {
         market: Option<String>,
     },
     #[cfg(unix)]
-    #[command(about = "Run a Game with xodus wine")]
+    /// Run a Game with xodus wine
     Run {
         source: String,
         wine: String,
@@ -80,12 +74,12 @@ enum SubCommand {
         #[arg(short, long)]
         market: Option<String>,
     },
-    #[command(about = "Generate or decrypt base64-encoded CLEP challenge data")]
+    /// Generate or decrypt base64-encoded CLEP challenge data
     Clep {
         #[command(subcommand)]
         action: ClepAction,
     },
-    #[command(about = "Decode SPLicenseBlock")]
+    /// Decode SPLicenseBlock
     SpLicense {
         block: String,
     },
@@ -93,24 +87,18 @@ enum SubCommand {
 
 #[derive(Subcommand)]
 enum ClepAction {
-    #[command(
-        about = "Generate a base64-encoded CLEP challenge (V2 and V4) from SMBIOS/disk serial data"
-    )]
+    /// Generate a base64-encoded CLEP challenge (V2 and V4) from SMBIOS/disk serial data
     Generate {
-        #[arg(
-            long,
-            help = "Base64-encoded SMBIOS data (up to 256 bytes, zero-padded)"
-        )]
+        /// Base64-encoded SMBIOS data (up to 256 bytes, zero-padded)
+        #[arg(long)]
         smbios: Option<String>,
-        #[arg(
-            long,
-            help = "Base64-encoded disk serial (up to 64 bytes, zero-padded)"
-        )]
+        /// Base64-encoded disk serial (up to 64 bytes, zero-padded)
+        #[arg(long)]
         disk_serial: Option<String>,
     },
-    #[command(about = "Decrypt a base64-encoded CLEP challenge back into its plaintext fields")]
+    /// Decrypt a base64-encoded CLEP challenge back into its plaintext fields
     Decrypt {
-        #[clap(help = "Base64-encoded, obfuscated CLEP challenge data (2048 bytes)")]
+        /// Base64-encoded, obfuscated CLEP challenge data (2048 bytes)
         data: String,
     },
 }
