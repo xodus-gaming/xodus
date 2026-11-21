@@ -20,12 +20,9 @@ use clap::Parser;
 use msixvc_common::resources::pri::Pri;
 use msixvc_common::resources::query::{QualifierContext, QualifierSetMatch};
 
+/// Inspect and resolve resources in a Package Resource Index (PRI) file
 #[derive(Parser)]
-#[command(
-    author,
-    version,
-    about = "Inspect and resolve resources in a Package Resource Index (PRI) file"
-)]
+#[command(author, version)]
 struct Args {
     /// Path to the PRI file to read.
     file: PathBuf,
