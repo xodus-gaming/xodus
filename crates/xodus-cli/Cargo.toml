@@ -25,10 +25,12 @@ futures-util = "0.3.34"
 uuid = "1.29.3"
 indicatif = "0.18.6"
 fs2 = "0.4.3"
-tempfile = "3.27.0"
 rustix = { version = "1.1.6", features = ["fs"] }
 ctrlc = "3.5.3"
 nix = "0.32.0"
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+tempfile = "3.27.0"
 
 [features]
 tokio_console = ["dep:console-subscriber"]
