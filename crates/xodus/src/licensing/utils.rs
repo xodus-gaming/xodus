@@ -37,7 +37,9 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Pr
 
     match magic {
         RSAFULLPRIVATE_MAGIC => {
-            tracing::trace!("Got RSA Full Private");
+            tracing::error!(
+                "TODO (BCRYPT_RSAFULLPRIVATE_BLOB) code path has not been tested and may cause follow up errors"
+            );
 
             // read d after p and q
             let _exp_p = take(cb_p1);
