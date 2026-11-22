@@ -47,6 +47,7 @@ async fn main() {
         panic!("Device token isnt legacy")
     };
 
+    let shared = Arc::new(simple_context::SharedState::default());
     let runtime_dir = utils::get_runtime_dir();
     let cancellation = CancellationToken::new();
     let socket_path = format!("{runtime_dir}/xodus.sock");
@@ -72,8 +73,9 @@ async fn main() {
             let token = cancellation.clone();
             let device_token = device_token.clone();
             let tokens = tokens.clone();
+            let shared = shared.clone();
             tokio::spawn(async move {
-                connection::router::route(accept.0, token, device_token, tokens).await
+                connection::router::route(accept.0, token, device_token, tokens, shared).await
             });
         }
     }

@@ -4,6 +4,7 @@ use crate::models::soap;
 use crate::models::xbox::XstsResponse;
 
 pub mod auth;
+pub mod signing;
 pub mod title;
 pub use auth::{authenticate_xbox_user, get_xsts_auth_header, request_xsts_token};
 
@@ -13,6 +14,19 @@ pub async fn run(
     legacy: LegacyToken,
     relying_party: &str,
 ) -> XstsResponse {
+    xsts_user_only(client, dev_token, legacy, relying_party)
+        .await
+        .expect("Failed to authenticate Xbox user")
+}
+
+/// XSTS token for `relying_party` from the stored MSA user token only (no device/title
+/// identity, so requests made with it cannot be signed). Non-panicking variant of [`run`].
+pub async fn xsts_user_only(
+    client: &reqwest::Client,
+    dev_token: LegacyToken,
+    legacy: LegacyToken,
+    relying_party: &str,
+) -> Result<XstsResponse, Box<dyn std::error::Error + Send + Sync>> {
     let user_token = crate::api::live::exchange_user_token(
         client,
         legacy,
@@ -26,13 +40,11 @@ pub async fn run(
             Some(soap::PolicyReference::mbi_ssl()),
         )],
     )
-    .await
-    .expect("Failed to get ms user token");
+    .await?;
 
     let user_token: Token = match user_token {
-        ExchangeUserTokenOutcome::Fault(_) => {
-            eprintln!("Failed to get exchange MS token");
-            panic!("TODO");
+        ExchangeUserTokenOutcome::Fault(fault) => {
+            return Err(format!("MSA token exchange failed: {fault:?}").into());
         }
         ExchangeUserTokenOutcome::Issued(
             soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
@@ -43,17 +55,12 @@ pub async fn run(
         ExchangeUserTokenOutcome::Issued(soap::BodyContent::RequestSecurityTokenResponse(
             token,
         )) => (*token).into(),
-        _ => unreachable!("Only responses are handled"),
+        _ => return Err("unexpected MSA token exchange response".into()),
     };
     let Token::Compact(user_token) = user_token else {
-        eprintln!("Unsupported token");
-        panic!("TODO");
+        return Err("unsupported MSA user token type".into());
     };
-    let resp = authenticate_xbox_user(client, user_token)
-        .await
-        .expect("Failed to authenticate Xbox user");
+    let resp = authenticate_xbox_user(client, user_token).await?;
 
-    request_xsts_token(client, resp.token, relying_party)
-        .await
-        .expect("Failed to authenticate Xbox user")
+    Ok(request_xsts_token(client, resp.token, relying_party).await?)
 }

@@ -7151,10 +7151,12 @@ dependencies = [
  "num-bigint-dig 0.9.1",
  "num-integer",
  "num_enum",
+ "p256",
  "prost",
  "prost-build",
  "quick-xml 0.42.0",
  "rand 0.10.2",
+ "reqwest 0.11.27",
  "reqwest 0.13.4",
  "rsa",
  "serde",
@@ -7204,6 +7206,7 @@ dependencies = [
 name = "xodus-service"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "chrono",
  "console-subscriber",
  "quick-xml 0.42.0",
