@@ -31,7 +31,6 @@ aes-keywrap = "0.9.1"
 num_enum = "0.7.6"
 prost = "0.14.6"
 globset = "0.4.21"
-num-integer = "0.1.47"
 kryptering = "0.7.1"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]

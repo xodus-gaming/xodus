@@ -7288,7 +7288,6 @@ dependencies = [
  "hmac 0.13.0",
  "keyring-core",
  "kryptering",
- "num-integer",
  "num_enum",
  "prost",
  "prost-build",
