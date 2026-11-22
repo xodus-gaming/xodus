@@ -24,3 +24,6 @@ sha2 = "0.11.0"
 tokio-util = { version = "0.7.19", features = ["io-util"] }
 typenum = { version = "1.20.1", features = ["const-generics"] }
 zerocopy = { version = "0.8.56", features = ["derive"] }
+futures-core = "0.3.34"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
