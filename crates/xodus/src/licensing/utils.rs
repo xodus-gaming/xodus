@@ -40,6 +40,9 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Pr
             tracing::trace!("Got RSA Full Private");
 
             // read d after p and q
+            let _exp_p = take(cb_p1);
+            let _exp_q = take(cb_p2);
+            let _coefficient = take(cb_p1);
             let d = take(cb_mod);
 
             PrivateKey::from_components(n, e, d, vec![p, q])
