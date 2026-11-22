@@ -30,25 +30,25 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Pr
         BoxedUint::from_be_slice_truncated(s, n as u32 * 8)
     };
 
-    let n_rsa = take(cb_mod);
-    let e_rsa = take(cb_pub_exp);
-    let p_rsa = take(cb_p1);
-    let q_rsa = take(cb_p2);
+    let n = take(cb_mod);
+    let e = take(cb_pub_exp);
+    let p = take(cb_p1);
+    let q = take(cb_p2);
 
     match magic {
         RSAFULLPRIVATE_MAGIC => {
             tracing::trace!("Got RSA Full Private");
 
             // read d after p and q
-            let d_rsa = take(cb_mod);
+            let d = take(cb_mod);
 
-            PrivateKey::from_components(n_rsa, e_rsa, d_rsa, vec![p_rsa, q_rsa])
+            PrivateKey::from_components(n, e, d, vec![p, q])
         }
         RSAPRIVATE_MAGIC => {
             tracing::trace!("Got RSA Private");
 
             // No d in the blob, recompute it.
-            PrivateKey::from_p_q(p_rsa, q_rsa, e_rsa)
+            PrivateKey::from_p_q(p, q, e)
         }
         _ => panic!("not an RSA private blob"),
     }
