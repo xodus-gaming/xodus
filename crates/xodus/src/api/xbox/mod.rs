@@ -1,7 +1,6 @@
-use crate::models::live::ExchangeUserTokenOutcome;
-use crate::models::secrets::{LegacyToken, Token};
 use crate::models::soap;
 use crate::models::xbox::XstsResponse;
+use crate::{api::live::ExchangeTokenResponseOutcome, models::secrets::LegacyToken};
 
 pub mod auth;
 pub mod title;
@@ -20,32 +19,16 @@ pub async fn run(
         dev_token,
         None,
         Some("Silent".to_string()),
-        "{d6d5a677-0872-4ab0-9442-bb792fce85c5}".to_string(),
+        "000000004424da1f".to_string(),
         &[(
-            "user.auth.xboxlive.com".to_owned(),
-            Some(soap::PolicyReference::mbi_ssl()),
+            "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0&clientid=000000004424da1f".to_owned(),
+            Some(soap::PolicyReference::token_broker()),
         )],
     )
     .await
     .expect("Failed to get ms user token");
 
-    let user_token: Token = match user_token {
-        ExchangeUserTokenOutcome::Fault(_) => {
-            eprintln!("Failed to get exchange MS token");
-            panic!("TODO");
-        }
-        ExchangeUserTokenOutcome::Issued(
-            soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
-        ) => {
-            let token = collection.security_tokens.remove(0);
-            token.into()
-        }
-        ExchangeUserTokenOutcome::Issued(soap::BodyContent::RequestSecurityTokenResponse(
-            token,
-        )) => (*token).into(),
-        _ => unreachable!("Only responses are handled"),
-    };
-    let Token::Compact(user_token) = user_token else {
+    let Some((user_token, _)) = user_token.get_rps() else {
         eprintln!("Unsupported token");
         panic!("TODO");
     };

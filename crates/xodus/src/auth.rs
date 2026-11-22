@@ -10,7 +10,7 @@ use xal::{
     XalAuthenticator,
 };
 
-use crate::models::live::ExchangeUserTokenOutcome;
+use crate::api::live::{ExchangeTokenResponseOutcome, TraceTokenRefreshError};
 use crate::models::secrets::Token;
 use crate::models::soap;
 use crate::tokens::TokenManager;
@@ -93,17 +93,18 @@ pub async fn do_sisu(
             "error",
         )));
     };
-    let device_token_resp: soap::RequestSecurityTokenResponse =
-        crate::api::live::exchange_device_token(
-            client,
-            device_token.clone(),
-            "{28C08266-F973-4AE6-FFE4-409B249F138F}".to_string(),
-            "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0".to_owned(),
-            Some(soap::PolicyReference::token_broker()),
-        )
-        .await?;
+    let device_token_resp = crate::api::live::exchange_device_token(
+        client,
+        device_token.clone(),
+        "{28C08266-F973-4AE6-FFE4-409B249F138F}".to_string(),
+        "scope=service::user.auth.xboxlive.com::MBI_SSL&api-version=2.0".to_owned(),
+        Some(soap::PolicyReference::token_broker()),
+    )
+    .await?;
 
-    let Token::Compact(ms_device_token) = device_token_resp.into() else {
+    device_token_resp.refresh_device(manager).trace();
+
+    let Some((ms_device_token, _)) = device_token_resp.get_rps() else {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::BrokenPipe,
             "error",
@@ -128,31 +129,9 @@ pub async fn do_sisu(
     )
     .await?;
 
-    let ExchangeUserTokenOutcome::Issued(
-        soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
-    ) = user_token
-    else {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::BrokenPipe,
-            "error",
-        )));
-    };
+    user_token.refresh_user(manager).trace();
 
-    if let Some(sts) = collection.security_tokens.pop() {
-        let address = sts.applies_to.endpoint_reference.address.clone();
-        let sts: Token = sts.into();
-        let address = if let Token::Legacy(legacy) = &sts {
-            legacy.key_name.clone().unwrap_or(address)
-        } else {
-            address
-        };
-        if let Err(err) = manager.save_user_token(address, sts) {
-            tracing::warn!("Failed to persist refreshed STS token: {err}");
-        }
-    }
-    let token: soap::RequestSecurityTokenResponse = collection.security_tokens.remove(0);
-    let token: Token = token.into();
-    let Token::Compact(user_token) = token else {
+    let Some((user_token, _)) = user_token.get_rps() else {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::BrokenPipe,
             "error",

@@ -1,5 +1,5 @@
+use xodus::api::live::{ExchangeTokenResponseOutcome, TraceTokenRefreshError};
 use xodus::licensing::splicense::{DeviceKey, SPLicense};
-use xodus::models::live::ExchangeUserTokenOutcome;
 use xodus::models::secrets::Token;
 use xodus::models::soap;
 use xodus::tokens::TokenManager;
@@ -30,6 +30,8 @@ pub async fn get_license(
     .await
     .unwrap();
 
+    ms_device_token.refresh_device(tokens).trace();
+
     let user_token = xodus::api::live::exchange_user_token(
         client,
         legacy,
@@ -46,27 +48,13 @@ pub async fn get_license(
     .await
     .expect("Failed to get ms user token");
 
-    let ms_device_token: Token = ms_device_token.into();
-    let Token::Compact(ms_device_token) = ms_device_token else {
+    let Some((ms_device_token, _)) = ms_device_token.get_rps() else {
         return Err("Unsupported token".to_string());
     };
 
-    let user_token: Token = match user_token {
-        ExchangeUserTokenOutcome::Fault(_) => {
-            return Err("Failed to get exchange MS token".to_string());
-        }
-        ExchangeUserTokenOutcome::Issued(
-            soap::BodyContent::RequestSecurityTokenResponseCollection(mut collection),
-        ) => {
-            let token = collection.security_tokens.remove(0);
-            token.into()
-        }
-        ExchangeUserTokenOutcome::Issued(soap::BodyContent::RequestSecurityTokenResponse(
-            token,
-        )) => (*token).into(),
-        _ => unreachable!("Only responses are handled"),
-    };
-    let Token::Compact(user_token) = user_token else {
+    user_token.refresh_user(tokens).trace();
+
+    let Some((user_token, _)) = user_token.get_rps() else {
         return Err("Unsupported token".to_string());
     };
 
