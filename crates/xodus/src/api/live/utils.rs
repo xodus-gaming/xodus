@@ -5,7 +5,8 @@ use aes::cipher::block_padding::Pkcs7;
 use aes::cipher::{BlockModeDecrypt, KeyIvInit};
 use base64::prelude::*;
 use hmac::{Hmac, KeyInit, Mac};
-use rsa::rand_core::{OsRng, RngCore};
+use rand::rand_core::TryRng;
+use rand::rngs::SysRng;
 use sha2::Sha256;
 use zerocopy::IntoBytes;
 
@@ -119,7 +120,7 @@ pub fn generate_shared_key(
 
 pub fn generate_nonce() -> [u8; 32] {
     let mut nonce = [0u8; 32];
-    _ = OsRng.try_fill_bytes(&mut nonce);
+    _ = SysRng.try_fill_bytes(&mut nonce);
     nonce
 }
 

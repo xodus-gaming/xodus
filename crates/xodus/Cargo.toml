@@ -23,7 +23,7 @@ zerocopy = { version = "0.8.56", features = ["derive"] }
 bergshamra-c14n = "0.8.0"
 hmac = "0.13.0"
 bergshamra = "0.8.0"
-rsa = { version = "0.9.10", features = ["serde", "sha2"] }
+rsa = "0.10.0"
 sha2 = "0.11.0"
 cbc = "0.2.1"
 url = "2.5.8"
@@ -31,7 +31,6 @@ aes-keywrap = "0.9.0"
 num_enum = "0.7.6"
 prost = "0.14.4"
 globset = "0.4.20"
-num-bigint-dig = "0.9.1"
 num-integer = "0.1.47"
 kryptering = "0.5.0"
 
@@ -45,7 +44,7 @@ dbus-secret-service-keyring-store = { version = "1.0.1", features = ["crypto-ope
 apple-native-keyring-store = { version = "1.0.2", features = ["keychain"]}
 
 [dev-dependencies]
-rsa = "0.9.10"
+rsa = "0.10.0"
 bergshamra = "0.8.0"
 ed25519-dalek = "3.0.0"
 
