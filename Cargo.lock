@@ -7328,6 +7328,7 @@ dependencies = [
  "rustix",
  "serde_json",
  "tao",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
