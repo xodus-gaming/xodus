@@ -30,8 +30,8 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Pr
         BoxedUint::from_be_slice_truncated(s, n * 8)
     };
 
-    let n = take(cb_mod);
     let e = take(cb_pub_exp);
+    let n = take(cb_mod);
     let p = take(cb_p1);
     let q = take(cb_p2);
 
