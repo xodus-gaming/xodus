@@ -12,7 +12,7 @@ pub fn generate_string(length: usize) -> String {
 }
 
 pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<PrivateKey> {
-    let u32_at = |o: usize| u32::from_le_bytes(blob[o..o + 4].try_into().unwrap()) as usize;
+    let u32_at = |o: usize| u32::from_le_bytes(blob[o..o + 4].try_into().unwrap());
 
     let magic = u32_at(0);
     let cb_pub_exp = u32_at(8);
@@ -20,14 +20,14 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Pr
     let cb_p1 = u32_at(16);
     let cb_p2 = u32_at(20);
 
-    const RSAPRIVATE_MAGIC: usize = u32::from_le_bytes(*b"RSA2") as usize;
-    const RSAFULLPRIVATE_MAGIC: usize = u32::from_le_bytes(*b"RSA3") as usize;
+    const RSAPRIVATE_MAGIC: u32 = u32::from_le_bytes(*b"RSA2");
+    const RSAFULLPRIVATE_MAGIC: u32 = u32::from_le_bytes(*b"RSA3");
 
     let mut off = 24;
-    let mut take = |n: usize| {
-        let s = &blob[off..off + n];
-        off += n;
-        BoxedUint::from_be_slice_truncated(s, n as u32 * 8)
+    let mut take = |n: u32| {
+        let s = &blob[off..off + n as usize];
+        off += n as usize;
+        BoxedUint::from_be_slice_truncated(s, n * 8)
     };
 
     let n = take(cb_mod);
