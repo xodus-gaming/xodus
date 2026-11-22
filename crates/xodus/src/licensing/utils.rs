@@ -20,8 +20,8 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Pr
     let cb_p1 = u32_at(16);
     let cb_p2 = u32_at(20);
 
-    const RSAPRIVATE_MAGIC: usize = 0x3241_5352; // "RSA2"
-    const RSAFULLPRIVATE_MAGIC: usize = 0x3341_5352; // "RSA3"
+    const RSAPRIVATE_MAGIC: usize = u32::from_le_bytes(*b"RSA2") as usize;
+    const RSAFULLPRIVATE_MAGIC: usize = u32::from_le_bytes(*b"RSA3") as usize;
 
     let mut off = 24;
     let mut take = |n: usize| {
