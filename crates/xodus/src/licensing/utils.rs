@@ -27,7 +27,7 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Pr
     let mut take = |n: u32| {
         let s = &blob[off..off + n as usize];
         off += n as usize;
-        BoxedUint::from_be_slice_truncated(s, n * 8)
+        BoxedUint::from_be_slice_vartime(s)
     };
 
     let e = take(cb_pub_exp);
