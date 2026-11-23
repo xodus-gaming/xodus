@@ -72,6 +72,8 @@ fn save_device_sts_token(
 ) {
     let key_name = resp
         .requested_security_token
+        .as_ref()
+        .unwrap()
         .encrypted_data
         .as_ref()
         .unwrap()

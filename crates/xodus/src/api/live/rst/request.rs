@@ -42,16 +42,22 @@ fn verify_and_decrypt_envelope<'a>(
         tracing::debug!("No signature, returning raw envelope");
         return Ok(envelope);
     };
+    if envelope.header.security.is_none() {
+        tracing::debug!("No Nonce, returning raw envelope");
+        return Ok(envelope);
+    }
     tracing::trace!("Decrypting soap::Envelope");
     let nonces: HashMap<String, String> = envelope
         .header
         .security
+        .as_ref()
+        .unwrap()
         .derived_key_tokens
         .iter()
         .map(|token| (token.id.clone(), token.nonce.clone()))
         .collect();
 
-    if let Some(security_signature) = &envelope.header.security.signature
+    if let Some(security_signature) = &envelope.header.security.as_ref().unwrap().signature
         && let Some(key_info) = &security_signature.key_info
     {
         let id = &key_info.security_token_reference.reference.uri;

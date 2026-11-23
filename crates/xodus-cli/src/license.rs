@@ -28,7 +28,8 @@ pub async fn get_license(
         Some(soap::PolicyReference::mbi_ssl()),
     )
     .await
-    .unwrap();
+    .unwrap()
+    .refresh(tokens);
 
     let user_token = xodus::api::live::exchange_user_token(
         client,
@@ -46,8 +47,7 @@ pub async fn get_license(
     .await
     .expect("Failed to get ms user token");
 
-    let ms_device_token: Token = ms_device_token.into();
-    let Token::Compact(ms_device_token) = ms_device_token else {
+    let Some((ms_device_token, _)) = ms_device_token.get_device_rps() else {
         return Err("Unsupported token".to_string());
     };
 
