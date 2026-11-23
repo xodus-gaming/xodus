@@ -10,10 +10,19 @@ use tokio::io::{AsyncRead, ReadBuf};
 use std::hint;
 use std::io::{self, Error, ErrorKind};
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll, ready};
 
 type HashEntry = [u8; HASH_ENTRY_LENGTH];
 type Page = [u8; PAGE_SIZE];
+
+/// Splits a HashTree's [`Page`] into its hash entries.
+fn page_as_entries(page: &Page) -> &[HashEntry; HASH_ENTRIES_IN_PAGE as usize] {
+    page.as_chunks::<HASH_ENTRY_LENGTH>()
+        .0
+        .try_into()
+        .expect("obtaining 170 24-byte hash entries from a 4096-byte page is infallible")
+}
 
 #[derive(Debug, Error)]
 #[error(
@@ -44,11 +53,11 @@ pub enum HashTreeStreamError {
 /// [`AsyncRead`]er, see [`HashTreeStream`] for parsing a hash table into an
 /// async [`Stream`] of hashes.
 struct PageVerifier {
-    hashes: Box<[HashEntry]>,
+    hashes: Arc<[HashEntry]>,
 }
 
 impl PageVerifier {
-    pub fn new(hashes: Box<[HashEntry]>) -> Self {
+    pub fn new(hashes: Arc<[HashEntry]>) -> Self {
         Self { hashes }
     }
 
@@ -196,7 +205,7 @@ impl<R: AsyncRead> HashTreeStream<R> {
     /// # Panics
     ///
     /// If `level_0_hashes` doesn't fit exactly into `level_1_hashes.len()` pages.
-    pub fn new(reader: R, level_1_hashes: Box<[HashEntry]>, level_0_hashes: usize) -> Self {
+    pub fn new(reader: R, level_1_hashes: Arc<[HashEntry]>, level_0_hashes: usize) -> Self {
         assert_eq!(
             level_0_hashes.div_ceil(HASH_ENTRIES_IN_PAGE as usize),
             level_1_hashes.len()
@@ -228,10 +237,7 @@ where
         // If there are remaining hash entries in the buffer that have not been
         // returned, then return the next one and advance the counter.
         if let Some(buf) = this.reader.buffer()
-            && let Some(hash) = buf
-                .as_chunks::<HASH_ENTRY_LENGTH>()
-                .0
-                .get(*this.next_entry_in_page)
+            && let Some(hash) = page_as_entries(buf).get(*this.next_entry_in_page)
         {
             *this.remaining_hashes -= 1;
             *this.next_entry_in_page += 1;
@@ -253,9 +259,7 @@ where
         *this.remaining_hashes -= 1;
         *this.next_entry_in_page = 1;
 
-        Poll::Ready(Some(Ok(*buf.first_chunk::<HASH_ENTRY_LENGTH>().expect(
-            "obtaining the first 24 bytes from a 4096-byte page is infallible",
-        ))))
+        Poll::Ready(Some(Ok(page_as_entries(buf)[0])))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -292,7 +296,7 @@ mod tests {
             ],
         ];
 
-        let page_verifier = PageVerifier::new(Box::new(hashes));
+        let page_verifier = PageVerifier::new(Arc::new(hashes));
 
         for (i, page) in pages.iter_mut().enumerate() {
             // Place invalid data into the page.
@@ -317,7 +321,7 @@ mod tests {
         let page = [0u8; PAGE_SIZE];
         let hashes = [[0u8; 24]; 0];
 
-        let page_verifier = PageVerifier::new(Box::new(hashes));
+        let page_verifier = PageVerifier::new(Arc::new(hashes));
 
         // When running out of hashes, the `PageVerifier` should panic.
         let _ = page_verifier.verify_page(&page, 0);
