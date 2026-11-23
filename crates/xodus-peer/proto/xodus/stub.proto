@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package xodus.stub;
+
+message Ping {
+    uint32 value = 1;
+}
+
+message Pong {
+    uint32 value = 1;
+}
+
+// Define ids
+enum StubServiceMessage {
+    STUB_SERVICE_MESSAGE_UNDEFINED = 0;
+    STUB_SERVICE_MESSAGE_SEND_PING = 1;
+}
+
+// Define exposed message types (streaming is unsupported)
+service StubService {
+    rpc SendPing(Ping) returns (Pong);
+}
