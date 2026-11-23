@@ -1,3 +1,6 @@
+use keyring_core::{self, Entry};
+use std::path::PathBuf;
+
 pub static SERVICE_NAME: &str = "Xodus Service";
 
 pub fn init_secrets() -> Result<(), keyring_core::Error> {
@@ -9,6 +12,7 @@ pub fn init_secrets() -> Result<(), keyring_core::Error> {
                 .expect("Invalid secrets backing path"),
         )?;
         keyring_core::set_default_store(store);
+        return Ok(());
     }
 
     #[cfg(not(feature = "key-chain-file"))]
@@ -35,8 +39,8 @@ pub fn init_secrets() -> Result<(), keyring_core::Error> {
     Ok(())
 }
 
-pub fn get_entry(user: &str) -> Result<keyring_core::Entry, keyring_core::Error> {
-    keyring_core::Entry::new(SERVICE_NAME, user)
+pub fn get_entry(user: &str) -> Result<Entry, keyring_core::Error> {
+    Entry::new(SERVICE_NAME, user)
 }
 
 pub fn destroy_secrets() {
