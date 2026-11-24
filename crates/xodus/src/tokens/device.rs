@@ -1,6 +1,7 @@
+use crate::bcrypt::parse_rsa_private;
 use crate::hardware;
 use crate::licensing::splicense::SPLicense;
-use crate::licensing::utils::{generate_string, parse_bcrypt_rsa_private};
+use crate::licensing::utils::generate_string;
 use crate::models::devicecredential::{Authentication, ClientInfo, DeviceAddRequest, DeviceInfo};
 use crate::models::secrets::Device;
 use crate::models::soap::BodyContent;
@@ -56,7 +57,7 @@ async fn reauthenticate_device(client: &reqwest::Client, tokens: &TokenManager, 
         SPLicense::parse_base64(&license.splicense).expect("Failed to parse SPLicense");
     let clep_sign_state = sp_license.clep_sign_state.expect("Missing clep sign state");
     let key = clep_sign_state.get_rsa_key();
-    let private_key = parse_bcrypt_rsa_private(&key).unwrap();
+    let private_key = parse_rsa_private(&*key).unwrap();
     let resp = crate::api::live::authenticate_device(client, license.username, private_key)
         .await
         .expect("Failed to auth device");
