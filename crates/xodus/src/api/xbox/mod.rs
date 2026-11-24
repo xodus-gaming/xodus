@@ -25,6 +25,7 @@ pub async fn run(
             "user.auth.xboxlive.com".to_owned(),
             Some(soap::PolicyReference::mbi_ssl()),
         )],
+        None,
     )
     .await
     .expect("Failed to get ms user token");

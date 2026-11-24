@@ -18,3 +18,10 @@ pub struct MSATokenResponse {
     pub device_rps: String,
     pub device_expiry: i64,
 }
+
+/// Failure reply: same root element as `MSATokenResponse`, carrying only an `Error` HRESULT.
+#[derive(Serialize)]
+#[serde(rename = "MSATokenResponse", rename_all = "PascalCase")]
+pub struct MSATokenErrorResponse {
+    pub error: String,
+}
