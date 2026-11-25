@@ -615,7 +615,6 @@ sec-ch-ua-platform: "Windows"
 ## Other linkups not in this writeup
 
 ```
-https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/<uuid>/sdp | Get the necessary info for WebRTC connection.
 https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/<uuid>/ice | ?
 https://weu.core.gssv-play-prod.xboxlive.com/v5/sessions/cloud/<uuid>/keepalive | Keeps the connection alive.
 ```
