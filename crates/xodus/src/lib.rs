@@ -1,5 +1,6 @@
 pub mod api;
 pub mod auth;
+pub mod bcrypt;
 pub mod clep;
 pub mod hardware;
 pub mod licensing;
