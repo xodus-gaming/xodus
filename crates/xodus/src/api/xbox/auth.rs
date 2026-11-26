@@ -12,7 +12,21 @@ pub async fn authenticate_xbox_user(
         properties: UserAuthProperties {
             auth_method: "RPS".to_string(),
             site_name: "user.auth.xboxlive.com".to_string(),
-            rps_ticket,
+            // XASU's RpsTicket needs a leading marker telling it what kind of
+            // ticket follows, and only accepts "t=" (HTTP 400 / X-Err
+            // 00000005 otherwise). Some MSA accounts are issued
+            // "delegation-compact" tickets whose compact-token string
+            // already carries its own "d=" marker baked in; that marker has
+            // to be swapped for "t=", not kept and not doubled up
+            // ("t=d=..." is just as rejected as a bare "d=..."). See
+            // upstream issue #238.
+            rps_ticket: match rps_ticket
+                .strip_prefix("d=")
+                .or_else(|| rps_ticket.strip_prefix("t="))
+            {
+                Some(payload) => format!("t={payload}"),
+                None => format!("t={rps_ticket}"),
+            },
         },
     };
 
