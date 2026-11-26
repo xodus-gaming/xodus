@@ -1,7 +1,5 @@
-use num_bigint_dig::{BigUint as NbBigUint, ModInverse};
-use num_integer::Integer;
 use rand::distr::{Alphanumeric, SampleString};
-use rsa::{BigUint as RsaBigUint, RsaPrivateKey};
+use rsa::{BoxedUint, PrivateKey};
 
 use crate::licensing::splicense::BCryptRsaBlock;
 
@@ -13,8 +11,8 @@ pub fn generate_string(length: usize) -> String {
     Alphanumeric.sample_string(&mut rand::rng(), length)
 }
 
-pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<RsaPrivateKey> {
-    let u32_at = |o: usize| u32::from_le_bytes(blob[o..o + 4].try_into().unwrap()) as usize;
+pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<PrivateKey> {
+    let u32_at = |o: usize| u32::from_le_bytes(blob[o..o + 4].try_into().unwrap());
 
     let magic = u32_at(0);
     let cb_pub_exp = u32_at(8);
@@ -22,53 +20,40 @@ pub fn parse_bcrypt_rsa_private(blob: &BCryptRsaBlock) -> rsa::errors::Result<Rs
     let cb_p1 = u32_at(16);
     let cb_p2 = u32_at(20);
 
-    const RSAPRIVATE_MAGIC: usize = 0x3241_5352; // "RSA2"
-    const RSAFULLPRIVATE_MAGIC: usize = 0x3341_5352; // "RSA3"
+    const RSAPRIVATE_MAGIC: u32 = u32::from_le_bytes(*b"RSA2");
+    const RSAFULLPRIVATE_MAGIC: u32 = u32::from_le_bytes(*b"RSA3");
 
     let mut off = 24;
-    // take returns both the parsed BigUint (for arithmetic) and a Vec<u8> copy of the raw bytes
-    let mut take = |n: usize| {
-        let s = &blob[off..off + n];
-        off += n;
-        (NbBigUint::from_bytes_be(s), s.to_vec())
+    let mut take = |n: u32| {
+        let s = &blob[off..off + n as usize];
+        off += n as usize;
+        BoxedUint::from_be_slice_vartime(s)
     };
 
-    // use nb_* names for internal arithmetic BigUints and store raw bytes for conversion back
-    let (e_nb, e_bytes) = take(cb_pub_exp);
-    let (_n_nb, n_bytes) = take(cb_mod);
-    let (p_nb, p_bytes) = take(cb_p1);
-    let (q_nb, q_bytes) = take(cb_p2);
-
-    // convert nb BigUints back to rsa::BigUint for API using original bytes
-    let n_rsa = RsaBigUint::from_bytes_be(&n_bytes);
-    let e_rsa = RsaBigUint::from_bytes_be(&e_bytes);
-    let p_rsa = RsaBigUint::from_bytes_be(&p_bytes);
-    let q_rsa = RsaBigUint::from_bytes_be(&q_bytes);
+    let e = take(cb_pub_exp);
+    let n = take(cb_mod);
+    let p = take(cb_p1);
+    let q = take(cb_p2);
 
     match magic {
         RSAFULLPRIVATE_MAGIC => {
-            tracing::trace!("Got RSA Full Private");
-            // read d after p and q
-            let (_d_nb, d_bytes) = take(cb_mod);
-            let d_rsa = RsaBigUint::from_bytes_be(&d_bytes);
+            tracing::error!(
+                "TODO (BCRYPT_RSAFULLPRIVATE_BLOB) code path has not been tested and may cause follow up errors"
+            );
 
-            RsaPrivateKey::from_components(n_rsa, e_rsa, d_rsa, vec![p_rsa, q_rsa])
+            // read d after p and q
+            let _exp_p = take(cb_p1);
+            let _exp_q = take(cb_p2);
+            let _coefficient = take(cb_p1);
+            let d = take(cb_mod);
+
+            PrivateKey::from_components(n, e, d, vec![p, q])
         }
         RSAPRIVATE_MAGIC => {
             tracing::trace!("Got RSA Private");
-            // No d in the blob — recompute it.
-            let one = NbBigUint::from(1u32);
-            let p1 = &p_nb - &one;
-            let p2 = &q_nb - &one;
-            let lambda = p1.lcm(&p2);
-            let d_nb = e_nb.clone().mod_inverse(&lambda).expect("e not invertible");
-            let d_rsa = RsaBigUint::from_bytes_be(
-                &d_nb
-                    .to_biguint()
-                    .expect("inverse should be positive")
-                    .to_bytes_be(),
-            );
-            RsaPrivateKey::from_components(n_rsa, e_rsa, d_rsa, vec![p_rsa, q_rsa])
+
+            // No d in the blob, recompute it.
+            PrivateKey::from_p_q(p, q, e)
         }
         _ => panic!("not an RSA private blob"),
     }

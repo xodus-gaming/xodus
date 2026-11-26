@@ -4,7 +4,7 @@ use crate::api::live::utils;
 use crate::models::soap::{self, XML_SIGNATURE_METHOD_HMAC, XML_SIGNATURE_METHOD_RSA};
 
 pub enum RSTSignature<'a> {
-    Rsa(Box<rsa::RsaPrivateKey>),
+    Rsa(Box<rsa::PrivateKey>),
     Hmac {
         clep_secret: &'a [u8],
         /// Used only if TPMInfo public key was sent.

@@ -34,7 +34,7 @@ pub async fn login_device_credential(
 pub async fn authenticate_device(
     client: &reqwest::Client,
     username: String,
-    private_key: rsa::RsaPrivateKey,
+    private_key: rsa::PrivateKey,
 ) -> Result<soap::Envelope, rst::RSTError> {
     let request = rst::RSTRequestBuilder::new()
         .username(soap::UsernameToken::devicetoken(username))
