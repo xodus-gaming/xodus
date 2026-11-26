@@ -46,7 +46,12 @@ enum SubCommand {
         #[arg(short, long)]
         key_file: Option<String>,
     },
-    Login,
+    Login {
+        /// Work around Linux webview graphics issues using X11/XWayland and disabling WebKit's DMA-BUF renderer
+        #[cfg(target_os = "linux")]
+        #[arg(long)]
+        safe_webview: bool,
+    },
     Logout {
         /// Remove device license
         #[arg(long, default_value_t = false)]
@@ -80,9 +85,7 @@ enum SubCommand {
         action: ClepAction,
     },
     /// Decode SPLicenseBlock
-    SpLicense {
-        block: String,
-    },
+    SpLicense { block: String },
 }
 
 #[derive(Subcommand)]
@@ -110,8 +113,25 @@ struct CliArgs {
     command: SubCommand,
 }
 
+fn main() -> ExitCode {
+    let args = CliArgs::parse();
+
+    #[cfg(target_os = "linux")]
+    if matches!(&args.command, SubCommand::Login { safe_webview: true }) {
+        // SAFETY: Startup is still single-threaded: only argument parsing has run.
+        // These writes must precede the Tokio runtime, tracing/console subscriber,
+        // HTTP clients, credentials, and GTK/Tao/Wry initialization in run().
+        unsafe {
+            std::env::set_var("GDK_BACKEND", "x11");
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+
+    run(args)
+}
+
 #[tokio::main]
-async fn main() -> ExitCode {
+async fn run(args: CliArgs) -> ExitCode {
     let filter = tracing_subscriber::EnvFilter::from_env("XODUS_LOG");
     let registry =
         tracing_subscriber::registry().with(tracing_subscriber::fmt::layer().with_filter(filter));
@@ -136,7 +156,6 @@ async fn main() -> ExitCode {
         .connection_verbose(true)
         .build()
         .unwrap();
-    let args = CliArgs::parse();
 
     xodus::secrets::init_secrets().expect("Unable to initialize credentials");
     let tokens = TokenManager::with_keychain_and_memory();
@@ -175,7 +194,7 @@ async fn main() -> ExitCode {
             )
             .await
         }
-        SubCommand::Login => commands::login::run(&client, &tokens).await,
+        SubCommand::Login { .. } => commands::login::run(&client, &tokens).await,
         SubCommand::Logout { device } => commands::logout::run(&tokens, device).await,
         SubCommand::Extract {
             path,
@@ -234,4 +253,34 @@ async fn main() -> ExitCode {
     xodus::secrets::destroy_secrets();
 
     code
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn login_safe_webview_parsing() {
+        let args = CliArgs::try_parse_from(["xodus-cli", "login"]).unwrap();
+        #[cfg(target_os = "linux")]
+        {
+            assert!(matches!(
+                args.command,
+                SubCommand::Login {
+                    safe_webview: false
+                }
+            ));
+            let args = CliArgs::try_parse_from(["xodus-cli", "login", "--safe-webview"]).unwrap();
+            assert!(matches!(
+                args.command,
+                SubCommand::Login { safe_webview: true }
+            ));
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            assert!(matches!(args.command, SubCommand::Login {}));
+            assert!(CliArgs::try_parse_from(["xodus-cli", "login", "--safe-webview"]).is_err());
+        }
+        assert!(CliArgs::try_parse_from(["xodus-cli", "logout", "--safe-webview"]).is_err());
+    }
 }
