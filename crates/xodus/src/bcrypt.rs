@@ -1,4 +1,11 @@
-//! TODO: DOCS
+//! Utilities for parsing Microsoft BCrypt RSA key blobs.
+//!
+//! The blobs are parsed into the [`PublicKey`] and [`PrivateKey`] structs from
+//! the [`rsa`] crate via the [`parse_rsa_public`] and [`parse_rsa_private`]
+//! functions.
+//!
+//! See [the official docs](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob)
+//! for more information on the blob format.
 
 use rsa::{BoxedUint, Error, PrivateKey, PublicKey, Result};
 
@@ -96,6 +103,11 @@ fn split_blob(blob: &[u8]) -> Result<(RsaKeyBlob, BlobReader<'_>)> {
     Ok((RsaKeyBlob::parse(header), BlobReader(blob)))
 }
 
+/// Parses a Microsoft BCrypt RSA public key blob.
+///
+/// The blob must be in the `BCRYPT_RSAPUBLIC_BLOB` format.
+///
+/// See [the official docs](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob).
 pub fn parse_rsa_public(blob: &[u8]) -> Result<PublicKey> {
     let (header, reader) = split_blob(blob)?;
     if header.magic != RsaKeyBlob::PUBLIC_MAGIC {
@@ -105,6 +117,12 @@ pub fn parse_rsa_public(blob: &[u8]) -> Result<PublicKey> {
     parse_public(&header, reader)
 }
 
+/// Parses a Microsoft BCrypt RSA private key blob.
+///
+/// This function accepts both the `BCRYPT_RSAPRIVATE_BLOB` and
+/// `BCRYPT_RSAFULLPRIVATE_BLOB` formats.
+///
+/// See [the official docs](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob).
 pub fn parse_rsa_private(blob: &[u8]) -> Result<PrivateKey> {
     let (header, reader) = split_blob(blob)?;
 
