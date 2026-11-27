@@ -6,3 +6,4 @@
 - [titlestorage](./titlestorage.md)
 - [game save format](./gamesaveformat.md)
 - [gameruntime](./gameruntime.md)
+- [cloudgaming](./cloudgaming.md)
