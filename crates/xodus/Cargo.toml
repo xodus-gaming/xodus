@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = { workspace = true }
 
 [dependencies]
-xal = { git = "https://github.com/xodus-gaming/xal-rs", rev = "6aa2420f8f0d5e6f7460ff13f399037583a942f4", version = "0.1.3" }
+xal = { git = "https://github.com/xodus-gaming/xal-rs", rev = "79b9932e5266a1a087a81e7e015ae9460b72a173", version = "0.1.3" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 serde = { version = "1.0.229", features = ["derive"] }
